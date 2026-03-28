@@ -1,0 +1,252 @@
+import SwiftUI
+import MapKit
+
+// MARK: - NearbyView
+
+/// Main view for the Nearby tab.
+///
+/// Combines: "X people nearby" header, mesh particle background,
+/// friends section, location channels section, and friend finder map.
+/// Uses staggered reveal for section entrance and glassmorphism throughout.
+struct NearbyView: View {
+
+    // In production these would be @Query or @EnvironmentObject from a ViewModel.
+    // For now, preview-friendly state.
+    @State private var peerCount: Int = 23
+    @State private var nearbyFriends: [NearbyPeerCard_Data] = NearbyView.sampleFriends
+    @State private var nearbyPeers: [NearbyPeerCard_Data] = NearbyView.samplePeers
+    @State private var channels: [LocationChannelItem] = NearbyView.sampleChannels
+    @State private var friendPins: [FriendMapPin] = NearbyView.sampleFriendPins
+    @State private var beacons: [BeaconPin] = []
+    @State private var showMap = false
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                GradientBackground()
+
+                // Ambient mesh particles behind content
+                MeshParticleView(peerCount: peerCount)
+                    .opacity(0.6)
+
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: FCSpacing.lg) {
+                        headerSection
+                            .staggeredReveal(index: 0)
+
+                        friendsSection
+                            .staggeredReveal(index: 1)
+
+                        channelsSection
+                            .staggeredReveal(index: 2)
+
+                        mapSection
+                            .staggeredReveal(index: 3)
+
+                        // Bottom spacer for tab bar
+                        Spacer().frame(height: FCSpacing.xxl)
+                    }
+                    .padding(.top, FCSpacing.md)
+                }
+            }
+            .navigationTitle("Nearby")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(.hidden, for: .navigationBar)
+        }
+    }
+
+    // MARK: - Header Section
+
+    private var headerSection: some View {
+        GlassCard(thickness: .ultraThin, cornerRadius: FCCornerRadius.xl) {
+            HStack(spacing: FCSpacing.md) {
+                // Animated peer count
+                VStack(alignment: .leading, spacing: FCSpacing.xs) {
+                    Text("\(peerCount)")
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .foregroundStyle(.fcAccentPurple)
+                        .contentTransition(.numericText())
+
+                    Text("people nearby")
+                        .font(theme.typography.body)
+                        .foregroundStyle(theme.colors.text)
+                }
+
+                Spacer()
+
+                // Signal indicator
+                VStack(spacing: FCSpacing.xs) {
+                    Image(systemName: "wave.3.right")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(.fcAccentPurple)
+                        .symbolEffect(.pulse, options: .repeating)
+
+                    Text("Mesh Active")
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.mutedText)
+                }
+            }
+        }
+        .padding(.horizontal, FCSpacing.md)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(peerCount) people nearby, mesh active")
+    }
+
+    // MARK: - Friends Section
+
+    @ViewBuilder
+    private var friendsSection: some View {
+        if !nearbyFriends.isEmpty {
+            VStack(alignment: .leading, spacing: FCSpacing.md) {
+                HStack {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.fcAccentPurple)
+
+                    Text("Friends Nearby")
+                        .font(theme.typography.headline)
+                        .foregroundStyle(theme.colors.text)
+
+                    Spacer()
+
+                    Text("\(nearbyFriends.count)")
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.mutedText)
+                        .padding(.horizontal, FCSpacing.sm)
+                        .padding(.vertical, FCSpacing.xs)
+                        .background(Capsule().fill(theme.colors.hover))
+                }
+                .padding(.horizontal, FCSpacing.md)
+
+                ForEach(Array(nearbyFriends.enumerated()), id: \.element.id) { index, friend in
+                    NearbyPeerCard(
+                        displayName: friend.displayName,
+                        username: friend.username,
+                        avatarData: nil,
+                        hopCount: friend.hopCount,
+                        rssi: friend.rssi,
+                        isOnline: friend.isOnline,
+                        isFriend: true
+                    )
+                    .padding(.horizontal, FCSpacing.md)
+                    .staggeredReveal(index: index)
+                }
+            }
+        }
+    }
+
+    // MARK: - Channels Section
+
+    private var channelsSection: some View {
+        LocationChannelList(channels: channels)
+    }
+
+    // MARK: - Map Section
+
+    private var mapSection: some View {
+        VStack(alignment: .leading, spacing: FCSpacing.md) {
+            HStack {
+                Image(systemName: "map.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.fcAccentPurple)
+
+                Text("Friend Finder")
+                    .font(theme.typography.headline)
+                    .foregroundStyle(theme.colors.text)
+
+                Spacer()
+
+                Button(action: { withAnimation { showMap.toggle() } }) {
+                    Text(showMap ? "Hide Map" : "Show Map")
+                        .font(theme.typography.caption)
+                        .foregroundStyle(.fcAccentPurple)
+                        .padding(.horizontal, FCSpacing.sm)
+                        .padding(.vertical, FCSpacing.xs)
+                        .background(
+                            Capsule()
+                                .fill(.fcAccentPurple.opacity(0.12))
+                        )
+                }
+                .frame(minHeight: FCSizing.minTapTarget)
+                .accessibilityLabel(showMap ? "Hide friend finder map" : "Show friend finder map")
+            }
+            .padding(.horizontal, FCSpacing.md)
+
+            if showMap {
+                FriendFinderMap(
+                    friends: friendPins,
+                    userLocation: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
+                    beacons: beacons,
+                    onDropBeacon: { coordinate in
+                        let beacon = BeaconPin(
+                            id: UUID(),
+                            label: "I'm here!",
+                            coordinate: coordinate,
+                            createdBy: "You",
+                            expiresAt: Date().addingTimeInterval(1800)
+                        )
+                        beacons.append(beacon)
+                    }
+                )
+                .frame(height: 350)
+                .padding(.horizontal, FCSpacing.md)
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+    }
+}
+
+// MARK: - Peer Card Data
+
+/// Lightweight view-level struct for peer card display.
+struct NearbyPeerCard_Data: Identifiable {
+    let id: UUID
+    let displayName: String
+    let username: String?
+    let hopCount: Int
+    let rssi: Int
+    let isOnline: Bool
+}
+
+// MARK: - Sample Data
+
+extension NearbyView {
+
+    static let sampleFriends: [NearbyPeerCard_Data] = [
+        NearbyPeerCard_Data(id: UUID(), displayName: "Sarah Chen", username: "sarahc", hopCount: 0, rssi: -45, isOnline: true),
+        NearbyPeerCard_Data(id: UUID(), displayName: "Jake Morrison", username: "jakem", hopCount: 1, rssi: -62, isOnline: true),
+        NearbyPeerCard_Data(id: UUID(), displayName: "Priya Patel", username: "priyap", hopCount: 3, rssi: -78, isOnline: true),
+    ]
+
+    static let samplePeers: [NearbyPeerCard_Data] = [
+        NearbyPeerCard_Data(id: UUID(), displayName: "Alex", username: nil, hopCount: 2, rssi: -70, isOnline: true),
+        NearbyPeerCard_Data(id: UUID(), displayName: "MeshUser_7f3a", username: nil, hopCount: 4, rssi: -85, isOnline: false),
+    ]
+
+    static let sampleChannels: [LocationChannelItem] = [
+        LocationChannelItem(id: UUID(), name: "Main Field", iconName: "mappin.and.ellipse", memberCount: 42, lastMessagePreview: "Anyone know where the food trucks moved?", lastActivityAt: Date().addingTimeInterval(-120), isAutoJoined: true, geohash: "gcpu2e"),
+        LocationChannelItem(id: UUID(), name: "Camping Area B", iconName: "tent.fill", memberCount: 18, lastMessagePreview: "Showers open until midnight", lastActivityAt: Date().addingTimeInterval(-300), isAutoJoined: false, geohash: "gcpu2f"),
+        LocationChannelItem(id: UUID(), name: "Car Park 3", iconName: "car.fill", memberCount: 7, lastMessagePreview: nil, lastActivityAt: nil, isAutoJoined: false, geohash: "gcpu2g"),
+    ]
+
+    static let sampleFriendPins: [FriendMapPin] = [
+        FriendMapPin(id: UUID(), displayName: "Sarah", coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), precision: .precise, color: .blue, lastUpdated: Date()),
+        FriendMapPin(id: UUID(), displayName: "Jake", coordinate: CLLocationCoordinate2D(latitude: 51.0052, longitude: -2.5850), precision: .fuzzy, color: .green, lastUpdated: Date().addingTimeInterval(-60)),
+    ]
+}
+
+// MARK: - Preview
+
+#Preview("Nearby Tab") {
+    NearbyView()
+        .preferredColorScheme(.dark)
+        .festiChatTheme()
+}
+
+#Preview("Nearby Tab - Light") {
+    NearbyView()
+        .preferredColorScheme(.light)
+        .festiChatTheme()
+}

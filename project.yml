@@ -1,0 +1,110 @@
+name: FestiChat
+options:
+  bundleIdPrefix: app.festichat
+  deploymentTarget:
+    iOS: "16.0"
+    macOS: "13.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    INFOPLIST_FILE: App/Info.plist
+    ENABLE_USER_SCRIPT_SANDBOXING: false
+
+packages:
+  FestiChatProtocol:
+    path: Packages/FestiChatProtocol
+  FestiChatMesh:
+    path: Packages/FestiChatMesh
+  FestiChatCrypto:
+    path: Packages/FestiChatCrypto
+
+targets:
+  FestiChat:
+    type: application
+    platform: [iOS, macOS]
+    sources:
+      - path: App
+        excludes:
+          - "**/*.entitlements"
+      - path: Sources
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.festichat.FestiChat
+        CODE_SIGN_ENTITLEMENTS: App/Entitlements/FestiChat.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_FILE: App/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: true
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          OTHER_SWIFT_FLAGS: "-DBLE_UUID_DEBUG"
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+          SWIFT_OPTIMIZATION_LEVEL: -O
+    dependencies:
+      - package: FestiChatProtocol
+      - package: FestiChatMesh
+      - package: FestiChatCrypto
+    entitlements:
+      path: App/Entitlements/FestiChat.entitlements
+
+  FestiChatTests:
+    type: bundle.unit-test
+    platform: [iOS, macOS]
+    sources:
+      - path: Tests
+    dependencies:
+      - target: FestiChat
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.festichat.FestiChatTests
+
+schemes:
+  FestiChat:
+    build:
+      targets:
+        FestiChat: all
+        FestiChatTests: [test]
+    run:
+      config: Debug
+      environmentVariables:
+        - variable: BLE_SERVICE_UUID
+          value: "FC000001-0000-1000-8000-00805F9B34FA"
+          isEnabled: true
+    test:
+      config: Debug
+      targets:
+        - FestiChatTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  FestiChat-Release:
+    build:
+      targets:
+        FestiChat: all
+    run:
+      config: Release
+      environmentVariables:
+        - variable: BLE_SERVICE_UUID
+          value: "FC000001-0000-1000-8000-00805F9B34FB"
+          isEnabled: true
+    profile:
+      config: Release
+    archive:
+      config: Release

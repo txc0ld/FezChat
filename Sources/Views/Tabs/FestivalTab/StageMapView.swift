@@ -1,0 +1,223 @@
+import SwiftUI
+import MapKit
+
+// MARK: - StageMapView
+
+/// Interactive MapKit view rendering festival grounds with stage hotspots,
+/// friend dots overlay, and meeting point pins.
+///
+/// Stage hotspots are tappable and navigate to the corresponding stage channel.
+/// Friend locations appear as colored dots with precision indicators.
+struct StageMapView: View {
+
+    let stages: [StageMapItem]
+    let friends: [FriendMapPin]
+    let meetingPoints: [MeetingPointMapItem]
+    let festivalCenter: CLLocationCoordinate2D
+    let festivalRadiusMeters: Double
+
+    var onStageTap: ((StageMapItem) -> Void)?
+    var onMeetingPointTap: ((MeetingPointMapItem) -> Void)?
+    var onFriendTap: ((FriendMapPin) -> Void)?
+
+    @State private var cameraPosition: MapCameraPosition = .automatic
+    @State private var selectedStage: StageMapItem?
+
+    @Environment(\.theme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            mapView
+
+            // Recenter control
+            Button(action: recenter) {
+                Image(systemName: "scope")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.fcAccentPurple)
+                    .frame(width: FCSizing.minTapTarget, height: FCSizing.minTapTarget)
+                    .background(
+                        Circle()
+                            .fill(.thickMaterial)
+                            .overlay(
+                                Circle()
+                                    .stroke(colorScheme == .dark ? .white.opacity(0.15) : .black.opacity(0.1),
+                                            lineWidth: FCSizing.hairline)
+                            )
+                    )
+            }
+            .padding(FCSpacing.md)
+            .accessibilityLabel("Recenter map on festival")
+        }
+        .onAppear { recenter() }
+    }
+
+    // MARK: - Map
+
+    private var mapView: some View {
+        Map(position: $cameraPosition) {
+            // Festival boundary circle
+            MapCircle(center: festivalCenter, radius: festivalRadiusMeters)
+                .foregroundStyle(.fcAccentPurple.opacity(0.05))
+                .stroke(.fcAccentPurple.opacity(0.2), lineWidth: 1)
+
+            // Stage hotspots
+            ForEach(stages) { stage in
+                Annotation(stage.name, coordinate: stage.coordinate, anchor: .bottom) {
+                    StageHotspotView(stage: stage, isSelected: selectedStage?.id == stage.id) {
+                        selectedStage = stage
+                        onStageTap?(stage)
+                    }
+                }
+            }
+
+            // Friend dots
+            ForEach(friends) { friend in
+                Annotation(friend.displayName, coordinate: friend.coordinate) {
+                    Button(action: { onFriendTap?(friend) }) {
+                        Circle()
+                            .fill(friend.color)
+                            .frame(width: friend.precision == .precise ? 12 : 8, height: friend.precision == .precise ? 12 : 8)
+                            .overlay(
+                                Circle()
+                                    .stroke(.white, lineWidth: 1.5)
+                            )
+                            .shadow(color: friend.color.opacity(0.4), radius: 3)
+                            .frame(minWidth: FCSizing.minTapTarget, minHeight: FCSizing.minTapTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(friend.displayName), \(friend.precisionDescription)")
+                }
+            }
+
+            // Meeting point pins
+            ForEach(meetingPoints) { point in
+                Annotation(point.label, coordinate: point.coordinate) {
+                    Button(action: { onMeetingPointTap?(point) }) {
+                        VStack(spacing: 0) {
+                            Image(systemName: "flag.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.fcAccentPurple)
+
+                            Text(point.label)
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(.fcAccentPurple))
+                        }
+                        .frame(minWidth: FCSizing.minTapTarget, minHeight: FCSizing.minTapTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Meeting point: \(point.label)")
+                }
+            }
+        }
+        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+        .mapControls {
+            MapCompass()
+            MapScaleView()
+        }
+        .clipShape(RoundedRectangle(cornerRadius: FCCornerRadius.xl, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: FCCornerRadius.xl, style: .continuous)
+                .stroke(
+                    colorScheme == .dark ? .white.opacity(0.1) : .black.opacity(0.08),
+                    lineWidth: FCSizing.hairline
+                )
+        )
+    }
+
+    // MARK: - Helpers
+
+    private func recenter() {
+        withAnimation {
+            cameraPosition = .region(
+                MKCoordinateRegion(
+                    center: festivalCenter,
+                    latitudinalMeters: festivalRadiusMeters * 2.5,
+                    longitudinalMeters: festivalRadiusMeters * 2.5
+                )
+            )
+        }
+    }
+}
+
+// MARK: - StageHotspotView
+
+/// Tappable stage hotspot marker on the map.
+private struct StageHotspotView: View {
+
+    let stage: StageMapItem
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 2) {
+                Image(systemName: "music.note.house.fill")
+                    .font(.system(size: isSelected ? 22 : 18, weight: .bold))
+                    .foregroundStyle(.fcAccentPurple)
+                    .shadow(color: .fcAccentPurple.opacity(0.5), radius: isSelected ? 6 : 2)
+
+                Text(stage.name)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(theme.colors.text)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(.thickMaterial)
+                    )
+            }
+            .frame(minWidth: FCSizing.minTapTarget, minHeight: FCSizing.minTapTarget)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(stage.name) stage")
+        .accessibilityHint("Tap to open stage channel")
+    }
+}
+
+// MARK: - Data Models
+
+struct StageMapItem: Identifiable {
+    let id: UUID
+    let name: String
+    let coordinate: CLLocationCoordinate2D
+    let isLive: Bool
+    let currentArtist: String?
+}
+
+struct MeetingPointMapItem: Identifiable {
+    let id: UUID
+    let label: String
+    let coordinate: CLLocationCoordinate2D
+    let createdBy: String
+    let expiresAt: Date
+}
+
+// MARK: - Preview
+
+#Preview("Stage Map") {
+    let stages: [StageMapItem] = [
+        StageMapItem(id: UUID(), name: "Pyramid", coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), isLive: true, currentArtist: "Bicep"),
+        StageMapItem(id: UUID(), name: "Other", coordinate: CLLocationCoordinate2D(latitude: 51.0055, longitude: -2.5845), isLive: false, currentArtist: nil),
+        StageMapItem(id: UUID(), name: "West Holts", coordinate: CLLocationCoordinate2D(latitude: 51.0038, longitude: -2.5870), isLive: true, currentArtist: "Floating Points"),
+    ]
+
+    StageMapView(
+        stages: stages,
+        friends: NearbyView.sampleFriendPins,
+        meetingPoints: [
+            MeetingPointMapItem(id: UUID(), label: "Meet at tent", coordinate: CLLocationCoordinate2D(latitude: 51.0042, longitude: -2.5855), createdBy: "Sarah", expiresAt: Date().addingTimeInterval(1800)),
+        ],
+        festivalCenter: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
+        festivalRadiusMeters: 3000
+    )
+    .frame(height: 400)
+    .padding()
+    .background(GradientBackground())
+    .preferredColorScheme(.dark)
+}

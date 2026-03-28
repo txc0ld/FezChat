@@ -1,0 +1,332 @@
+import SwiftUI
+
+// MARK: - SettingsView
+
+/// App settings: theme, location, notifications, PTT mode,
+/// recovery export, and about/legal sections.
+struct SettingsView: View {
+
+    @State private var selectedTheme: AppTheme = .system
+    @State private var locationSharing: LocationPrecision = .fuzzy
+    @State private var notificationsEnabled: Bool = true
+    @State private var proximityAlerts: Bool = true
+    @State private var pttMode: PTTMode = .holdToTalk
+    @State private var autoJoinChannels: Bool = true
+    @State private var crowdPulseVisible: Bool = true
+    @State private var breadcrumbs: Bool = false
+    @State private var showExportRecovery: Bool = false
+    @State private var showDeleteConfirm: Bool = false
+
+    @Environment(\.theme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            GradientBackground()
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: FCSpacing.lg) {
+                    appearanceSection
+                        .staggeredReveal(index: 0)
+
+                    locationSection
+                        .staggeredReveal(index: 1)
+
+                    notificationsSection
+                        .staggeredReveal(index: 2)
+
+                    chatSection
+                        .staggeredReveal(index: 3)
+
+                    securitySection
+                        .staggeredReveal(index: 4)
+
+                    aboutSection
+                        .staggeredReveal(index: 5)
+
+                    dangerZone
+                        .staggeredReveal(index: 6)
+
+                    Spacer().frame(height: FCSpacing.xxl)
+                }
+                .padding(FCSpacing.md)
+            }
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Export Recovery Kit", isPresented: $showExportRecovery) {
+            Button("Export") {
+                // Export encrypted keypair backup
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will create a password-protected backup of your encryption keys. Keep it safe -- you'll need it to recover your identity on a new device.")
+        }
+        .alert("Delete Account", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                // Delete account
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently delete your keys and all local data. Friends will see you as a new user if you re-register. This cannot be undone.")
+        }
+    }
+
+    // MARK: - Appearance
+
+    private var appearanceSection: some View {
+        settingsGroup(title: "Appearance", icon: "paintbrush.fill") {
+            VStack(spacing: FCSpacing.md) {
+                settingsRow(title: "Theme") {
+                    Picker("Theme", selection: $selectedTheme) {
+                        ForEach(AppTheme.allCases, id: \.self) { theme in
+                            Text(theme.rawValue.capitalized).tag(theme)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 200)
+                }
+            }
+        }
+    }
+
+    // MARK: - Location
+
+    private var locationSection: some View {
+        settingsGroup(title: "Location", icon: "location.fill") {
+            VStack(spacing: FCSpacing.md) {
+                settingsRow(title: "Default Sharing") {
+                    Picker("Precision", selection: $locationSharing) {
+                        Text("Precise").tag(LocationPrecision.precise)
+                        Text("Fuzzy").tag(LocationPrecision.fuzzy)
+                        Text("Off").tag(LocationPrecision.off)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 220)
+                }
+
+                settingsToggleRow(title: "Proximity Alerts", subtitle: "Get notified when friends are nearby", isOn: $proximityAlerts)
+
+                settingsToggleRow(title: "Breadcrumb Trails", subtitle: "Track friend movement (opt-in, auto-deleted)", isOn: $breadcrumbs)
+
+                settingsToggleRow(title: "Crowd Pulse", subtitle: "Show crowd density heatmap", isOn: $crowdPulseVisible)
+            }
+        }
+    }
+
+    // MARK: - Notifications
+
+    private var notificationsSection: some View {
+        settingsGroup(title: "Notifications", icon: "bell.fill") {
+            VStack(spacing: FCSpacing.md) {
+                settingsToggleRow(title: "Push Notifications", subtitle: "Receive notifications for messages", isOn: $notificationsEnabled)
+
+                settingsToggleRow(title: "Auto-Join Channels", subtitle: "Automatically join nearby location channels", isOn: $autoJoinChannels)
+            }
+        }
+    }
+
+    // MARK: - Chat
+
+    private var chatSection: some View {
+        settingsGroup(title: "Chat", icon: "message.fill") {
+            VStack(spacing: FCSpacing.md) {
+                settingsRow(title: "Push-to-Talk Mode") {
+                    Picker("PTT Mode", selection: $pttMode) {
+                        Text("Hold").tag(PTTMode.holdToTalk)
+                        Text("Toggle").tag(PTTMode.toggleTalk)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 160)
+                }
+            }
+        }
+    }
+
+    // MARK: - Security
+
+    private var securitySection: some View {
+        settingsGroup(title: "Security", icon: "lock.fill") {
+            VStack(spacing: FCSpacing.md) {
+                Button(action: { showExportRecovery = true }) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: FCSpacing.xs) {
+                            Text("Export Recovery Kit")
+                                .font(theme.typography.body)
+                                .foregroundStyle(theme.colors.text)
+
+                            Text("Encrypted backup of your encryption keys")
+                                .font(theme.typography.caption)
+                                .foregroundStyle(theme.colors.mutedText)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.fcAccentPurple)
+                    }
+                    .frame(minHeight: FCSizing.minTapTarget)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Export recovery kit")
+            }
+        }
+    }
+
+    // MARK: - About
+
+    private var aboutSection: some View {
+        settingsGroup(title: "About", icon: "info.circle.fill") {
+            VStack(spacing: FCSpacing.md) {
+                settingsInfoRow(title: "Version", value: "1.0.0")
+                settingsInfoRow(title: "Build", value: "2026.03.28")
+
+                Button(action: {}) {
+                    HStack {
+                        Text("Privacy Policy")
+                            .font(theme.typography.body)
+                            .foregroundStyle(theme.colors.text)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 12))
+                            .foregroundStyle(theme.colors.mutedText)
+                    }
+                    .frame(minHeight: FCSizing.minTapTarget)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {}) {
+                    HStack {
+                        Text("Terms of Service")
+                            .font(theme.typography.body)
+                            .foregroundStyle(theme.colors.text)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 12))
+                            .foregroundStyle(theme.colors.mutedText)
+                    }
+                    .frame(minHeight: FCSizing.minTapTarget)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {}) {
+                    HStack {
+                        Text("Open Source Licenses")
+                            .font(theme.typography.body)
+                            .foregroundStyle(theme.colors.text)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 12))
+                            .foregroundStyle(theme.colors.mutedText)
+                    }
+                    .frame(minHeight: FCSizing.minTapTarget)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Danger Zone
+
+    private var dangerZone: some View {
+        settingsGroup(title: "Account", icon: "exclamationmark.triangle.fill") {
+            Button(action: { showDeleteConfirm = true }) {
+                HStack {
+                    Text("Delete Account & Data")
+                        .font(theme.typography.body)
+                        .foregroundStyle(FCColors.darkColors.statusRed)
+                    Spacer()
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundStyle(FCColors.darkColors.statusRed)
+                }
+                .frame(minHeight: FCSizing.minTapTarget)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Delete account and all data")
+        }
+    }
+
+    // MARK: - Reusable Components
+
+    private func settingsGroup<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+        GlassCard(thickness: .regular) {
+            VStack(alignment: .leading, spacing: FCSpacing.md) {
+                HStack(spacing: FCSpacing.sm) {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.fcAccentPurple)
+
+                    Text(title)
+                        .font(theme.typography.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(theme.colors.text)
+                }
+
+                content()
+            }
+        }
+    }
+
+    private func settingsRow<Content: View>(title: String, @ViewBuilder trailing: () -> Content) -> some View {
+        HStack {
+            Text(title)
+                .font(theme.typography.body)
+                .foregroundStyle(theme.colors.text)
+
+            Spacer()
+
+            trailing()
+        }
+        .frame(minHeight: FCSizing.minTapTarget)
+    }
+
+    private func settingsToggleRow(title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: FCSpacing.xs) {
+                Text(title)
+                    .font(theme.typography.body)
+                    .foregroundStyle(theme.colors.text)
+
+                Text(subtitle)
+                    .font(theme.typography.caption)
+                    .foregroundStyle(theme.colors.mutedText)
+            }
+        }
+        .tint(.fcAccentPurple)
+        .frame(minHeight: FCSizing.minTapTarget)
+    }
+
+    private func settingsInfoRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .font(theme.typography.body)
+                .foregroundStyle(theme.colors.text)
+
+            Spacer()
+
+            Text(value)
+                .font(theme.typography.secondary)
+                .foregroundStyle(theme.colors.mutedText)
+        }
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Settings") {
+    NavigationStack {
+        SettingsView()
+    }
+    .preferredColorScheme(.dark)
+    .festiChatTheme()
+}
+
+#Preview("Settings - Light") {
+    NavigationStack {
+        SettingsView()
+    }
+    .preferredColorScheme(.light)
+    .festiChatTheme()
+}

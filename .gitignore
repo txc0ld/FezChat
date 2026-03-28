@@ -1,0 +1,36 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+*.pbxproj
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+Packages/*/Package.resolved
+
+# macOS
+.DS_Store
+
+# Secrets
+*.env
+*.key
+
+# XcodeGen
+*.xcodeproj
+
+# CocoaPods (if ever used)
+Pods/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Code coverage
+*.gcda
+*.gcno
+*.profraw
+*.profdata

@@ -1,0 +1,349 @@
+import SwiftUI
+import MapKit
+
+// MARK: - AlertDetailSheet
+
+/// Full alert detail sheet showing live location, severity info,
+/// and the response workflow (accept -> navigate -> resolve).
+struct AlertDetailSheet: View {
+
+    @Binding var isPresented: Bool
+
+    let alert: SOSAlertItem
+
+    var onAccept: (() -> Void)?
+    var onNavigate: (() -> Void)?
+    var onResolve: ((SOSResolution) -> Void)?
+
+    @State private var showResolveOptions = false
+    @State private var responseTimer: Int = 0
+    @State private var timer: Timer?
+    @State private var cameraPosition: MapCameraPosition = .automatic
+
+    @Environment(\.theme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                GradientBackground()
+
+                ScrollView {
+                    VStack(spacing: FCSpacing.lg) {
+                        severityHeader
+                        liveMapSection
+                        detailsSection
+                        responseTimerSection
+                        workflowActions
+                    }
+                    .padding(FCSpacing.md)
+                }
+            }
+            .navigationTitle("Alert #\(alert.shortID)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { isPresented = false }
+                        .foregroundStyle(theme.colors.mutedText)
+                }
+            }
+            .onAppear { startResponseTimer() }
+            .onDisappear { timer?.invalidate() }
+            .confirmationDialog("Resolve Alert", isPresented: $showResolveOptions) {
+                Button("Treated on Site") { onResolve?(.treatedOnSite); isPresented = false }
+                Button("Transported") { onResolve?(.transported); isPresented = false }
+                Button("False Alarm") { onResolve?(.falseAlarm); isPresented = false }
+                Button("Cancel", role: .cancel) {}
+            }
+        }
+    }
+
+    // MARK: - Severity Header
+
+    private var severityHeader: some View {
+        GlassCard(thickness: .regular) {
+            HStack(spacing: FCSpacing.md) {
+                // Severity badge
+                ZStack {
+                    Circle()
+                        .fill(severityColor.opacity(0.2))
+                        .frame(width: 56, height: 56)
+
+                    Image(systemName: "cross.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(severityColor)
+                }
+
+                VStack(alignment: .leading, spacing: FCSpacing.xs) {
+                    Text(severityLabel)
+                        .font(theme.typography.headline)
+                        .fontWeight(.bold)
+                        .foregroundStyle(severityColor)
+
+                    Text("Alert #\(alert.shortID)")
+                        .font(theme.typography.secondary)
+                        .foregroundStyle(theme.colors.mutedText)
+
+                    Text(alert.createdAt, style: .relative)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.mutedText.opacity(0.7))
+                }
+
+                Spacer()
+
+                // Status
+                statusBadge
+            }
+        }
+    }
+
+    private var statusBadge: some View {
+        let (text, color) = statusInfo
+        return Text(text)
+            .font(theme.typography.caption)
+            .fontWeight(.bold)
+            .foregroundStyle(color)
+            .padding(.horizontal, FCSpacing.md)
+            .padding(.vertical, FCSpacing.sm)
+            .background(Capsule().fill(color.opacity(0.15)))
+    }
+
+    private var statusInfo: (String, Color) {
+        if alert.acceptedBy != nil {
+            return ("ACCEPTED", .fcAccentPurple)
+        }
+        return ("ACTIVE", severityColor)
+    }
+
+    // MARK: - Live Map Section
+
+    private var liveMapSection: some View {
+        GlassCard(thickness: .regular) {
+            VStack(alignment: .leading, spacing: FCSpacing.sm) {
+                HStack {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(severityColor)
+
+                    Text("Live Location")
+                        .font(theme.typography.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(theme.colors.text)
+
+                    Spacer()
+
+                    // Accuracy indicator
+                    HStack(spacing: FCSpacing.xs) {
+                        Image(systemName: alert.accuracy.iconName)
+                            .font(.system(size: 10))
+                        Text(alert.accuracy.label)
+                            .font(theme.typography.caption)
+                    }
+                    .foregroundStyle(alert.accuracy.color)
+                }
+
+                Map(position: $cameraPosition) {
+                    Annotation("SOS", coordinate: alert.coordinate) {
+                        ZStack {
+                            // Accuracy circle
+                            if alert.accuracy == .estimated {
+                                Circle()
+                                    .fill(severityColor.opacity(0.1))
+                                    .frame(width: 60, height: 60)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(severityColor.opacity(0.3), lineWidth: 1)
+                                    )
+                            } else if alert.accuracy == .lastKnown {
+                                Circle()
+                                    .fill(severityColor.opacity(0.05))
+                                    .frame(width: 80, height: 80)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(severityColor.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                                    )
+                            }
+
+                            // Pin
+                            Circle()
+                                .fill(severityColor)
+                                .frame(width: 16, height: 16)
+                                .overlay(
+                                    Image(systemName: "cross.fill")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .foregroundStyle(.white)
+                                )
+                                .shadow(color: severityColor.opacity(0.5), radius: 4)
+                        }
+                    }
+                }
+                .mapStyle(.standard(elevation: .flat))
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: FCCornerRadius.md, style: .continuous))
+
+                Text(alert.locationDescription)
+                    .font(theme.typography.secondary)
+                    .foregroundStyle(theme.colors.mutedText)
+            }
+        }
+    }
+
+    // MARK: - Details Section
+
+    private var detailsSection: some View {
+        GlassCard(thickness: .regular) {
+            VStack(alignment: .leading, spacing: FCSpacing.md) {
+                Text("Details")
+                    .font(theme.typography.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(theme.colors.text)
+
+                detailRow(label: "Severity", value: severityLabel, color: severityColor)
+                detailRow(label: "Location", value: alert.locationDescription, color: theme.colors.text)
+                detailRow(label: "GPS Accuracy", value: alert.accuracy.label, color: alert.accuracy.color)
+
+                if let description = alert.description {
+                    detailRow(label: "Description", value: description, color: theme.colors.text)
+                }
+
+                if let acceptedBy = alert.acceptedBy {
+                    detailRow(label: "Accepted By", value: acceptedBy, color: .fcAccentPurple)
+                }
+            }
+        }
+    }
+
+    private func detailRow(label: String, value: String, color: Color) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(theme.typography.caption)
+                .foregroundStyle(theme.colors.mutedText)
+                .frame(width: 100, alignment: .leading)
+
+            Text(value)
+                .font(theme.typography.secondary)
+                .foregroundStyle(color)
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Response Timer
+
+    private var responseTimerSection: some View {
+        GlassCard(thickness: .ultraThin) {
+            HStack {
+                Image(systemName: "timer")
+                    .font(.system(size: 16))
+                    .foregroundStyle(theme.colors.mutedText)
+
+                Text("Response Time")
+                    .font(theme.typography.secondary)
+                    .foregroundStyle(theme.colors.mutedText)
+
+                Spacer()
+
+                Text(formattedTime)
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .foregroundStyle(theme.colors.text)
+                    .contentTransition(.numericText())
+            }
+        }
+    }
+
+    private var formattedTime: String {
+        let minutes = responseTimer / 60
+        let seconds = responseTimer % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    // MARK: - Workflow Actions
+
+    private var workflowActions: some View {
+        VStack(spacing: FCSpacing.md) {
+            if alert.acceptedBy == nil {
+                GlassButton("Accept Alert", icon: "checkmark.circle.fill") {
+                    onAccept?()
+                }
+                .fullWidth()
+            }
+
+            GlassButton("Navigate to Location", icon: "arrow.triangle.turn.up.right.diamond.fill", style: .secondary) {
+                onNavigate?()
+            }
+            .fullWidth()
+
+            if alert.acceptedBy != nil {
+                GlassButton("Resolve Alert", icon: "checkmark.seal.fill", style: .outline) {
+                    showResolveOptions = true
+                }
+                .fullWidth()
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var severityColor: Color {
+        switch alert.severity {
+        case .green: return FCColors.darkColors.statusGreen
+        case .amber: return FCColors.darkColors.statusAmber
+        case .red: return FCColors.darkColors.statusRed
+        }
+    }
+
+    private var severityLabel: String {
+        switch alert.severity {
+        case .green: return "Non-Urgent"
+        case .amber: return "Urgent"
+        case .red: return "Critical Emergency"
+        }
+    }
+
+    private func startResponseTimer() {
+        let elapsed = Int(Date().timeIntervalSince(alert.createdAt))
+        responseTimer = elapsed
+
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            responseTimer += 1
+        }
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Alert Detail - Active") {
+    AlertDetailSheet(
+        isPresented: .constant(true),
+        alert: SOSAlertItem(
+            id: UUID(),
+            shortID: "A7F3",
+            severity: .red,
+            locationDescription: "Near Pyramid Stage, Section B, Row 12",
+            description: nil,
+            accuracy: .precise,
+            acceptedBy: nil,
+            createdAt: Date().addingTimeInterval(-180)
+        )
+    )
+    .preferredColorScheme(.dark)
+    .festiChatTheme()
+}
+
+#Preview("Alert Detail - Accepted") {
+    AlertDetailSheet(
+        isPresented: .constant(true),
+        alert: SOSAlertItem(
+            id: UUID(),
+            shortID: "B2E1",
+            severity: .amber,
+            locationDescription: "Camping Area B, near showers",
+            description: "Feeling very dizzy and nauseous, has not eaten today",
+            accuracy: .estimated,
+            acceptedBy: "Medic-5",
+            createdAt: Date().addingTimeInterval(-420)
+        )
+    )
+    .preferredColorScheme(.dark)
+    .festiChatTheme()
+}

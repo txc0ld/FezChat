@@ -1,0 +1,137 @@
+import SwiftUI
+
+// MARK: - ConnectionBanner
+
+/// Glass capsule banner showing "Connected to X people nearby".
+/// Slides down from the top on mesh connection, auto-dismisses after 3 seconds.
+struct ConnectionBanner: View {
+
+    /// Number of connected peers to display.
+    let peerCount: Int
+
+    /// Whether the banner is currently visible.
+    @Binding var isVisible: Bool
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.theme) private var theme
+
+    /// Auto-dismiss duration in seconds.
+    private let dismissDelay: TimeInterval = 3.0
+
+    var body: some View {
+        if isVisible {
+            bannerContent
+                .transition(bannerTransition)
+                .onAppear {
+                    scheduleAutoDismiss()
+                }
+        }
+    }
+
+    // MARK: - Content
+
+    private var bannerContent: some View {
+        HStack(spacing: FCSpacing.sm) {
+            Circle()
+                .fill(theme.colors.statusGreen)
+                .frame(width: 8, height: 8)
+
+            Text(bannerText)
+                .font(.custom(FCFontName.medium, size: 14, relativeTo: .footnote))
+                .foregroundStyle(theme.colors.text)
+        }
+        .padding(.horizontal, FCSpacing.md)
+        .padding(.vertical, FCSpacing.sm + 2)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            Capsule()
+                .stroke(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.15)
+                        : Color.black.opacity(0.1),
+                    lineWidth: FCSizing.hairline
+                )
+        )
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+    }
+
+    // MARK: - Helpers
+
+    private var bannerText: String {
+        if peerCount == 1 {
+            return "Connected to 1 person nearby"
+        } else {
+            return "Connected to \(peerCount) people nearby"
+        }
+    }
+
+    private var bannerTransition: AnyTransition {
+        if SpringConstants.isReduceMotionEnabled {
+            return .opacity
+        } else {
+            return .asymmetric(
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .move(edge: .top).combined(with: .opacity)
+            )
+        }
+    }
+
+    private func scheduleAutoDismiss() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + dismissDelay) {
+            withAnimation(SpringConstants.accessiblePageEntrance) {
+                isVisible = false
+            }
+        }
+    }
+}
+
+// MARK: - ConnectionBanner Modifier
+
+/// Attaches a connection banner overlay to a view.
+struct ConnectionBannerModifier: ViewModifier {
+    let peerCount: Int
+    @Binding var isVisible: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                ConnectionBanner(peerCount: peerCount, isVisible: $isVisible)
+                    .padding(.top, FCSpacing.sm)
+            }
+    }
+}
+
+extension View {
+    /// Shows a connection banner overlay.
+    func connectionBanner(peerCount: Int, isVisible: Binding<Bool>) -> some View {
+        modifier(ConnectionBannerModifier(peerCount: peerCount, isVisible: isVisible))
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Connection Banner") {
+    struct BannerPreview: View {
+        @State private var isVisible = true
+        var body: some View {
+            ZStack {
+                GradientBackground()
+                VStack {
+                    ConnectionBanner(peerCount: 12, isVisible: $isVisible)
+                    Spacer()
+                    GlassButton("Show Banner") {
+                        withAnimation(SpringConstants.accessiblePageEntrance) {
+                            isVisible = true
+                        }
+                    }
+                }
+                .padding()
+            }
+            .environment(\.theme, Theme.shared)
+        }
+    }
+    return BannerPreview()
+}

@@ -1,0 +1,683 @@
+import Foundation
+import SwiftData
+import CoreLocation
+import FestiChatProtocol
+import FestiChatMesh
+import FestiChatCrypto
+
+// MARK: - SOS Flow State
+
+/// States of the SOS alert flow.
+enum SOSFlowState: Sendable, Equatable {
+    /// No active SOS flow.
+    case idle
+    /// User is selecting severity.
+    case selectingSeverity
+    /// Awaiting user confirmation before broadcasting.
+    case confirmingAlert(severity: SOSSeverity)
+    /// Acquiring precise GPS location.
+    case acquiringLocation
+    /// Broadcasting the alert.
+    case broadcasting
+    /// Alert is active and waiting for responder.
+    case active(alertID: UUID)
+    /// A responder has accepted the alert.
+    case responderAccepted(alertID: UUID, responderName: String)
+    /// Alert has been resolved.
+    case resolved(alertID: UUID, resolution: SOSResolution)
+    /// Error occurred.
+    case error(String)
+}
+
+// MARK: - SOS View Model
+
+/// Manages the SOS alert flow: severity selection, confirmation, GPS acquisition, broadcast,
+/// and medical responder dashboard.
+///
+/// SOS Flow:
+/// 1. User taps SOS button -> severity selection screen
+/// 2. User selects severity (green/amber/red) -> confirmation dialog
+/// 3. On confirm -> acquire precise GPS -> broadcast sosAlert packet
+/// 4. Wait for sosAccept from medical responder
+/// 5. On accept -> share precise location with responder
+/// 6. On resolve -> close alert
+///
+/// Medical Responder Dashboard:
+/// - View active SOS alerts on map
+/// - Accept an alert to claim it
+/// - Navigate to patient location
+/// - Resolve with outcome (treated on site, transported, false alarm, cancelled)
+///
+/// False alarm tracking:
+/// - Users who trigger false alarms get a counter incremented
+/// - After 3 false alarms, a confirmation delay is added
+@MainActor
+@Observable
+final class SOSViewModel {
+
+    // MARK: - Published State
+
+    /// Current SOS flow state.
+    var flowState: SOSFlowState = .idle
+
+    /// The active SOS alert, if any.
+    var activeAlert: SOSAlert?
+
+    /// All active SOS alerts visible on the mesh (for responders).
+    var visibleAlerts: [SOSAlertInfo] = []
+
+    /// The user's false alarm count.
+    var falseAlarmCount: Int = 0
+
+    /// Whether this user is a registered medical responder.
+    var isMedicalResponder = false
+
+    /// The responder's callsign (if medical responder).
+    var responderCallsign: String?
+
+    /// Whether the responder is on duty.
+    var isOnDuty = false
+
+    /// Alert the responder has accepted.
+    var acceptedAlert: SOSAlert?
+
+    /// Error message, if any.
+    var errorMessage: String?
+
+    /// Selected severity (for the selection screen).
+    var selectedSeverity: SOSSeverity?
+
+    /// Optional description for the alert.
+    var alertDescription: String = ""
+
+    /// Whether GPS acquisition is in progress.
+    var isAcquiringGPS = false
+
+    /// GPS acquisition progress (seconds elapsed / max wait time).
+    var gpsProgress: Double = 0
+
+    /// Countdown seconds remaining for false-alarm-delayed users.
+    var confirmationCountdown: Int = 0
+
+    // MARK: - Supporting Types
+
+    struct SOSAlertInfo: Identifiable, Sendable {
+        let id: UUID
+        let severity: SOSSeverity
+        let fuzzyLocation: String
+        let latitude: Double
+        let longitude: Double
+        let message: String?
+        let description: String?
+        let reporterName: String?
+        let createdAt: Date
+        let status: SOSStatus
+        let distance: CLLocationDistance?
+    }
+
+    // MARK: - Dependencies
+
+    private let modelContainer: ModelContainer
+    private let locationService: LocationService
+    private let messageService: MessageService
+    private let notificationService: NotificationService
+    private var sosObservation: NSObjectProtocol?
+
+    // MARK: - Constants
+
+    /// GPS acquisition timeout (seconds).
+    private static let gpsTimeout: TimeInterval = 10.0
+
+    /// False alarm threshold before adding confirmation delay.
+    private static let falseAlarmThreshold = 3
+
+    /// Confirmation delay for users with many false alarms (seconds).
+    private static let falseAlarmDelay = 10
+
+    /// SOS alert expiration (24 hours + festival duration).
+    private static let alertExpiration: TimeInterval = 86_400
+
+    // MARK: - Init
+
+    init(
+        modelContainer: ModelContainer,
+        locationService: LocationService,
+        messageService: MessageService,
+        notificationService: NotificationService
+    ) {
+        self.modelContainer = modelContainer
+        self.locationService = locationService
+        self.messageService = messageService
+        self.notificationService = notificationService
+
+        setupSOSReceiver()
+    }
+
+    deinit {
+        if let obs = sosObservation { NotificationCenter.default.removeObserver(obs) }
+    }
+
+    // MARK: - SOS Flow
+
+    /// Start the SOS flow (opens severity selection).
+    func startSOSFlow() {
+        flowState = .selectingSeverity
+        selectedSeverity = nil
+        alertDescription = ""
+    }
+
+    /// Select a severity level and move to confirmation.
+    func selectSeverity(_ severity: SOSSeverity) {
+        selectedSeverity = severity
+
+        // Check false alarm delay
+        if falseAlarmCount >= Self.falseAlarmThreshold {
+            confirmationCountdown = Self.falseAlarmDelay
+            startConfirmationCountdown(severity: severity)
+        } else {
+            flowState = .confirmingAlert(severity: severity)
+        }
+    }
+
+    /// Confirm and trigger the SOS alert.
+    func confirmAlert() async {
+        guard let severity = selectedSeverity else {
+            flowState = .error("No severity selected")
+            return
+        }
+
+        // Acquire GPS
+        flowState = .acquiringLocation
+        isAcquiringGPS = true
+        gpsProgress = 0
+
+        let location: CLLocation
+        do {
+            // Start a progress timer
+            let progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+                Task { @MainActor in
+                    guard let self else { timer.invalidate(); return }
+                    self.gpsProgress = min(1.0, self.gpsProgress + (0.5 / Self.gpsTimeout))
+                }
+            }
+
+            location = try await locationService.requestSOSLocation()
+            progressTimer.invalidate()
+            gpsProgress = 1.0
+        } catch {
+            isAcquiringGPS = false
+            // Fall back to last known location
+            if let lastKnown = locationService.currentLocation {
+                location = lastKnown
+            } else {
+                flowState = .error("Unable to determine location")
+                return
+            }
+        }
+
+        isAcquiringGPS = false
+
+        // Create fuzzy location (geohash precision 5 = ~1.2km)
+        let fuzzyGeohash = locationService.computeFuzzyGeohash(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude
+        )
+
+        // Create alert
+        flowState = .broadcasting
+
+        let context = ModelContext(modelContainer)
+        let alert = SOSAlert(
+            severity: severity,
+            preciseLocation: GeoPoint(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            ),
+            fuzzyLocation: fuzzyGeohash,
+            message: alertDescription.isEmpty ? nil : alertDescription,
+            alertDescription: alertDescription.isEmpty ? nil : alertDescription,
+            falseAlarmCount: falseAlarmCount,
+            expiresAt: Date().addingTimeInterval(Self.alertExpiration)
+        )
+
+        context.insert(alert)
+        do {
+            try context.save()
+        } catch {
+            flowState = .error("Failed to save alert: \(error.localizedDescription)")
+            return
+        }
+
+        activeAlert = alert
+
+        // Broadcast SOS packet
+        await broadcastSOSAlert(alert, severity: severity, fuzzyGeohash: fuzzyGeohash)
+
+        flowState = .active(alertID: alert.id)
+    }
+
+    /// Cancel the SOS flow before broadcasting.
+    func cancelFlow() {
+        flowState = .idle
+        selectedSeverity = nil
+        alertDescription = ""
+        confirmationCountdown = 0
+    }
+
+    /// Cancel an active alert (user false alarm).
+    func cancelActiveAlert() async {
+        guard let alert = activeAlert else { return }
+
+        let context = ModelContext(modelContainer)
+        alert.status = .resolved
+        alert.resolution = .cancelled
+        alert.resolvedAt = Date()
+
+        do {
+            try context.save()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        // Broadcast resolution
+        await broadcastSOSResolve(alertID: alert.id)
+
+        activeAlert = nil
+        flowState = .idle
+    }
+
+    /// Mark an active alert as a false alarm (increments counter).
+    func markFalseAlarm() async {
+        guard let alert = activeAlert else { return }
+
+        let context = ModelContext(modelContainer)
+        alert.status = .resolved
+        alert.resolution = .falseAlarm
+        alert.resolvedAt = Date()
+        alert.falseAlarmCount += 1
+
+        falseAlarmCount += 1
+
+        do {
+            try context.save()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        await broadcastSOSResolve(alertID: alert.id)
+
+        activeAlert = nil
+        flowState = .resolved(alertID: alert.id, resolution: .falseAlarm)
+    }
+
+    // MARK: - Medical Responder Actions
+
+    /// Load the user's medical responder status.
+    func loadResponderStatus() async {
+        let context = ModelContext(modelContainer)
+        let descriptor = FetchDescriptor<MedicalResponder>()
+
+        guard let responders = try? context.fetch(descriptor) else { return }
+
+        if let responder = responders.first {
+            isMedicalResponder = true
+            responderCallsign = responder.callsign
+            isOnDuty = responder.isOnDuty
+        }
+    }
+
+    /// Toggle responder on-duty status.
+    func toggleOnDuty() async {
+        let context = ModelContext(modelContainer)
+        let descriptor = FetchDescriptor<MedicalResponder>()
+
+        guard let responder = try? context.fetch(descriptor).first else { return }
+
+        responder.isOnDuty.toggle()
+        isOnDuty = responder.isOnDuty
+
+        try? context.save()
+    }
+
+    /// Accept an SOS alert as a medical responder.
+    func acceptAlert(_ alertInfo: SOSAlertInfo) async {
+        let context = ModelContext(modelContainer)
+        let idStr = alertInfo.id.uuidString
+        let descriptor = FetchDescriptor<SOSAlert>(predicate: #Predicate { $0.id.uuidString == idStr })
+
+        guard let alert = try? context.fetch(descriptor).first else {
+            errorMessage = "Alert not found"
+            return
+        }
+
+        let responderDescriptor = FetchDescriptor<MedicalResponder>()
+        guard let responder = try? context.fetch(responderDescriptor).first else {
+            errorMessage = "Responder profile not found"
+            return
+        }
+
+        alert.status = .accepted
+        alert.acceptedBy = responder
+        alert.acceptedAt = Date()
+        responder.activeAlert = alert
+        responder.responseCount += 1
+
+        do {
+            try context.save()
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        acceptedAlert = alert
+
+        // Broadcast acceptance
+        await broadcastSOSAccept(alertID: alert.id)
+    }
+
+    /// Resolve an accepted alert with an outcome.
+    func resolveAlert(resolution: SOSResolution) async {
+        guard let alert = acceptedAlert else { return }
+
+        let context = ModelContext(modelContainer)
+        alert.status = .resolved
+        alert.resolution = resolution
+        alert.resolvedAt = Date()
+
+        let responderDescriptor = FetchDescriptor<MedicalResponder>()
+        if let responder = try? context.fetch(responderDescriptor).first {
+            responder.activeAlert = nil
+            // Update average response time
+            if let acceptedAt = alert.acceptedAt {
+                let responseTime = Date().timeIntervalSince(acceptedAt)
+                let count = Double(responder.responseCount)
+                responder.avgResponseTime = ((responder.avgResponseTime * (count - 1)) + responseTime) / count
+            }
+        }
+
+        do {
+            try context.save()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        await broadcastSOSResolve(alertID: alert.id)
+
+        notificationService.notifySOSResolved(alertID: alert.id)
+
+        acceptedAlert = nil
+        flowState = .resolved(alertID: alert.id, resolution: resolution)
+    }
+
+    /// Refresh visible SOS alerts from SwiftData.
+    func refreshVisibleAlerts() async {
+        let context = ModelContext(modelContainer)
+        let descriptor = FetchDescriptor<SOSAlert>(
+            predicate: #Predicate { $0.statusRaw == "active" || $0.statusRaw == "accepted" },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+
+        guard let alerts = try? context.fetch(descriptor) else { return }
+
+        let userLocation = locationService.currentLocation
+
+        visibleAlerts = alerts.map { alert in
+            let distance: CLLocationDistance?
+            if let userLoc = userLocation {
+                let alertLoc = CLLocation(
+                    latitude: alert.preciseLocationLatitude,
+                    longitude: alert.preciseLocationLongitude
+                )
+                distance = userLoc.distance(from: alertLoc)
+            } else {
+                distance = nil
+            }
+
+            return SOSAlertInfo(
+                id: alert.id,
+                severity: alert.severity,
+                fuzzyLocation: alert.fuzzyLocation,
+                latitude: alert.preciseLocationLatitude,
+                longitude: alert.preciseLocationLongitude,
+                message: alert.message,
+                description: alert.alertDescription,
+                reporterName: alert.reporter?.resolvedDisplayName,
+                createdAt: alert.createdAt,
+                status: alert.status,
+                distance: distance
+            )
+        }.sorted { ($0.distance ?? .infinity) < ($1.distance ?? .infinity) }
+    }
+
+    // MARK: - Private: Broadcasting
+
+    private func broadcastSOSAlert(_ alert: SOSAlert, severity: SOSSeverity, fuzzyGeohash: String) async {
+        guard let identity = try? KeyManager.shared.loadIdentity() else { return }
+
+        // Build payload: severity (1 byte) + fuzzy geohash + optional message
+        var payload = Data()
+        let severityByte: UInt8
+        switch severity {
+        case .green: severityByte = 0x01
+        case .amber: severityByte = 0x02
+        case .red: severityByte = 0x03
+        }
+        payload.append(severityByte)
+        payload.append(fuzzyGeohash.data(using: .utf8) ?? Data())
+        payload.append(0x00) // separator
+        if let desc = alert.alertDescription {
+            payload.append(desc.data(using: .utf8) ?? Data())
+        }
+
+        let packet = Packet(
+            type: .sosAlert,
+            ttl: 7, // Maximum TTL for SOS
+            timestamp: Packet.currentTimestamp(),
+            flags: .sosPriority,
+            senderID: identity.peerID,
+            payload: payload
+        )
+
+        let wireData = try? PacketSerializer.encode(packet)
+        // Transport handles the actual send via NotificationCenter
+        if let data = wireData {
+            NotificationCenter.default.post(
+                name: .shouldBroadcastPacket,
+                object: nil,
+                userInfo: ["data": data, "priority": "sos"]
+            )
+        }
+    }
+
+    private func broadcastSOSAccept(alertID: UUID) async {
+        guard let identity = try? KeyManager.shared.loadIdentity() else { return }
+
+        var payload = Data()
+        payload.append(alertID.uuidString.data(using: .utf8) ?? Data())
+
+        let packet = Packet(
+            type: .sosAccept,
+            ttl: 7,
+            timestamp: Packet.currentTimestamp(),
+            flags: .sosPriority,
+            senderID: identity.peerID,
+            payload: payload
+        )
+
+        if let data = try? PacketSerializer.encode(packet) {
+            NotificationCenter.default.post(
+                name: .shouldBroadcastPacket,
+                object: nil,
+                userInfo: ["data": data, "priority": "sos"]
+            )
+        }
+    }
+
+    private func broadcastSOSResolve(alertID: UUID) async {
+        guard let identity = try? KeyManager.shared.loadIdentity() else { return }
+
+        var payload = Data()
+        payload.append(alertID.uuidString.data(using: .utf8) ?? Data())
+
+        let packet = Packet(
+            type: .sosResolve,
+            ttl: 7,
+            timestamp: Packet.currentTimestamp(),
+            flags: .sosPriority,
+            senderID: identity.peerID,
+            payload: payload
+        )
+
+        if let data = try? PacketSerializer.encode(packet) {
+            NotificationCenter.default.post(
+                name: .shouldBroadcastPacket,
+                object: nil,
+                userInfo: ["data": data, "priority": "sos"]
+            )
+        }
+    }
+
+    // MARK: - Private: SOS Receiver
+
+    private func setupSOSReceiver() {
+        sosObservation = NotificationCenter.default.addObserver(
+            forName: .didReceiveSOSPacket,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let packet = notification.userInfo?["packet"] as? Packet else { return }
+
+            Task { @MainActor in
+                await self?.handleReceivedSOSPacket(packet)
+            }
+        }
+    }
+
+    private func handleReceivedSOSPacket(_ packet: Packet) async {
+        switch packet.type {
+        case .sosAlert:
+            await handleIncomingSOS(packet)
+        case .sosAccept:
+            await handleSOSAccepted(packet)
+        case .sosResolve:
+            await handleSOSResolved(packet)
+        case .sosNearbyAssist:
+            handleNearbyAssistRequest(packet)
+        default:
+            break
+        }
+    }
+
+    private func handleIncomingSOS(_ packet: Packet) async {
+        let payload = packet.payload
+        guard !payload.isEmpty else { return }
+
+        let severityByte = payload[payload.startIndex]
+        let severity: SOSSeverity
+        switch severityByte {
+        case 0x01: severity = .green
+        case 0x02: severity = .amber
+        case 0x03: severity = .red
+        default: severity = .amber
+        }
+
+        // Parse fuzzy location and message
+        let remaining = payload.dropFirst()
+        let parts = remaining.split(separator: 0x00, maxSplits: 1)
+        let fuzzyGeohash = String(data: Data(parts.first ?? Data()), encoding: .utf8) ?? ""
+        let message = parts.count > 1 ? String(data: Data(parts.last!), encoding: .utf8) : nil
+
+        // Compute approximate distance
+        var distance: Int = 999
+        if let userLocation = locationService.currentLocation,
+           let coords = Geohash.decode(fuzzyGeohash) {
+            let alertLoc = CLLocation(latitude: coords.latitude, longitude: coords.longitude)
+            distance = Int(userLocation.distance(from: alertLoc))
+        }
+
+        // Notify user
+        notificationService.notifySOSNearby(
+            severity: severity.rawValue,
+            alertID: UUID(), // We derive from packet
+            distance: distance,
+            message: message
+        )
+
+        // Refresh visible alerts
+        await refreshVisibleAlerts()
+    }
+
+    private func handleSOSAccepted(_ packet: Packet) async {
+        let uuidString = String(data: packet.payload, encoding: .utf8) ?? ""
+        guard let alertID = UUID(uuidString: uuidString) else { return }
+
+        // If this is our alert, update state
+        if activeAlert?.id == alertID {
+            let context = ModelContext(modelContainer)
+            if let alert = activeAlert {
+                alert.status = .accepted
+                try? context.save()
+            }
+            flowState = .responderAccepted(
+                alertID: alertID,
+                responderName: "Responder \(packet.senderID.description.prefix(8))"
+            )
+        }
+
+        await refreshVisibleAlerts()
+    }
+
+    private func handleSOSResolved(_ packet: Packet) async {
+        let uuidString = String(data: packet.payload, encoding: .utf8) ?? ""
+        guard let alertID = UUID(uuidString: uuidString) else { return }
+
+        notificationService.notifySOSResolved(alertID: alertID)
+        await refreshVisibleAlerts()
+    }
+
+    private func handleNearbyAssistRequest(_ packet: Packet) {
+        // Nearby assist is a nudge to help -- just notify
+        notificationService.notifySOSNearby(
+            severity: "green",
+            alertID: UUID(),
+            distance: 50,
+            message: "Someone nearby may need assistance"
+        )
+    }
+
+    // MARK: - Private: Confirmation Countdown
+
+    private func startConfirmationCountdown(severity: SOSSeverity) {
+        flowState = .confirmingAlert(severity: severity)
+
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            Task { @MainActor in
+                guard let self else { timer.invalidate(); return }
+                self.confirmationCountdown -= 1
+                if self.confirmationCountdown <= 0 {
+                    timer.invalidate()
+                }
+            }
+        }
+    }
+
+    // MARK: - Reset
+
+    /// Reset all SOS state.
+    func reset() {
+        flowState = .idle
+        activeAlert = nil
+        selectedSeverity = nil
+        alertDescription = ""
+        confirmationCountdown = 0
+        isAcquiringGPS = false
+        gpsProgress = 0
+        errorMessage = nil
+    }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let shouldBroadcastPacket = Notification.Name("com.festichat.shouldBroadcastPacket")
+}
