@@ -3,7 +3,6 @@ options:
   bundleIdPrefix: app.festichat
   deploymentTarget:
     iOS: "16.0"
-    macOS: "13.0"
   xcodeVersion: "15.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
@@ -16,7 +15,6 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
-    INFOPLIST_FILE: App/Info.plist
     ENABLE_USER_SCRIPT_SANDBOXING: false
 
 packages:
@@ -30,7 +28,7 @@ packages:
 targets:
   FestiChat:
     type: application
-    platform: [iOS, macOS]
+    platform: iOS
     sources:
       - path: App
         excludes:
@@ -46,6 +44,7 @@ targets:
         INFOPLIST_FILE: App/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: true
+        SUPPORTS_MACCATALYST: true
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
@@ -62,7 +61,7 @@ targets:
 
   FestiChatTests:
     type: bundle.unit-test
-    platform: [iOS, macOS]
+    platform: iOS
     sources:
       - path: Tests
     dependencies:
