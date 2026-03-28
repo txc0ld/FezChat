@@ -195,6 +195,10 @@ composing -> queued -> sent -> delivered -> read
 - `delivered`: Delivery ACK received from recipient device
 - `read`: Read receipt received
 
+### 4.4 Reply threading
+
+Messages can be sent as replies to a specific earlier message via the `replyTo` relationship in the Message model. The UI displays the quoted original above the reply. Reply chains are flat (no nested threading) — all replies reference the root message.
+
 ### 4.5 Group encryption
 
 Groups use a **Sender Key** scheme to avoid per-member fan-out:
@@ -229,7 +233,7 @@ Existing groups above the limit continue to function but cannot add new members 
 
 **Congestion impact:** Since sender key encryption produces 1 packet per message (not N-1), group messages have the same mesh impact as DMs. The traffic shaping in Section 8 applies without modification.
 
-### 4.6 Walkie-talkie (PTT)
+### 4.7 Walkie-talkie (PTT)
 
 - Floating button in DMs and group chats
 - Hold to talk, release to send
@@ -483,6 +487,7 @@ The multi-tier Bloom filter (Section 8.7) has ~0.3% aggregate false positive rat
 0x13  groupMemberAdd      Admin adds member
 0x14  groupMemberRemove   Admin removes member
 0x15  groupAdminChange    Ownership/admin transfer
+0x16  blockVote           Hashed user ID for mesh-level reputation (sent to direct peers)
 ```
 
 ### 6.6 Packet padding
@@ -647,7 +652,7 @@ Backpressure: queue > 80% stops relay traffic; queue > 95% drops Lane 3 entirely
 | Warm | Last 10 minutes | 16KB | Recent history |
 | Cold | Last 2 hours | 64KB | Extended dedup |
 
-Check order: Hot -> Warm -> Cold. False positive rate: ~0.1% per tier.
+Check order: Hot -> Warm -> Cold. Base false positive rate: ~0.1% per tier. With double-hashing mitigation (Section 5.11), effective rate: ~0.01% per tier (~0.03% aggregate).
 
 ### 8.8 Battery management
 
@@ -1129,6 +1134,7 @@ radiusMeters: Double
 startDate: Date
 endDate: Date
 stageMapImage: Data?
+organizerSigningKey: Data (32 bytes, Ed25519 public key for verifying announcements offline)
 stages: [Stage]
 channels: [Channel]
 manifestVersion: Int
@@ -1263,16 +1269,34 @@ lastUpdated: Date
 heatLevel: enum (quiet, moderate, busy, packed)
 ```
 
-**NoiseSession (transient, Keychain-backed)**
+**NoiseSession (hybrid: metadata in Keychain, cipher states in memory)**
 ```
 peerID: Data
 handshakeComplete: Bool
-peerStaticKeyKnown: Bool (enables IK pattern upgrade on reconnect)
-establishedAt: Date
-expiresAt: Date (establishedAt + 4 hours)
-messageCounter: UInt64
-rekeyAt: UInt64
+peerStaticKeyKnown: Bool (enables IK pattern upgrade on reconnect, persisted to Keychain)
+peerStaticKey: Data? (32 bytes, persisted to Keychain for IK upgrade)
+establishedAt: Date (persisted to Keychain)
+expiresAt: Date (establishedAt + 4 hours, persisted to Keychain)
+messageCounter: UInt64 (memory-only, lost on termination)
+rekeyAt: UInt64 (memory-only)
+sendCipher: CipherState (memory-only, transient)
+receiveCipher: CipherState (memory-only, transient)
 ```
+
+NOTE: On app termination/restoration, cipher states are lost. If `peerStaticKeyKnown == true` and session not expired, a fast IK handshake (2 messages) re-establishes ciphers. If unknown or expired, full XX handshake (3 messages). This gives the benefit of session resumption without persisting cipher material to disk.
+
+**GroupSenderKey**
+```
+id: UUID
+channel: Channel (relationship)
+memberPeerID: Data (8 bytes, the member who generated this key)
+keyMaterial: Data (32 bytes, AES-256-GCM key — stored in Keychain)
+messageCounter: UInt64 (nonce management, monotonically increasing)
+rotationEpoch: Int (incremented on each key rotation)
+createdAt: Date
+```
+
+NOTE: AES-256-GCM chosen over ChaChaPoly for sender keys because Apple's Secure Enclave and A-series chips provide hardware-accelerated AES, giving better performance for high-throughput group messages. ChaChaPoly remains the choice for Noise sessions where its constant-time software implementation benefits the handshake phase.
 
 **UserPreferences**
 ```
@@ -1453,6 +1477,7 @@ FestiChat/
 |   |       |-- ClusterManager.swift
 |   |       |-- DirectedRouter.swift
 |   |       |-- TrafficShaper.swift
+|   |       |-- ReputationManager.swift        # Block vote tallying + relay deprioritization
 |   |       |-- WiFiTransport.swift
 |   |       |-- WebSocketTransport.swift
 |   |       +-- TransportCoordinator.swift
@@ -1462,7 +1487,8 @@ FestiChat/
 |           |-- KeyManager.swift
 |           |-- NoiseHandshake.swift
 |           |-- NoiseCipherState.swift
-|           |-- NoiseSessionManager.swift
+|           |-- NoiseSessionManager.swift   # Includes session caching + IK upgrade
+|           |-- SenderKeyManager.swift      # Group sender key lifecycle + rotation
 |           |-- Signer.swift
 |           |-- PhoneHasher.swift
 |           +-- ReplayProtection.swift
