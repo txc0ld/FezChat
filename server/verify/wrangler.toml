@@ -1,0 +1,17 @@
+name = "festichat-verify"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+[vars]
+# Set TWILIO_ACCOUNT_SID = "mock" for local dev / testing.
+# In production, override with wrangler secret put.
+TWILIO_ACCOUNT_SID = "mock"
+
+[durable_objects]
+bindings = [
+  { name = "PHONE_SESSION", class_name = "VerificationSession" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["VerificationSession"]
