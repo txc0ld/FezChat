@@ -168,7 +168,7 @@ A thin backend is required for four specific functions. Everything else is P2P.
 | Mode | Description | Encryption | Persistence |
 |---|---|---|---|
 | DM | 1-on-1 private messages | Noise XX E2E | Forever on device, 2hr mesh relay cache |
-| Group | Invite-only group chat | Noise XX E2E (pairwise per member) | Forever on device, 30min mesh relay cache |
+| Group | Invite-only group chat | Sender Key E2E (see 4.5) | Forever on device, 30min mesh relay cache |
 | Location channel | Auto-joined by proximity/geohash | Signed but not encrypted (public) | 24hr on device, 5min mesh relay cache |
 | Stage channel | Festival-specific, auto-joined by geofence | Signed but not encrypted (public) | Duration of festival, 5min mesh relay cache |
 | Lost & Found | Per-festival public channel | Signed but not encrypted | Duration of festival |
@@ -195,7 +195,41 @@ composing -> queued -> sent -> delivered -> read
 - `delivered`: Delivery ACK received from recipient device
 - `read`: Read receipt received
 
-### 4.4 Walkie-talkie (PTT)
+### 4.5 Group encryption
+
+Groups use a **Sender Key** scheme to avoid per-member fan-out:
+
+1. When a user joins a group, they generate a random symmetric **sender key** (AES-256-GCM).
+2. The sender key is distributed to each group member individually via their existing pairwise Noise session (one-time cost on join).
+3. When sending a group message, the sender encrypts once with their sender key. All members decrypt with the same key.
+4. Result: 1 encrypted packet per group message (not N-1), regardless of group size.
+
+**Key rotation triggers:**
+- A member leaves or is removed -> new sender key generated and distributed
+- A member is blocked -> new sender key, excluded from distribution
+- Every 100 messages -> automatic rotation for forward secrecy
+- Admin role change -> no rotation needed (sender keys are per-member, not per-role)
+
+**Group management packet types:**
+- `groupKeyDistribution` (encrypted sub-type 0x12): sender key wrapped in pairwise Noise session
+- `groupMemberAdd` (encrypted sub-type 0x13): admin adds member, triggers key distribution
+- `groupMemberRemove` (encrypted sub-type 0x14): admin removes member, triggers key rotation
+- `groupAdminChange` (encrypted sub-type 0x15): ownership/admin transfer
+
+**Group size limits (tied to crowd-scale mode):**
+
+| Crowd mode | Max group size | Rationale |
+|---|---|---|
+| Gather | 50 members | Plenty of bandwidth |
+| Festival | 30 members | Conserve relay capacity |
+| Mega | 20 members | Text-only, keep traffic manageable |
+| Massive | 10 members | Minimal mesh overhead |
+
+Existing groups above the limit continue to function but cannot add new members until crowd density decreases.
+
+**Congestion impact:** Since sender key encryption produces 1 packet per message (not N-1), group messages have the same mesh impact as DMs. The traffic shaping in Section 8 applies without modification.
+
+### 4.6 Walkie-talkie (PTT)
 
 - Floating button in DMs and group chats
 - Hold to talk, release to send
@@ -217,7 +251,17 @@ composing -> queued -> sent -> delivered -> read
 | Debug Service UUID | `FC000001-0000-1000-8000-00805F9B34FA` |
 | Requested MTU | 517 bytes |
 | Effective MTU | 512 bytes |
-| Max payload per packet | 469 bytes (512 - header - sender - recipient - overhead) |
+
+**Max payload per packet (exact arithmetic):**
+
+| Configuration | Calculation | Max payload |
+|---|---|---|
+| Broadcast, signed | 512 - 16 (header) - 8 (sender) - 64 (sig) | **424 bytes** |
+| Broadcast, unsigned | 512 - 16 - 8 | **488 bytes** |
+| Addressed, signed | 512 - 16 - 8 (sender) - 8 (recipient) - 64 (sig) | **416 bytes** |
+| Addressed, unsigned | 512 - 16 - 8 - 8 | **480 bytes** |
+
+**Fragmentation threshold: 416 bytes** (worst case: addressed + signed). All payloads exceeding 416 bytes are fragmented regardless of flags, ensuring they fit in any packet configuration.
 
 ### 5.2 Dual-role operation
 
@@ -231,13 +275,14 @@ Every device operates as BOTH a BLE Central (scanner/client) and BLE Peripheral 
 
 1. Device advertises FestiChat service UUID via BLE peripheral
 2. Central scans for that UUID, connects
-3. On connection: exchange Announcement packets (TLV-encoded):
-   - Username
-   - Noise public key (Curve25519)
-   - Ed25519 signing public key
-   - Avatar thumbnail (64x64 JPEG, ~2-4KB)
-   - Capabilities flags
-   - Neighbor peer ID list
+3. On connection: exchange Announcement packets (TLV-encoded, must fit single packet ~488 bytes):
+   - Username (max 32 bytes UTF-8)
+   - Noise public key (32 bytes, Curve25519)
+   - Ed25519 signing public key (32 bytes)
+   - Capabilities flags (2 bytes)
+   - Neighbor peer ID list (8 bytes x N, max 8 neighbors = 64 bytes)
+   - Avatar hash (32 bytes SHA256 of thumbnail, for cache validation)
+   - NOTE: Avatar thumbnail (~2-4KB) sent separately via `fileTransfer` (0x22) after Noise handshake completes, as it exceeds single-packet capacity
 4. Noise XX handshake initiated for E2E channel
 5. Peer added to local peer table
 
@@ -272,7 +317,7 @@ Every device operates as BOTH a BLE Central (scanner/client) and BLE Peripheral 
 
 ### 5.7 Fragmentation
 
-- Payloads > 469 bytes split into fragments
+- Payloads > 416 bytes split into fragments (worst-case: addressed + signed packet)
 - Fragment header: `fragmentID (4 bytes) + index (2 bytes) + total (2 bytes)`
 - Max 128 concurrent fragment assemblies per peer
 - Fragment lifetime: 30 seconds
@@ -285,6 +330,66 @@ Every device operates as BOTH a BLE Central (scanner/client) and BLE Peripheral 
 - Missing messages requested and re-transmitted
 - Max filter size: 400 bytes, target false positive rate: 1%
 - Sync intervals: 15s for messages, 30s for fragments, 60s for file transfers
+
+### 5.9 iOS background BLE behavior
+
+iOS heavily restricts background BLE operations. The app must handle these constraints:
+
+**Background scanning:**
+- iOS controls scan intervals in background — typically 1-3 second scans every ~30 seconds (vs continuous in foreground)
+- Can only scan for specific service UUIDs (already satisfied by our service UUID filter)
+- Scanning continues indefinitely if the app has the `bluetooth-central` background mode
+
+**Background advertising:**
+- Local name and service data are removed from advertisements by iOS
+- Only the service UUID is advertised
+- Other FestiChat devices can still discover via UUID, but the announcement packet exchange happens after connection (not during advertisement)
+
+**State restoration recovery flow:**
+1. App is suspended/terminated by iOS
+2. BLE event occurs (peer connects, data received)
+3. iOS relaunches app in background with restoration state
+4. `AppDelegate` receives `willRestoreState` callback with peripheral/central state
+5. App rebuilds peer table from restoration data + cached peer records in SwiftData
+6. Existing Noise sessions resume from Keychain-backed cache (see Section 7.2)
+7. GCS sync triggered immediately to reconcile missed messages
+
+**Expected behavior:** In background, the app is a less active but still functional mesh participant. Message relay continues. Discovery is slower. The user's messages are still received and queued for notification. Foreground return triggers an immediate full scan + GCS sync burst.
+
+### 5.10 Fallback transports
+
+**WiFi Direct (v2, not in v1):** WiFi Direct peer discovery and data transfer is planned for v2. It offers higher bandwidth (~250 Mbps vs BLE's ~2 Mbps) and longer range (~200m vs ~50m) but requires explicit pairing on iOS (no background discovery). Marked as future enhancement.
+
+**Cellular WebSocket (v1, basic):**
+- WebSocket endpoint: `wss://relay.festichat.app/ws`
+- Authentication: Noise static public key sent as bearer token (no passwords, no accounts)
+- Message format: identical binary protocol packets wrapped in WebSocket binary frames
+- Server is a dumb relay — receives packets, forwards to connected peers based on recipient ID
+- Server stores NOTHING — zero-knowledge relay. Messages not decryptable by server.
+- Used when: BLE mesh has no path to recipient AND internet is available
+- Handoff: `TransportCoordinator` checks BLE first (100ms timeout), then queues for WebSocket
+- Reconnection: exponential backoff from 1s to 60s, max 10 attempts
+- Server infrastructure: Cloudflare Workers with Durable Objects (WebSocket support, global edge)
+
+**Transport priority:**
+1. BLE mesh (always attempted first)
+2. WebSocket relay (if BLE has no path and internet available)
+3. Queue locally (if neither available, deliver when either becomes available)
+
+### 5.11 Bloom filter false positive mitigation
+
+The multi-tier Bloom filter (Section 8.7) has ~0.3% aggregate false positive rate. At high packet volumes, this means some legitimate packets are incorrectly discarded. Mitigation strategy:
+
+**For non-SOS traffic:**
+- Acceptable loss rate: < 0.5% of unique messages (within normal mesh loss expectations)
+- GCS sync (Section 5.8) is the primary recovery mechanism — peers reconcile message IDs every 15 seconds, requesting any messages they missed
+- Expected recovery latency: 15-30 seconds for most messages
+- Double-hashing: each packet ID is hashed with two independent hash functions; both must match in the Bloom filter to be considered "seen" (reduces false positive rate to ~0.01% per tier)
+
+**For SOS traffic:**
+- Separate SOS Bloom filter (Section 8.9) with 10x lower density (fewer entries, much lower false positive rate)
+- SOS packets include a monotonic sequence number per sender; if a gap is detected, the missing SOS is explicitly requested from the sender's neighbors
+- Effective SOS false positive rate: < 0.001%
 
 ---
 
@@ -325,11 +430,10 @@ Every device operates as BOTH a BLE Central (scanner/client) and BLE Peripheral 
 
 ```
 -- Core messaging
-0x01  announce            Peer introduction (TLV: username, keys, avatar, capabilities, neighbors)
+0x01  announce            Peer introduction (TLV: username, keys, capabilities, neighbors)
+                          NOTE: avatar thumbnail sent separately via 0x22 fileTransfer after handshake
 0x02  meshBroadcast       Public location channel message
 0x03  leave               Peer departing mesh
-0x04  friendRequest       Friend request with username + phone hash
-0x05  friendAccept        Friend acceptance with phone hash confirmation
 
 -- Encryption
 0x10  noiseHandshake      Noise XX init/response
@@ -368,10 +472,17 @@ Every device operates as BOTH a BLE Central (scanner/client) and BLE Peripheral 
 0x04  readReceipt         Message read
 0x05  voiceNote           Opus-encoded audio
 0x06  imageMessage        Compressed image
-0x07  friendRequest       Request with phone hash
-0x08  friendAccept        Accept with phone hash
+0x07  friendRequest       Request with username + phone hash (only route for friend ops)
+0x08  friendAccept        Accept with phone hash confirmation (only route for friend ops)
+0x09  typingIndicator     Recipient should show typing dots
+0x0A  messageDelete       Request to delete a sent message by ID
+0x0B  messageEdit         Edited content for a sent message by ID
 0x10  profileRequest      Request full-res profile picture
 0x11  profileResponse     Full-res profile picture data
+0x12  groupKeyDistribution  Sender key wrapped in pairwise Noise session
+0x13  groupMemberAdd      Admin adds member
+0x14  groupMemberRemove   Admin removes member
+0x15  groupAdminChange    Ownership/admin transfer
 ```
 
 ### 6.6 Packet padding
@@ -406,25 +517,37 @@ All multi-byte integers are big-endian (network byte order).
 - Re-keying: every 1000 messages or 1 hour, whichever comes first
 - Replay protection: sliding window nonce (64-bit counter + 128-bit window)
 
-### 7.2 Signing
+### 7.2 Session resumption and caching
+
+Noise XX requires a 3-message handshake, which is expensive for frequently dropped BLE connections. To mitigate:
+
+- **Session cache:** Completed Noise sessions are cached in memory for 4 hours (keyed by peer ID). If a peer reconnects within this window, the existing cipher states resume without re-handshaking.
+- **IK pattern upgrade:** For peers whose static key is already known (from a prior XX handshake), subsequent connections use `Noise_IK_25519_ChaChaPoly_SHA256` — a 2-message handshake that skips the responder's static key transmission. This saves one round-trip.
+- **Session expiry:** Cached sessions expire after 4 hours or after the device enters Ultra-low battery mode. Expired sessions trigger a fresh XX handshake on next connection.
+- **NoiseSession model updates:** Add `expiresAt: Date` (4 hours from establishment) and `peerStaticKeyKnown: Bool` (enables IK upgrade on reconnect).
+
+### 7.3 Signing
 
 - Algorithm: Ed25519
 - Signed data: entire packet EXCLUDING TTL field (TTL changes during relay)
 - All broadcast/public packets are signed for authenticity
 - All encrypted packets are signed inside the Noise session
 
-### 7.3 Phone hash
+### 7.4 Phone hash
 
 ```
-SHA256(phone_number_e164 + "festichat_v1_salt")
+SHA256(phone_number_e164 + per_user_salt)
 ```
 
+- `per_user_salt`: 32 random bytes generated on first launch, stored in Keychain
+- Salt is exchanged inside the Noise-encrypted friend request payload (never in plaintext)
+- Both sides compute `SHA256(their_phone + friend's_salt)` and compare with the hash received
+- This prevents precomputed rainbow tables — each user's hash is unique even for the same phone number
 - Computed locally on device
-- Shared only during friend request/accept (inside Noise-encrypted payload)
-- Used for mutual friend verification — both sides compute and compare
+- Phone hash shared ONLY during friend request/accept (inside Noise-encrypted payload)
 - Raw phone number never transmitted
 
-### 7.4 Key storage
+### 7.5 Key storage
 
 All keys stored in iOS Keychain with:
 - `kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock`
@@ -562,6 +685,7 @@ SOS packets at any crowd scale:
 ```json
 {
   "version": 12,
+  "signature": "<Ed25519 signature of festivals array by FestiChat manifest signing key>",
   "festivals": [
     {
       "id": "uuid",
@@ -571,6 +695,7 @@ SOS packets at any crowd scale:
       "startDate": "2026-06-24",
       "endDate": "2026-06-28",
       "stageMapUrl": "https://cdn.festichat.app/maps/glasto-2026.jpg",
+      "organizerSigningKey": "<Ed25519 public key for this festival's organizer>",
       "stages": [
         {
           "id": "uuid",
@@ -586,7 +711,13 @@ SOS packets at any crowd scale:
 }
 ```
 
-### 9.3 Geofence behavior
+### 9.3 Manifest and organizer authentication
+
+**Manifest integrity:** The festival JSON manifest is signed with the FestiChat manifest Ed25519 key. The corresponding public key is embedded in the app binary. The app verifies the signature before accepting any manifest update. A compromised CDN or DNS hijack cannot inject fake festivals.
+
+**Organizer authentication:** Each registered festival includes an `organizerSigningKey` in the manifest. Organizer announcement packets (0x30) MUST be signed with this key. Peers verify the signature against the manifest-provided key before displaying or relaying the announcement. Unsigned or incorrectly signed announcements are silently dropped. This prevents attackers from flooding the mesh with fake priority broadcasts.
+
+### 9.4 Geofence behavior
 
 - GPS check on launch + every 15 minutes while active
 - Within 2km: prompt "Looks like you're at [Festival]! Join?"
@@ -594,17 +725,17 @@ SOS packets at any crowd scale:
 - Leave geofence: Festival tab greys out, channels remain accessible but marked "Out of range"
 - No persistent location tracking
 
-### 9.4 Organizer capabilities
+### 9.5 Organizer capabilities
 
-- Priority announcements (weather, schedule changes, safety)
+- Priority announcements (weather, schedule changes, safety) — signed with organizer key, verified by peers
 - Stage channel configuration
 - Stage map with tappable hotspots
 - Schedule/lineup data
-- Emergency broadcasts (high-TTL, high-priority)
+- Emergency broadcasts (high-TTL, high-priority) — signed and verified
 - Aggregate stats only: approximate peer count, channel activity levels
 - NO access to user messages, DMs, group chats, or individual identity
 
-### 9.5 Festival tab structure
+### 9.6 Festival tab structure
 
 - Stage map (interactive, with crowd pulse heatmap overlay, friend dots, meeting point pins)
 - Announcements feed
@@ -864,15 +995,36 @@ All technical details hidden from user:
 - High contrast mode: increase border opacity, reduce material transparency
 - SOS button: extra-large tap target (minimum 60pt), VoiceOver priority
 
-### 13.6 Content moderation & App Store compliance
+### 13.6 Message editing and deletion
+
+- **Edit:** Sender can edit a message within 5 minutes of sending. Sends `messageEdit` encrypted sub-type (0x0B) with original message ID + new content. Recipient sees "edited" label. Original content not retained on recipient device.
+- **Delete:** Sender can request deletion at any time. Sends `messageDelete` encrypted sub-type (0x0A) with message ID. Recipient device removes the message and shows "Message deleted" placeholder. Relay nodes cannot delete cached copies (encrypted, will expire naturally).
+- **Delete for me:** User can locally delete any received message without notifying the sender.
+
+### 13.7 Content moderation & App Store compliance
 
 - Report button on every message (long-press -> Report)
 - Report button on every profile (Profile sheet -> Report)
-- Block user: immediately stops all message delivery from that user
-- Reported content stored locally with context for user review
-- No server-side content moderation (no server has access to message content)
-- Apple App Store Review Guidelines 1.1, 1.2: abuse reporting mechanism present
-- Privacy nutrition labels: accurate disclosure of data collection
+- Block user: immediately stops all message delivery from that user; blocked user's packets are silently dropped at the BLE level
+- Reported content forwarded (with user consent) to a minimal abuse reporting endpoint for App Store compliance
+- Apple App Store Review Guidelines 1.1, 1.2: abuse reporting and action mechanism present
+
+**Mesh-level reputation (decentralized moderation):**
+- When a user is blocked, the blocker's device gossips a lightweight `blockVote` (hashed user ID, no content) to direct peers
+- Peers tally block votes via a local counter per user ID
+- If a user accumulates block votes from 10+ distinct peers within a cluster: relay nodes in that cluster deprioritize (but do not drop) that user's non-SOS packets
+- At 25+ block votes: relay nodes drop that user's broadcast/channel packets (DMs still relayed to preserve 1-on-1 communication)
+- Block votes reset per festival (no permanent reputation score)
+- SOS packets are NEVER affected by block votes — safety overrides moderation
+
+**Privacy nutrition labels:** Accurate App Store privacy disclosure. Data collected: phone number (verification only), approximate location (when in use), usage data (message counts for billing). Data NOT collected: message content, contacts, browsing history, precise location (except during SOS).
+
+### 13.8 Offline message queue limits
+
+- Maximum retry attempts per queued message: 50
+- Maximum queue age: 24 hours (messages older than 24h are marked as failed and the user is notified)
+- Maximum queue size: 500 messages (oldest failed messages evicted first if queue is full)
+- User sees: "Message couldn't be delivered" with option to retry or delete
 
 ---
 
@@ -1045,12 +1197,14 @@ reportedFor: Friend?
 severity: enum (green, amber, red)
 preciseLocation: GeoPoint
 fuzzyLocation: String (geohash-6)
-message: String?
+message: String? (user-provided context, e.g. "Friend collapsed")
+description: String? (required for "report for friend", 3-word minimum)
 status: enum (active, accepted, enRoute, resolved)
 acceptedBy: MedicalResponder?
 acceptedAt: Date?
 resolvedAt: Date?
 resolution: enum (treatedOnSite, transported, falseAlarm, cancelled)?
+falseAlarmCount: Int (per festival, for throttling)
 createdAt: Date
 expiresAt: Date
 ```
@@ -1093,10 +1247,12 @@ timestamp: Date
 ```
 id: UUID
 message: Message
-attempts: Int
+attempts: Int (max 50)
+maxAttempts: Int (default 50)
 nextRetryAt: Date
+expiresAt: Date (createdAt + 24 hours)
 transport: enum (ble, wifi, cellular, any)
-status: enum (queued, sending, failed)
+status: enum (queued, sending, failed, expired)
 ```
 
 **CrowdPulse (transient)**
@@ -1111,7 +1267,9 @@ heatLevel: enum (quiet, moderate, busy, packed)
 ```
 peerID: Data
 handshakeComplete: Bool
+peerStaticKeyKnown: Bool (enables IK pattern upgrade on reconnect)
 establishedAt: Date
+expiresAt: Date (establishedAt + 4 hours)
 messageCounter: UInt64
 rekeyAt: UInt64
 ```
@@ -1121,7 +1279,6 @@ rekeyAt: UInt64
 id: UUID
 theme: enum (system, light, dark)
 defaultLocationSharing: enum (precise, fuzzy, off)
-locationSharingDefault: Bool
 proximityAlertsEnabled: Bool
 breadcrumbsEnabled: Bool
 notificationsEnabled: Bool
