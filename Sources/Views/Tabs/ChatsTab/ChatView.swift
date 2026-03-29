@@ -16,6 +16,8 @@ struct ChatView: View {
     @State private var selectedImageData: Data? = nil
     @State private var showPaywall = false
     @State private var scrollToBottomID: UUID? = nil
+    @State private var isPTTRecording = false
+    @State private var pttAudioLevels: [Float] = []
 
     @Environment(\.theme) private var theme
     @Environment(\.colorScheme) private var colorScheme
@@ -40,6 +42,31 @@ struct ChatView: View {
                 .transition(.opacity)
             }
 
+            // PTT waveform overlay
+            if isPTTRecording {
+                HStack(spacing: BlipSpacing.sm) {
+                    Circle()
+                        .fill(theme.colors.statusRed)
+                        .frame(width: 8, height: 8)
+
+                    WaveformView(
+                        levels: pttAudioLevels.isEmpty
+                            ? Array(repeating: Float.random(in: 0.1...0.6), count: 16)
+                            : pttAudioLevels,
+                        color: .blipAccentPurple,
+                        isActive: true
+                    )
+                    .frame(height: 32)
+
+                    Text("Recording...")
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.mutedText)
+                }
+                .padding(.horizontal, BlipSpacing.md)
+                .padding(.vertical, BlipSpacing.xs)
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+
             // Message input (pinned at bottom)
             MessageInput(
                 text: Binding(
@@ -60,10 +87,12 @@ struct ChatView: View {
                     // Attachment handling
                 },
                 onPTTStart: {
-                    // PTT start
+                    isPTTRecording = true
+                    pttAudioLevels = []
                 },
                 onPTTEnd: {
-                    // PTT end
+                    isPTTRecording = false
+                    pttAudioLevels = []
                 },
                 messagesRemaining: nil,
                 onLowBalanceTap: {
