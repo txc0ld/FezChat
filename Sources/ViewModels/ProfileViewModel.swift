@@ -69,7 +69,6 @@ final class ProfileViewModel {
     private let modelContainer: ModelContainer
     private let keyManager: KeyManager
     private let imageService: ImageService
-    private let phoneVerificationService: PhoneVerificationService
 
     // MARK: - Constants
 
@@ -81,13 +80,11 @@ final class ProfileViewModel {
     init(
         modelContainer: ModelContainer,
         keyManager: KeyManager = .shared,
-        imageService: ImageService = ImageService(),
-        phoneVerificationService: PhoneVerificationService = PhoneVerificationService()
+        imageService: ImageService = ImageService()
     ) {
         self.modelContainer = modelContainer
         self.keyManager = keyManager
         self.imageService = imageService
-        self.phoneVerificationService = phoneVerificationService
     }
 
     // MARK: - Load Profile
@@ -126,8 +123,8 @@ final class ProfileViewModel {
             pendingRequests = allFriends.filter { $0.status == .pending }
             blockedUsers = allFriends.filter { $0.status == .blocked }
 
-            // Check phone verification
-            isPhoneVerified = phoneVerificationService.hasVerifiedPhone
+            // Phone verification removed (FEZ-21: switched to email + social login)
+            isPhoneVerified = false
 
             // Calculate message balance
             await refreshMessageBalance()
