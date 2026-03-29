@@ -11,6 +11,8 @@ struct OnboardingFlow: View {
     var onComplete: () -> Void = {}
 
     @State private var currentStep: Int = 0
+    @State private var showBypass = false
+    @State private var bypassCode = ""
     @Environment(\.theme) private var theme
     @Environment(\.colorScheme) private var colorScheme
 
@@ -43,10 +45,21 @@ struct OnboardingFlow: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(SpringConstants.accessiblePageEntrance, value: currentStep)
 
-                // Custom page indicator
+                // Custom page indicator — long-press to reveal bypass entry
                 pageIndicator
+                    .onLongPressGesture(minimumDuration: 1.0) {
+                        showBypass = true
+                    }
                     .padding(.bottom, BlipSpacing.md)
             }
+        }
+        .alert("Dev Bypass", isPresented: $showBypass) {
+            TextField("Code", text: $bypassCode)
+                .keyboardType(.numberPad)
+            Button("Submit") { attemptBypass() }
+            Button("Cancel", role: .cancel) { bypassCode = "" }
+        } message: {
+            Text("Enter bypass code to skip onboarding")
         }
     }
 
@@ -82,6 +95,14 @@ struct OnboardingFlow: View {
 
     private func completeOnboarding() {
         onComplete()
+    }
+
+    private func attemptBypass() {
+        if bypassCode == "000000" {
+            showBypass = false
+            bypassCode = ""
+            onComplete()
+        }
     }
 }
 

@@ -14,6 +14,9 @@ struct PermissionsStep: View {
     @State private var contentVisible = false
     @State private var permissionGranted = false
     @State private var permissionDenied = false
+    #if DEBUG
+    @State private var autoAdvanceTask: Task<Void, Never>?
+    #endif
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -109,7 +112,19 @@ struct PermissionsStep: View {
                 contentVisible = true
             }
             checkCurrentPermission()
+            #if DEBUG
+            autoAdvanceTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled else { return }
+                onComplete()
+            }
+            #endif
         }
+        #if DEBUG
+        .onDisappear {
+            autoAdvanceTask?.cancel()
+        }
+        #endif
     }
 
     // MARK: - Illustration
