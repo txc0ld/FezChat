@@ -451,6 +451,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             return
         }
         delegate?.transport(self, didConnect: peerID)
+        NotificationCenter.default.post(name: .meshPeerStateChanged, object: nil)
     }
 
     /// Handle failed connection.
@@ -481,6 +482,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
 
         if let peerID = peerID {
             delegate?.transport(self, didDisconnect: peerID)
+            NotificationCenter.default.post(name: .meshPeerStateChanged, object: nil)
         }
     }
 
@@ -803,4 +805,13 @@ extension BLEService: CBPeripheralManagerDelegate {
     public func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
         logger.debug("Peripheral manager ready to update subscribers")
     }
+}
+
+// MARK: - Mesh Notification Names
+
+public extension Notification.Name {
+    /// Posted when a BLE mesh peer connects or disconnects.
+    static let meshPeerStateChanged = Notification.Name("com.festichat.meshPeerStateChanged")
+    /// Posted when transport connectivity state changes.
+    static let meshTransportStateChanged = Notification.Name("com.festichat.meshTransportStateChanged")
 }

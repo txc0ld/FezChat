@@ -8,6 +8,8 @@ struct FestiChatApp: App {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    @State private var coordinator = AppCoordinator()
+
     var sharedModelContainer: ModelContainer = {
         do {
             return try ModelContainer(
@@ -21,9 +23,15 @@ struct FestiChatApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(coordinator: coordinator)
+                .environment(coordinator)
                 .environment(\.theme, Theme.shared)
                 .preferredColorScheme(nil)
+                .onAppear {
+                    if !coordinator.isReady && !coordinator.needsOnboarding {
+                        coordinator.configure(modelContainer: sharedModelContainer)
+                    }
+                }
         }
         .modelContainer(sharedModelContainer)
     }
@@ -35,9 +43,11 @@ struct FestiChatApp: App {
 struct RootView: View {
 
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @State private var showSplash = true
     @State private var appPhase: AppPhase = .splash
     @Environment(\.theme) private var theme
+    @Environment(\.modelContext) private var modelContext
+
+    var coordinator: AppCoordinator
 
     private enum AppPhase {
         case splash
@@ -51,7 +61,11 @@ struct RootView: View {
             case .splash:
                 SplashView {
                     withAnimation(SpringConstants.accessibleReveal) {
-                        appPhase = hasCompletedOnboarding ? .main : .onboarding
+                        if coordinator.needsOnboarding || !hasCompletedOnboarding {
+                            appPhase = .onboarding
+                        } else {
+                            appPhase = .main
+                        }
                     }
                 }
                 .transition(.opacity)
@@ -59,6 +73,9 @@ struct RootView: View {
             case .onboarding:
                 OnboardingFlow {
                     hasCompletedOnboarding = true
+                    coordinator.reconfigureAfterOnboarding(
+                        modelContainer: modelContext.container
+                    )
                     withAnimation(SpringConstants.accessibleReveal) {
                         appPhase = .main
                     }
@@ -68,6 +85,14 @@ struct RootView: View {
             case .main:
                 MainTabView()
                     .transition(.opacity)
+                    .onAppear {
+                        if coordinator.isReady {
+                            coordinator.start()
+                        }
+                    }
+                    .onDisappear {
+                        coordinator.stop()
+                    }
             }
         }
         .animation(SpringConstants.accessibleReveal, value: appPhase)

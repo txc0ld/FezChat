@@ -383,9 +383,5 @@ final class MeshViewModel {
     }
 }
 
-// MARK: - Notification Names
-
-extension Notification.Name {
-    static let meshPeerStateChanged = Notification.Name("com.festichat.meshPeerStateChanged")
-    static let meshTransportStateChanged = Notification.Name("com.festichat.meshTransportStateChanged")
-}
+// Notification names (.meshPeerStateChanged, .meshTransportStateChanged)
+// are defined in FestiChatMesh/BLEService.swift
