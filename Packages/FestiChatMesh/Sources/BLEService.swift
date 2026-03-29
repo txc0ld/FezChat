@@ -27,51 +27,51 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         }
     }
 
-    // MARK: - Core Bluetooth managers
+    // MARK: - Core Bluetooth managers (protocol-typed for testability)
 
-    private var centralManager: CBCentralManager!
-    private var peripheralManager: CBPeripheralManager!
+    var centralManager: (any BLECentralManaging)?
+    var peripheralManager: (any BLEPeripheralManaging)?
 
     // MARK: - BLE service & characteristic
 
-    private var service: CBMutableService?
-    private var characteristic: CBMutableCharacteristic?
+    var service: CBMutableService?
+    var characteristic: CBMutableCharacteristic?
 
     // MARK: - Peer tracking
 
     /// Maps discovered CBPeripheral identifiers to their peer IDs.
-    private var peripheralToPeerID: [UUID: PeerID] = [:]
+    var peripheralToPeerID: [UUID: PeerID] = [:]
 
-    /// Reverse mapping: PeerID -> CBPeripheral for sending.
-    private var peerIDToPeripheral: [PeerID: CBPeripheral] = [:]
+    /// Reverse mapping: PeerID -> peripheral proxy for sending.
+    var peerIDToPeripheral: [PeerID: any BLEPeripheralProxy] = [:]
 
     /// Maps peripheral UUID to the writable characteristic discovered on that peripheral.
-    private var peripheralCharacteristics: [UUID: CBCharacteristic] = [:]
+    var peripheralCharacteristics: [UUID: CBCharacteristic] = [:]
 
     /// Set of peripheral UUIDs currently being connected to (to avoid duplicates).
-    private var connectingPeripherals: Set<UUID> = []
+    var connectingPeripherals: Set<UUID> = []
 
     /// Peripherals that recently timed out, with the timestamp of the timeout.
-    private var timedOutPeripherals: [UUID: Date] = [:]
+    var timedOutPeripherals: [UUID: Date] = [:]
 
     /// Centrals subscribed to our characteristic (for notify).
-    private var subscribedCentrals: [CBCentral] = []
+    var subscribedCentrals: [CBCentral] = []
 
     /// Maps subscribed CBCentral identifiers to peer IDs.
-    private var centralToPeerID: [UUID: PeerID] = [:]
+    var centralToPeerID: [UUID: PeerID] = [:]
 
     /// Strong references to connected peripherals to prevent deallocation.
-    private var connectedPeripheralRefs: [UUID: CBPeripheral] = [:]
+    var connectedPeripheralRefs: [UUID: any BLEPeripheralProxy] = [:]
 
     // MARK: - Concurrency
 
-    private let lock = NSLock()
+    let lock = NSLock()
     private let queue = DispatchQueue(label: "com.festichat.ble", qos: .userInitiated)
     private let logger = Logger(subsystem: "com.festichat", category: "BLE")
 
     // MARK: - Scanning control
 
-    private var isScanning = false
+    var isScanning = false
     private var scanTimer: DispatchSourceTimer?
 
     // MARK: - Local peer ID
@@ -89,28 +89,45 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         super.init()
     }
 
+    /// Create a BLE service with injected managers for testing.
+    init(
+        localPeerID: PeerID,
+        centralManager: any BLECentralManaging,
+        peripheralManager: any BLEPeripheralManaging
+    ) {
+        self.localPeerID = localPeerID
+        super.init()
+        self.centralManager = centralManager
+        self.peripheralManager = peripheralManager
+    }
+
     // MARK: - Transport lifecycle
 
     public func start() {
         guard state == .idle || state == .stopped else { return }
         state = .starting
 
-        centralManager = CBCentralManager(
-            delegate: self,
-            queue: queue,
-            options: [
-                CBCentralManagerOptionRestoreIdentifierKey: BLEConstants.centralRestorationID,
-                CBCentralManagerOptionShowPowerAlertKey: true,
-            ]
-        )
+        // Only create real CB managers if not already injected (test mode).
+        if centralManager == nil {
+            centralManager = CBCentralManager(
+                delegate: self,
+                queue: queue,
+                options: [
+                    CBCentralManagerOptionRestoreIdentifierKey: BLEConstants.centralRestorationID,
+                    CBCentralManagerOptionShowPowerAlertKey: true,
+                ]
+            )
+        }
 
-        peripheralManager = CBPeripheralManager(
-            delegate: self,
-            queue: queue,
-            options: [
-                CBPeripheralManagerOptionRestoreIdentifierKey: BLEConstants.peripheralRestorationID,
-            ]
-        )
+        if peripheralManager == nil {
+            peripheralManager = CBPeripheralManager(
+                delegate: self,
+                queue: queue,
+                options: [
+                    CBPeripheralManagerOptionRestoreIdentifierKey: BLEConstants.peripheralRestorationID,
+                ]
+            )
+        }
     }
 
     public func stop() {
@@ -118,13 +135,13 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
 
         stopScanning()
 
-        if peripheralManager?.isAdvertising == true {
-            peripheralManager.stopAdvertising()
+        if peripheralManager?.bleIsAdvertising == true {
+            peripheralManager?.bleStopAdvertising()
         }
 
         lock.withLock {
             for (_, peripheral) in connectedPeripheralRefs {
-                centralManager?.cancelPeripheralConnection(peripheral)
+                centralManager?.bleCancelConnection(peripheral)
             }
             peripheralToPeerID.removeAll()
             peerIDToPeripheral.removeAll()
@@ -136,7 +153,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         }
 
         if let service = service {
-            peripheralManager?.remove(service)
+            peripheralManager?.bleRemoveService(service)
         }
     }
 
@@ -169,7 +186,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             lock.unlock()
 
             if let central = central, let char = characteristic {
-                peripheralManager?.updateValue(data, for: char, onSubscribedCentrals: [central])
+                _ = peripheralManager?.bleUpdateValue(data, for: char, onSubscribedCentrals: [central])
                 sent = true
             }
         }
@@ -184,7 +201,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
 
         // Notify all subscribed centrals via peripheral manager
         if let char = characteristic, !subscribedCentrals.isEmpty {
-            peripheralManager?.updateValue(data, for: char, onSubscribedCentrals: subscribedCentrals)
+            _ = peripheralManager?.bleUpdateValue(data, for: char, onSubscribedCentrals: subscribedCentrals)
         }
 
         // Write to all connected peripherals via central manager
@@ -203,15 +220,13 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     // MARK: - Scanning
 
     private func startScanning() {
-        guard centralManager?.state == .poweredOn else { return }
+        guard centralManager?.cmState == .poweredOn else { return }
         guard !isScanning else { return }
 
         isScanning = true
-        centralManager.scanForPeripherals(
-            withServices: [BLEConstants.serviceUUID],
-            options: [
-                CBCentralManagerScanOptionAllowDuplicatesKey: false,
-            ]
+        centralManager?.bleStartScan(
+            services: [BLEConstants.serviceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
         logger.info("BLE scanning started")
 
@@ -222,7 +237,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         isScanning = false
         scanTimer?.cancel()
         scanTimer = nil
-        centralManager?.stopScan()
+        centralManager?.bleStopScan()
     }
 
     /// Alternate between scanning and pausing to conserve power.
@@ -237,7 +252,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
             if self.isScanning {
-                self.centralManager?.stopScan()
+                self.centralManager?.bleStopScan()
                 // Pause, then resume
                 let resumeTimer = DispatchSource.makeTimerSource(queue: self.queue)
                 resumeTimer.schedule(
@@ -246,8 +261,8 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
                 )
                 resumeTimer.setEventHandler { [weak self] in
                     guard let self = self, self.isScanning else { return }
-                    self.centralManager?.scanForPeripherals(
-                        withServices: [BLEConstants.serviceUUID],
+                    self.centralManager?.bleStartScan(
+                        services: [BLEConstants.serviceUUID],
                         options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
                     )
                     self.scheduleScanCycle()
@@ -263,7 +278,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     // MARK: - Advertising
 
     private func startAdvertising() {
-        guard peripheralManager?.state == .poweredOn else { return }
+        guard peripheralManager?.pmState == .poweredOn else { return }
 
         let mutableCharacteristic = CBMutableCharacteristic(
             type: BLEConstants.characteristicUUID,
@@ -280,14 +295,14 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         mutableService.characteristics = [mutableCharacteristic]
         self.service = mutableService
 
-        peripheralManager.add(mutableService)
+        peripheralManager?.bleAddService(mutableService)
     }
 
     private func beginAdvertising() {
-        guard peripheralManager?.state == .poweredOn else { return }
-        guard peripheralManager?.isAdvertising == false else { return }
+        guard peripheralManager?.pmState == .poweredOn else { return }
+        guard peripheralManager?.bleIsAdvertising == false else { return }
 
-        peripheralManager.startAdvertising([
+        peripheralManager?.bleStartAdvertising([
             CBAdvertisementDataServiceUUIDsKey: [BLEConstants.serviceUUID],
             CBAdvertisementDataLocalNameKey: "FestiChat",
         ])
@@ -296,16 +311,16 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
 
     // MARK: - Connection management
 
-    private func shouldConnect(to peripheral: CBPeripheral, rssi: Int) -> Bool {
+    func shouldConnect(toUUID uuid: UUID, rssi: Int) -> Bool {
         lock.lock()
         defer { lock.unlock() }
 
         // Already connected or connecting
-        if connectedPeripheralRefs[peripheral.identifier] != nil { return false }
-        if connectingPeripherals.contains(peripheral.identifier) { return false }
+        if connectedPeripheralRefs[uuid] != nil { return false }
+        if connectingPeripherals.contains(uuid) { return false }
 
         // Recently timed out — backoff
-        if let timeoutDate = timedOutPeripherals[peripheral.identifier],
+        if let timeoutDate = timedOutPeripherals[uuid],
            Date().timeIntervalSince(timeoutDate) < BLEConstants.reconnectBackoff {
             return false
         }
@@ -324,10 +339,163 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         return true
     }
 
+    // MARK: - Internal handlers (testable via @testable import)
+
+    /// Handle central manager state change.
+    func handleCentralStateChange(_ newState: CBManagerState) {
+        switch newState {
+        case .poweredOn:
+            logger.info("Central powered on")
+            updateRunningState()
+            startScanning()
+        case .poweredOff:
+            logger.warning("Central powered off")
+            state = .failed("Bluetooth powered off")
+        case .unauthorized:
+            logger.error("Central unauthorized")
+            state = .failed("Bluetooth unauthorized")
+        case .unsupported:
+            logger.error("Central unsupported")
+            state = .failed("Bluetooth unsupported")
+        case .resetting:
+            logger.warning("Central resetting")
+        case .unknown:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    /// Handle peripheral manager state change.
+    func handlePeripheralManagerStateChange(_ newState: CBManagerState) {
+        switch newState {
+        case .poweredOn:
+            logger.info("Peripheral manager powered on")
+            updateRunningState()
+            startAdvertising()
+        case .poweredOff:
+            logger.warning("Peripheral manager powered off")
+        case .unauthorized:
+            logger.error("Peripheral manager unauthorized")
+        case .unsupported:
+            logger.error("Peripheral manager unsupported")
+        case .resetting:
+            logger.warning("Peripheral manager resetting")
+        case .unknown:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    /// Handle peripheral discovery.
+    func handleDidDiscover(peripheral: any BLEPeripheralProxy, rssi: Int) {
+        guard rssi != 127 else { return } // 127 means RSSI unavailable.
+
+        pruneTimedOutPeripherals()
+
+        guard shouldConnect(toUUID: peripheral.identifier, rssi: rssi) else { return }
+
+        lock.withLock {
+            connectingPeripherals.insert(peripheral.identifier)
+            connectedPeripheralRefs[peripheral.identifier] = peripheral
+        }
+
+        logger.info("Connecting to peripheral \(peripheral.identifier), RSSI: \(rssi)")
+        (peripheral as? CBPeripheral)?.delegate = self
+        centralManager?.bleConnect(peripheral, options: nil)
+
+        // Connection timeout — capture UUID to avoid Sendable issues with protocol existential.
+        let peripheralUUID = peripheral.identifier
+        queue.asyncAfter(deadline: .now() + BLEConstants.connectionTimeout) { [weak self] in
+            guard let self = self else { return }
+            let isStillConnecting = self.lock.withLock {
+                self.connectingPeripherals.contains(peripheralUUID)
+            }
+            if isStillConnecting {
+                self.logger.warning("Connection timeout for \(peripheralUUID)")
+                let peripheralRef = self.lock.withLock { self.connectedPeripheralRefs[peripheralUUID] }
+                if let peripheralRef = peripheralRef {
+                    self.centralManager?.bleCancelConnection(peripheralRef)
+                }
+                self.lock.withLock {
+                    self.connectingPeripherals.remove(peripheralUUID)
+                    self.connectedPeripheralRefs.removeValue(forKey: peripheralUUID)
+                    self.timedOutPeripherals[peripheralUUID] = Date()
+                }
+            }
+        }
+    }
+
+    /// Handle successful connection.
+    func handleDidConnect(peripheral: any BLEPeripheralProxy) {
+        logger.info("Connected to peripheral \(peripheral.identifier)")
+
+        lock.withLock {
+            connectingPeripherals.remove(peripheral.identifier)
+            connectedPeripheralRefs[peripheral.identifier] = peripheral
+
+            let peerID = temporaryPeerID(from: peripheral.identifier)
+            peripheralToPeerID[peripheral.identifier] = peerID
+            peerIDToPeripheral[peerID] = peripheral
+        }
+
+        // Request larger MTU on iOS 16+.
+        if #available(iOS 16.0, macOS 13.0, *) {
+            (peripheral as? CBPeripheral)?.delegate = self
+        }
+
+        peripheral.discoverServices([BLEConstants.serviceUUID])
+
+        guard let peerID = lock.withLock({ peripheralToPeerID[peripheral.identifier] }) else {
+            return
+        }
+        delegate?.transport(self, didConnect: peerID)
+    }
+
+    /// Handle failed connection.
+    func handleDidFailToConnect(peripheralUUID uuid: UUID) {
+        logger.error("Failed to connect to \(uuid)")
+
+        lock.withLock {
+            connectingPeripherals.remove(uuid)
+            connectedPeripheralRefs.removeValue(forKey: uuid)
+            timedOutPeripherals[uuid] = Date()
+        }
+    }
+
+    /// Handle disconnection.
+    func handleDidDisconnect(peripheralUUID uuid: UUID) {
+        logger.info("Disconnected from \(uuid)")
+
+        let peerID: PeerID? = lock.withLock {
+            let pid = peripheralToPeerID.removeValue(forKey: uuid)
+            if let pid = pid {
+                peerIDToPeripheral.removeValue(forKey: pid)
+            }
+            peripheralCharacteristics.removeValue(forKey: uuid)
+            connectedPeripheralRefs.removeValue(forKey: uuid)
+            connectingPeripherals.remove(uuid)
+            return pid
+        }
+
+        if let peerID = peerID {
+            delegate?.transport(self, didDisconnect: peerID)
+        }
+    }
+
+    /// Handle received data from a connected peripheral.
+    func handleDidReceiveValue(data: Data, fromPeripheralUUID uuid: UUID) {
+        let peerID: PeerID = lock.withLock {
+            peripheralToPeerID[uuid] ?? temporaryPeerID(from: uuid)
+        }
+        delegate?.transport(self, didReceiveData: data, from: peerID)
+    }
+
     // MARK: - Helpers
 
     /// Derive a temporary PeerID from a peripheral identifier until the real one is exchanged.
-    private func temporaryPeerID(from uuid: UUID) -> PeerID {
+    func temporaryPeerID(from uuid: UUID) -> PeerID {
         let data = withUnsafeBytes(of: uuid.uuid) { Data($0) }
         return PeerID(noisePublicKey: data)
     }
@@ -361,6 +529,14 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             centralToPeerID[uuid] = peerID
         }
     }
+
+    private func updateRunningState() {
+        if centralManager?.cmState == .poweredOn || peripheralManager?.pmState == .poweredOn {
+            if state != .running {
+                state = .running
+            }
+        }
+    }
 }
 
 // MARK: - CBCentralManagerDelegate
@@ -368,27 +544,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
 extension BLEService: CBCentralManagerDelegate {
 
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        switch central.state {
-        case .poweredOn:
-            logger.info("Central powered on")
-            updateRunningState()
-            startScanning()
-        case .poweredOff:
-            logger.warning("Central powered off")
-            state = .failed("Bluetooth powered off")
-        case .unauthorized:
-            logger.error("Central unauthorized")
-            state = .failed("Bluetooth unauthorized")
-        case .unsupported:
-            logger.error("Central unsupported")
-            state = .failed("Bluetooth unsupported")
-        case .resetting:
-            logger.warning("Central resetting")
-        case .unknown:
-            break
-        @unknown default:
-            break
-        }
+        handleCentralStateChange(central.state)
     }
 
     public func centralManager(
@@ -397,7 +553,6 @@ extension BLEService: CBCentralManagerDelegate {
     ) {
         logger.info("Central restoring state")
 
-        // Restore connected peripherals from state restoration.
         if let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
             for peripheral in peripherals {
                 peripheral.delegate = self
@@ -407,7 +562,6 @@ extension BLEService: CBCentralManagerDelegate {
                     peripheralToPeerID[peripheral.identifier] = tempID
                     peerIDToPeripheral[tempID] = peripheral
                 }
-                // Re-discover services to find our characteristic.
                 peripheral.discoverServices([BLEConstants.serviceUUID])
             }
         }
@@ -419,64 +573,14 @@ extension BLEService: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
-        let rssiValue = RSSI.intValue
-        guard rssiValue != 127 else { return } // 127 means RSSI unavailable.
-
-        pruneTimedOutPeripherals()
-
-        guard shouldConnect(to: peripheral, rssi: rssiValue) else { return }
-
-        lock.withLock {
-            connectingPeripherals.insert(peripheral.identifier)
-            connectedPeripheralRefs[peripheral.identifier] = peripheral
-        }
-
-        logger.info("Connecting to peripheral \(peripheral.identifier), RSSI: \(rssiValue)")
-        peripheral.delegate = self
-        central.connect(peripheral, options: nil)
-
-        // Connection timeout.
-        queue.asyncAfter(deadline: .now() + BLEConstants.connectionTimeout) { [weak self] in
-            guard let self = self else { return }
-            let isStillConnecting = self.lock.withLock {
-                self.connectingPeripherals.contains(peripheral.identifier)
-            }
-            if isStillConnecting {
-                self.logger.warning("Connection timeout for \(peripheral.identifier)")
-                central.cancelPeripheralConnection(peripheral)
-                self.lock.withLock {
-                    self.connectingPeripherals.remove(peripheral.identifier)
-                    self.connectedPeripheralRefs.removeValue(forKey: peripheral.identifier)
-                    self.timedOutPeripherals[peripheral.identifier] = Date()
-                }
-            }
-        }
+        handleDidDiscover(peripheral: peripheral, rssi: RSSI.intValue)
     }
 
     public func centralManager(
         _ central: CBCentralManager,
         didConnect peripheral: CBPeripheral
     ) {
-        logger.info("Connected to peripheral \(peripheral.identifier)")
-
-        lock.withLock {
-            connectingPeripherals.remove(peripheral.identifier)
-            connectedPeripheralRefs[peripheral.identifier] = peripheral
-
-            let peerID = temporaryPeerID(from: peripheral.identifier)
-            peripheralToPeerID[peripheral.identifier] = peerID
-            peerIDToPeripheral[peerID] = peripheral
-        }
-
-        // Request larger MTU on iOS 16+.
-        if #available(iOS 16.0, macOS 13.0, *) {
-            peripheral.delegate = self
-        }
-
-        peripheral.discoverServices([BLEConstants.serviceUUID])
-
-        let peerID = lock.withLock { peripheralToPeerID[peripheral.identifier]! }
-        delegate?.transport(self, didConnect: peerID)
+        handleDidConnect(peripheral: peripheral)
     }
 
     public func centralManager(
@@ -484,13 +588,7 @@ extension BLEService: CBCentralManagerDelegate {
         didFailToConnect peripheral: CBPeripheral,
         error: Error?
     ) {
-        logger.error("Failed to connect to \(peripheral.identifier): \(error?.localizedDescription ?? "unknown")")
-
-        lock.withLock {
-            connectingPeripherals.remove(peripheral.identifier)
-            connectedPeripheralRefs.removeValue(forKey: peripheral.identifier)
-            timedOutPeripherals[peripheral.identifier] = Date()
-        }
+        handleDidFailToConnect(peripheralUUID: peripheral.identifier)
     }
 
     public func centralManager(
@@ -498,30 +596,7 @@ extension BLEService: CBCentralManagerDelegate {
         didDisconnectPeripheral peripheral: CBPeripheral,
         error: Error?
     ) {
-        logger.info("Disconnected from \(peripheral.identifier)")
-
-        let peerID: PeerID? = lock.withLock {
-            let pid = peripheralToPeerID.removeValue(forKey: peripheral.identifier)
-            if let pid = pid {
-                peerIDToPeripheral.removeValue(forKey: pid)
-            }
-            peripheralCharacteristics.removeValue(forKey: peripheral.identifier)
-            connectedPeripheralRefs.removeValue(forKey: peripheral.identifier)
-            connectingPeripherals.remove(peripheral.identifier)
-            return pid
-        }
-
-        if let peerID = peerID {
-            delegate?.transport(self, didDisconnect: peerID)
-        }
-    }
-
-    private func updateRunningState() {
-        if centralManager?.state == .poweredOn || peripheralManager?.state == .poweredOn {
-            if state != .running {
-                state = .running
-            }
-        }
+        handleDidDisconnect(peripheralUUID: peripheral.identifier)
     }
 }
 
@@ -533,8 +608,8 @@ extension BLEService: CBPeripheralDelegate {
         _ peripheral: CBPeripheral,
         didDiscoverServices error: Error?
     ) {
-        guard error == nil else {
-            logger.error("Service discovery error: \(error!.localizedDescription)")
+        if let error = error {
+            logger.error("Service discovery error: \(error.localizedDescription)")
             return
         }
 
@@ -552,8 +627,8 @@ extension BLEService: CBPeripheralDelegate {
         didDiscoverCharacteristicsFor service: CBService,
         error: Error?
     ) {
-        guard error == nil else {
-            logger.error("Characteristic discovery error: \(error!.localizedDescription)")
+        if let error = error {
+            logger.error("Characteristic discovery error: \(error.localizedDescription)")
             return
         }
 
@@ -563,7 +638,6 @@ extension BLEService: CBPeripheralDelegate {
                 peripheralCharacteristics[peripheral.identifier] = char
             }
 
-            // Subscribe for notifications.
             if char.properties.contains(.notify) {
                 peripheral.setNotifyValue(true, for: char)
             }
@@ -575,18 +649,12 @@ extension BLEService: CBPeripheralDelegate {
         didUpdateValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        guard error == nil else {
-            logger.error("Value update error: \(error!.localizedDescription)")
+        if let error = error {
+            logger.error("Value update error: \(error.localizedDescription)")
             return
         }
-
         guard let data = characteristic.value, !data.isEmpty else { return }
-
-        let peerID: PeerID = lock.withLock {
-            peripheralToPeerID[peripheral.identifier] ?? temporaryPeerID(from: peripheral.identifier)
-        }
-
-        delegate?.transport(self, didReceiveData: data, from: peerID)
+        handleDidReceiveValue(data: data, fromPeripheralUUID: peripheral.identifier)
     }
 
     public func peripheral(
@@ -625,24 +693,7 @@ extension BLEService: CBPeripheralDelegate {
 extension BLEService: CBPeripheralManagerDelegate {
 
     public func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-        switch peripheral.state {
-        case .poweredOn:
-            logger.info("Peripheral manager powered on")
-            updateRunningState()
-            startAdvertising()
-        case .poweredOff:
-            logger.warning("Peripheral manager powered off")
-        case .unauthorized:
-            logger.error("Peripheral manager unauthorized")
-        case .unsupported:
-            logger.error("Peripheral manager unsupported")
-        case .resetting:
-            logger.warning("Peripheral manager resetting")
-        case .unknown:
-            break
-        @unknown default:
-            break
-        }
+        handlePeripheralManagerStateChange(peripheral.state)
     }
 
     public func peripheralManager(
@@ -651,7 +702,6 @@ extension BLEService: CBPeripheralManagerDelegate {
     ) {
         logger.info("Peripheral manager restoring state")
 
-        // Restore advertised services.
         if let services = dict[CBPeripheralManagerRestoredStateServicesKey] as? [CBMutableService] {
             for svc in services {
                 self.service = svc
@@ -738,7 +788,6 @@ extension BLEService: CBPeripheralManagerDelegate {
                 delegate?.transport(self, didReceiveData: data, from: peerID)
             }
 
-            // Respond to write-with-response.
             peripheral.respond(to: request, withResult: .success)
         }
     }
@@ -747,13 +796,11 @@ extension BLEService: CBPeripheralManagerDelegate {
         _ peripheral: CBPeripheralManager,
         didReceiveRead request: CBATTRequest
     ) {
-        // Respond with the local peer ID bytes for identification.
         request.value = localPeerID.bytes
         peripheral.respond(to: request, withResult: .success)
     }
 
     public func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-        // Queue was full, now ready to send again. The caller should retry pending notifications.
         logger.debug("Peripheral manager ready to update subscribers")
     }
 }
