@@ -312,6 +312,119 @@ final class MessageService: @unchecked Sendable {
         try sendPacket(packet)
     }
 
+    // MARK: - Friend Requests
+
+    /// Send a friend request to a nearby peer identified by their 8-byte PeerID data.
+    ///
+    /// Convenience wrapper for views that don't import BlipProtocol.
+    @MainActor
+    func sendFriendRequest(toPeerData peerData: Data) async throws {
+        guard let peerID = PeerID(bytes: peerData) else {
+            throw MessageServiceError.invalidRecipient
+        }
+        try await sendFriendRequest(to: peerID)
+    }
+
+    /// Send a friend request to a nearby peer.
+    ///
+    /// Payload format: username (UTF-8) + 0x00 + displayName (UTF-8)
+    /// Creates a local Friend record with `.pending` status.
+    @MainActor
+    func sendFriendRequest(to peerID: PeerID) async throws {
+        guard let identity = getIdentity() else {
+            throw MessageServiceError.senderNotFound
+        }
+
+        let context = ModelContext(modelContainer)
+
+        // Get local user
+        let userDescriptor = FetchDescriptor<User>(sortBy: [SortDescriptor(\.createdAt, order: .forward)])
+        guard let localUser = try context.fetch(userDescriptor).first else {
+            throw MessageServiceError.senderNotFound
+        }
+
+        // Build payload: username + 0x00 + displayName
+        var payload = Data()
+        payload.append(localUser.username.data(using: .utf8) ?? Data())
+        payload.append(0x00)
+        payload.append(localUser.resolvedDisplayName.data(using: .utf8) ?? Data())
+
+        let packet = buildPacket(
+            type: .noiseEncrypted,
+            payload: prependSubType(.friendRequest, to: payload),
+            flags: [.hasRecipient, .hasSignature, .isReliable],
+            senderID: identity.peerID,
+            recipientID: peerID
+        )
+
+        try sendPacket(packet)
+
+        // Create or update local Friend record for the remote peer
+        let peerData = peerID.bytes
+        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
+        if let meshPeer = try context.fetch(peerDescriptor).first {
+            let remoteUser = try resolveOrCreateUser(for: meshPeer, context: context)
+            try createOrUpdateFriend(user: remoteUser, status: .pending, context: context)
+        }
+
+        logger.info("Sent friend request to peer \(peerID)")
+    }
+
+    /// Accept a pending friend request and notify the sender.
+    ///
+    /// Updates the local Friend record to `.accepted`, creates a DM channel, and
+    /// sends a `.friendAccept` packet back to the requester.
+    @MainActor
+    func acceptFriendRequest(from friend: Friend) async throws {
+        guard let identity = getIdentity() else {
+            throw MessageServiceError.senderNotFound
+        }
+        guard let friendUser = friend.user else {
+            throw MessageServiceError.invalidRecipient
+        }
+
+        let context = ModelContext(modelContainer)
+
+        // Update friend status
+        let friendID = friend.id
+        let friendDesc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        if let existingFriend = try context.fetch(friendDesc).first {
+            existingFriend.statusRaw = FriendStatus.accepted.rawValue
+            try context.save()
+        }
+
+        // Ensure DM channel exists
+        try createDMChannel(with: friendUser, context: context)
+
+        // Send accept packet
+        let recipientPeerID = PeerID(noisePublicKey: friendUser.noisePublicKey)
+
+        let localUserDesc = FetchDescriptor<User>(sortBy: [SortDescriptor(\.createdAt, order: .forward)])
+        guard let localUser = try context.fetch(localUserDesc).first else {
+            throw MessageServiceError.senderNotFound
+        }
+
+        var payload = Data()
+        payload.append(localUser.username.data(using: .utf8) ?? Data())
+
+        let packet = buildPacket(
+            type: .noiseEncrypted,
+            payload: prependSubType(.friendAccept, to: payload),
+            flags: [.hasRecipient, .hasSignature, .isReliable],
+            senderID: identity.peerID,
+            recipientID: recipientPeerID
+        )
+
+        try sendPacket(packet)
+
+        logger.info("Accepted friend request from \(friendUser.username)")
+
+        NotificationCenter.default.post(
+            name: .friendListDidChange,
+            object: nil
+        )
+    }
+
     // MARK: - Receive Message
 
     /// Process incoming raw data from the transport layer.
@@ -729,19 +842,117 @@ final class MessageService: @unchecked Sendable {
 
     @MainActor
     private func handleFriendRequest(data: Data, from peerID: PeerID) async throws {
+        let context = ModelContext(modelContainer)
+
+        // Parse payload: username + 0x00 + displayName
+        let (senderUsername, senderDisplayName) = parseFriendPayload(data)
+
+        // Resolve sender as a MeshPeer -> User
+        let peerData = peerID.bytes
+        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
+        let meshPeer = try context.fetch(peerDescriptor).first
+
+        // Create or find User for the sender
+        let senderUser: User
+        if let meshPeer {
+            senderUser = try resolveOrCreateUser(for: meshPeer, context: context)
+            // Update username/display name from payload
+            if let name = senderUsername, !name.isEmpty {
+                senderUser.username = name
+            }
+            if let display = senderDisplayName, !display.isEmpty {
+                senderUser.displayName = display
+            }
+        } else if let username = senderUsername, !username.isEmpty {
+            // No MeshPeer record yet — create User from payload
+            let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
+            if let existing = try context.fetch(userDesc).first {
+                senderUser = existing
+            } else {
+                senderUser = User(
+                    username: username,
+                    displayName: senderDisplayName,
+                    emailHash: "",
+                    noisePublicKey: peerData,
+                    signingPublicKey: Data()
+                )
+                context.insert(senderUser)
+            }
+        } else {
+            logger.warning("Received friend request with no parseable sender info")
+            return
+        }
+
+        // Create Friend record with pending status (or update if exists)
+        try createOrUpdateFriend(user: senderUser, status: .pending, context: context)
+
+        logger.info("Received friend request from \(senderUser.username)")
+
+        // Notify UI
         NotificationCenter.default.post(
             name: .didReceiveFriendRequest,
             object: nil,
-            userInfo: ["data": data, "peerID": peerID]
+            userInfo: ["data": data, "peerID": peerID, "username": senderUser.username]
+        )
+
+        NotificationCenter.default.post(
+            name: .friendListDidChange,
+            object: nil
         )
     }
 
     @MainActor
     private func handleFriendAccept(data: Data, from peerID: PeerID) async throws {
+        let context = ModelContext(modelContainer)
+
+        // Parse payload: username
+        let (senderUsername, _) = parseFriendPayload(data)
+
+        // Find the Friend record for this peer
+        let peerData = peerID.bytes
+        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
+
+        var friendUser: User?
+
+        if let meshPeer = try context.fetch(peerDescriptor).first {
+            friendUser = try? resolveOrCreateUser(for: meshPeer, context: context)
+        }
+
+        // Fallback: find by username
+        if friendUser == nil, let username = senderUsername, !username.isEmpty {
+            let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
+            friendUser = try context.fetch(userDesc).first
+        }
+
+        guard let resolvedUser = friendUser else {
+            logger.warning("Received friend accept from unknown peer")
+            return
+        }
+
+        // Update Friend status to accepted
+        let userID = resolvedUser.id
+        let friendDesc = FetchDescriptor<Friend>(predicate: #Predicate {
+            $0.user?.id == userID
+        })
+        if let friend = try context.fetch(friendDesc).first {
+            friend.statusRaw = FriendStatus.accepted.rawValue
+            try context.save()
+        }
+
+        // Create DM channel
+        try createDMChannel(with: resolvedUser, context: context)
+
+        logger.info("Friend accept received from \(resolvedUser.username)")
+
         NotificationCenter.default.post(
             name: .didReceiveFriendAccept,
             object: nil,
-            userInfo: ["data": data, "peerID": peerID]
+            userInfo: ["data": data, "peerID": peerID, "username": resolvedUser.username]
+        )
+
+        NotificationCenter.default.post(
+            name: .friendListDidChange,
+            object: nil
         )
     }
 
@@ -785,6 +996,118 @@ final class MessageService: @unchecked Sendable {
             object: nil,
             userInfo: ["subType": subType, "data": data, "peerID": peerID]
         )
+    }
+
+    // MARK: - Private: Friend Helpers
+
+    /// Parse friend request/accept payload: username + 0x00 + displayName (optional)
+    private func parseFriendPayload(_ data: Data) -> (String?, String?) {
+        let bytes = [UInt8](data)
+        guard let sepIndex = bytes.firstIndex(of: 0x00) else {
+            // No separator — entire payload is username
+            return (String(data: data, encoding: .utf8), nil)
+        }
+        let usernameData = Data(bytes[0 ..< sepIndex])
+        let username = String(data: usernameData, encoding: .utf8)
+        let afterSep = sepIndex + 1
+        let displayName: String?
+        if afterSep < bytes.count {
+            displayName = String(data: Data(bytes[afterSep...]), encoding: .utf8)
+        } else {
+            displayName = nil
+        }
+        return (username, displayName)
+    }
+
+    /// Resolve or create a User record from a MeshPeer.
+    @MainActor
+    private func resolveOrCreateUser(for meshPeer: MeshPeer, context: ModelContext) throws -> User {
+        // Try matching by noisePublicKey
+        let peerKey = meshPeer.noisePublicKey
+        let keyDesc = FetchDescriptor<User>(predicate: #Predicate { $0.noisePublicKey == peerKey })
+        if let existing = try context.fetch(keyDesc).first {
+            return existing
+        }
+
+        // Try matching by username
+        if let username = meshPeer.username, !username.isEmpty {
+            let usernameDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
+            if let existing = try context.fetch(usernameDesc).first {
+                // Update public key if missing
+                if existing.noisePublicKey.isEmpty {
+                    existing.noisePublicKey = meshPeer.noisePublicKey
+                }
+                return existing
+            }
+        }
+
+        // Create new User
+        let user = User(
+            username: meshPeer.username ?? "peer_\(meshPeer.id.uuidString.prefix(8))",
+            displayName: meshPeer.username,
+            emailHash: "",
+            noisePublicKey: meshPeer.noisePublicKey,
+            signingPublicKey: meshPeer.signingPublicKey
+        )
+        context.insert(user)
+        try context.save()
+        return user
+    }
+
+    /// Create or update a Friend record for a given user.
+    @MainActor
+    private func createOrUpdateFriend(user: User, status: FriendStatus, context: ModelContext) throws {
+        let userID = user.id
+        let existingDesc = FetchDescriptor<Friend>(predicate: #Predicate {
+            $0.user?.id == userID
+        })
+        if let existing = try context.fetch(existingDesc).first {
+            // Don't downgrade accepted -> pending
+            if existing.status != .accepted || status == .accepted {
+                existing.statusRaw = status.rawValue
+            }
+            try context.save()
+            return
+        }
+
+        let friend = Friend(
+            user: user,
+            status: status
+        )
+        context.insert(friend)
+        try context.save()
+    }
+
+    /// Create a DM channel with the given user if one doesn't already exist.
+    @MainActor
+    private func createDMChannel(with remoteUser: User, context: ModelContext) throws {
+        // Check for existing DM
+        let dmDescriptor = FetchDescriptor<Channel>(predicate: #Predicate {
+            $0.typeRaw == "dm"
+        })
+        let existingChannels = try context.fetch(dmDescriptor)
+        for channel in existingChannels {
+            for membership in channel.memberships {
+                if membership.user?.id == remoteUser.id {
+                    return // DM already exists
+                }
+            }
+        }
+
+        // Create new DM channel
+        let channel = Channel(type: .dm, name: remoteUser.resolvedDisplayName)
+        context.insert(channel)
+
+        // Add membership for the remote user
+        let membership = GroupMembership(
+            user: remoteUser,
+            channel: channel,
+            role: .member
+        )
+        context.insert(membership)
+
+        try context.save()
+        logger.info("Created DM channel with \(remoteUser.username)")
     }
 
     // MARK: - Private: Payload Builders
@@ -1052,5 +1375,6 @@ extension Notification.Name {
     static let didReceivePTTAudio = Notification.Name("com.blip.didReceivePTTAudio")
     static let didReceiveFriendRequest = Notification.Name("com.blip.didReceiveFriendRequest")
     static let didReceiveFriendAccept = Notification.Name("com.blip.didReceiveFriendAccept")
+    static let friendListDidChange = Notification.Name("com.blip.friendListDidChange")
     static let didReceiveGroupManagement = Notification.Name("com.blip.didReceiveGroupManagement")
 }

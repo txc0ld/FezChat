@@ -7,16 +7,18 @@ import MapKit
 /// Main view for the Nearby tab.
 ///
 /// Combines: "X people nearby" header, mesh particle background,
-/// friends section, location channels section, and friend finder map.
-/// Uses staggered reveal for section entrance and glassmorphism throughout.
+/// peers section (with add-friend), friends section, channels, and friend finder map.
 struct NearbyView: View {
 
     @State private var meshViewModel: MeshViewModel?
     @State private var beacons: [BeaconPin] = []
     @State private var showMap = false
+    @State private var selectedPeer: MeshViewModel.NearbyPeer?
+    @State private var friendRequestSent: Set<UUID> = []
 
     @Environment(\.theme) private var theme
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppCoordinator.self) private var coordinator
 
     var body: some View {
         NavigationStack {
@@ -32,14 +34,17 @@ struct NearbyView: View {
                         headerSection
                             .staggeredReveal(index: 0)
 
-                        friendsSection
+                        peersSection
                             .staggeredReveal(index: 1)
 
-                        channelsSection
+                        friendsSection
                             .staggeredReveal(index: 2)
 
-                        mapSection
+                        channelsSection
                             .staggeredReveal(index: 3)
+
+                        mapSection
+                            .staggeredReveal(index: 4)
 
                         // Bottom spacer for tab bar
                         Spacer().frame(height: BlipSpacing.xxl)
@@ -52,6 +57,24 @@ struct NearbyView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .bleDebugOverlay()
+        .sheet(item: $selectedPeer) { peer in
+            ProfileSheet(
+                isPresented: Binding(
+                    get: { selectedPeer != nil },
+                    set: { if !$0 { selectedPeer = nil } }
+                ),
+                displayName: peer.displayName ?? peer.username ?? "Unknown",
+                username: peer.username ?? "",
+                bio: "",
+                isFriend: peer.friendStatus == .accepted,
+                isOnline: true,
+                onAddFriend: {
+                    sendFriendRequest(to: peer)
+                    selectedPeer = nil
+                }
+            )
+            .presentationDetents([.medium])
+        }
         .task {
             if meshViewModel == nil {
                 meshViewModel = MeshViewModel(modelContainer: modelContext.container)
@@ -68,6 +91,12 @@ struct NearbyView: View {
 
     private var peerCount: Int {
         meshViewModel?.connectedPeerCount ?? 0
+    }
+
+    /// All connected peers who are NOT yet friends (or have pending status).
+    private var nonFriendPeers: [MeshViewModel.NearbyPeer] {
+        guard let vm = meshViewModel else { return [] }
+        return vm.nearbyPeers.filter { $0.friendStatus != .accepted }
     }
 
     private var nearbyFriends: [NearbyPeerCard_Data] {
@@ -151,6 +180,70 @@ struct NearbyView: View {
         .accessibilityLabel("\(peerCount) people nearby, mesh active")
     }
 
+    // MARK: - Peers Section (Non-Friends)
+
+    @ViewBuilder
+    private var peersSection: some View {
+        if !nonFriendPeers.isEmpty {
+            VStack(alignment: .leading, spacing: BlipSpacing.md) {
+                HStack {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.blipAccentPurple)
+
+                    Text("People Nearby")
+                        .font(theme.typography.headline)
+                        .foregroundStyle(theme.colors.text)
+
+                    Spacer()
+
+                    Text("\(nonFriendPeers.count)")
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.mutedText)
+                        .padding(.horizontal, BlipSpacing.sm)
+                        .padding(.vertical, BlipSpacing.xs)
+                        .background(Capsule().fill(theme.colors.hover))
+                }
+                .padding(.horizontal, BlipSpacing.md)
+
+                ForEach(Array(nonFriendPeers.enumerated()), id: \.element.id) { index, peer in
+                    Button {
+                        selectedPeer = peer
+                    } label: {
+                        NearbyPeerCard(
+                            displayName: peer.displayName ?? peer.username ?? "Unknown",
+                            username: peer.username,
+                            avatarData: nil,
+                            hopCount: peer.isDirectPeer ? 0 : 1,
+                            rssi: peer.rssi,
+                            isOnline: true,
+                            isFriend: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .trailing) {
+                        if peer.friendStatus == .pending || friendRequestSent.contains(peer.id) {
+                            Text("Pending")
+                                .font(theme.typography.caption)
+                                .foregroundStyle(BlipColors.darkColors.statusAmber)
+                                .padding(.horizontal, BlipSpacing.sm)
+                                .padding(.vertical, BlipSpacing.xs)
+                                .background(Capsule().fill(BlipColors.darkColors.statusAmber.opacity(0.12)))
+                                .padding(.trailing, BlipSpacing.md + BlipSpacing.sm)
+                        } else {
+                            Image(systemName: "person.badge.plus")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.blipAccentPurple)
+                                .padding(.trailing, BlipSpacing.md + BlipSpacing.sm)
+                        }
+                    }
+                    .padding(.horizontal, BlipSpacing.md)
+                    .staggeredReveal(index: index)
+                }
+            }
+        }
+    }
+
     // MARK: - Friends Section
 
     @ViewBuilder
@@ -178,7 +271,7 @@ struct NearbyView: View {
             }
             .padding(.horizontal, BlipSpacing.md)
 
-            if nearbyFriends.isEmpty {
+            if nearbyFriends.isEmpty && nonFriendPeers.isEmpty {
                 HStack(spacing: BlipSpacing.sm) {
                     ProgressView()
                         .tint(theme.colors.mutedText)
@@ -188,6 +281,12 @@ struct NearbyView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, BlipSpacing.lg)
+            } else if nearbyFriends.isEmpty {
+                Text("No friends nearby yet. Tap a peer above to add them.")
+                    .font(theme.typography.secondary)
+                    .foregroundStyle(theme.colors.mutedText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, BlipSpacing.md)
             } else {
                 ForEach(Array(nearbyFriends.enumerated()), id: \.element.id) { index, friend in
                     NearbyPeerCard(
@@ -202,6 +301,20 @@ struct NearbyView: View {
                     .padding(.horizontal, BlipSpacing.md)
                     .staggeredReveal(index: index)
                 }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func sendFriendRequest(to peer: MeshViewModel.NearbyPeer) {
+        guard let messageService = coordinator.messageService else { return }
+        friendRequestSent.insert(peer.id)
+        Task {
+            do {
+                try await messageService.sendFriendRequest(toPeerData: peer.peerID)
+            } catch {
+                friendRequestSent.remove(peer.id)
             }
         }
     }
@@ -312,10 +425,12 @@ extension NearbyView {
     NearbyView()
         .preferredColorScheme(.dark)
         .blipTheme()
+        .environment(AppCoordinator())
 }
 
 #Preview("Nearby Tab - Light") {
     NearbyView()
         .preferredColorScheme(.light)
         .blipTheme()
+        .environment(AppCoordinator())
 }

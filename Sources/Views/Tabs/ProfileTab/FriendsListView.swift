@@ -1,20 +1,26 @@
 import SwiftUI
+import SwiftData
 
 // MARK: - FriendsListView
 
 /// Friends management view with Online/All/Pending/Blocked sections,
 /// search, and add-by-username functionality.
+///
+/// Loads real friend data from SwiftData. Falls back to sample data in previews.
 struct FriendsListView: View {
 
-    @State private var friends: [FriendListItem] = FriendsListView.sampleFriends
+    @State private var friends: [FriendListItem] = []
     @State private var searchText: String = ""
     @State private var selectedSection: FriendSection = .all
     @State private var showAddFriend = false
     @State private var addUsername: String = ""
     @State private var selectedFriend: FriendListItem?
+    @State private var isLoaded = false
 
     @Environment(\.theme) private var theme
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppCoordinator.self) private var coordinator
 
     var body: some View {
         ZStack {
@@ -63,9 +69,19 @@ struct FriendsListView: View {
                 username: friend.username,
                 bio: friend.bio,
                 isFriend: friend.status == .accepted,
-                isOnline: friend.isOnline
+                isOnline: friend.isOnline,
+                onAddFriend: friend.status == .pending ? {
+                    acceptFriendRequest(friend)
+                    selectedFriend = nil
+                } : nil
             )
             .presentationDetents([.medium])
+        }
+        .task {
+            loadFriends()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .friendListDidChange)) { _ in
+            loadFriends()
         }
     }
 
@@ -211,8 +227,57 @@ struct FriendsListView: View {
 
     private func sendFriendRequest() {
         guard !addUsername.isEmpty else { return }
-        // In production: send via mesh
+        // Look up the peer by username in SwiftData MeshPeers and send a request
+        let username = addUsername
         addUsername = ""
+
+        let context = ModelContext(modelContext.container)
+        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.username == username })
+        guard let peer = try? context.fetch(peerDescriptor).first,
+              let messageService = coordinator.messageService else {
+            return
+        }
+        Task {
+            try? await messageService.sendFriendRequest(toPeerData: peer.peerID)
+            loadFriends()
+        }
+    }
+
+    private func acceptFriendRequest(_ item: FriendListItem) {
+        guard let messageService = coordinator.messageService else { return }
+        let context = ModelContext(modelContext.container)
+        let friendID = item.id
+        let desc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        guard let friend = try? context.fetch(desc).first else { return }
+        Task {
+            try? await messageService.acceptFriendRequest(from: friend)
+            loadFriends()
+        }
+    }
+
+    private func loadFriends() {
+        let context = ModelContext(modelContext.container)
+        let descriptor = FetchDescriptor<Friend>(sortBy: [SortDescriptor(\.addedAt, order: .reverse)])
+        guard let allFriends = try? context.fetch(descriptor) else { return }
+
+        // Also check which friends are online via MeshPeer
+        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.connectionStateRaw == "connected" })
+        let connectedPeers = (try? context.fetch(peerDescriptor)) ?? []
+        let connectedKeys = Set(connectedPeers.map(\.noisePublicKey))
+
+        friends = allFriends.compactMap { friend -> FriendListItem? in
+            guard let user = friend.user else { return nil }
+            let isOnline = connectedKeys.contains(user.noisePublicKey)
+            return FriendListItem(
+                id: friend.id,
+                displayName: user.resolvedDisplayName,
+                username: user.username,
+                bio: user.bio ?? "",
+                isOnline: isOnline,
+                isPhoneVerified: user.isVerified,
+                status: friend.status
+            )
+        }
     }
 }
 
@@ -363,4 +428,5 @@ extension FriendsListView {
     }
     .preferredColorScheme(.dark)
     .blipTheme()
+    .environment(AppCoordinator())
 }

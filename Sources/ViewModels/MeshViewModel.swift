@@ -60,6 +60,9 @@ final class MeshViewModel {
     /// List of nearby friends detected on the mesh.
     var nearbyFriends: [NearbyFriend] = []
 
+    /// All connected mesh peers with their friend status.
+    var nearbyPeers: [NearbyPeer] = []
+
     /// Available location channels based on proximity.
     var locationChannels: [LocationChannelInfo] = []
 
@@ -101,6 +104,18 @@ final class MeshViewModel {
         let isDirectPeer: Bool
     }
 
+    /// A connected mesh peer with optional friend status.
+    struct NearbyPeer: Identifiable, Sendable {
+        let id: UUID
+        let peerID: Data
+        let username: String?
+        let displayName: String?
+        let rssi: Int
+        let lastSeen: Date
+        let isDirectPeer: Bool
+        let friendStatus: FriendStatus?
+    }
+
     struct LocationChannelInfo: Identifiable, Sendable {
         let id: UUID
         let name: String
@@ -130,6 +145,7 @@ final class MeshViewModel {
     nonisolated(unsafe) private var refreshTimer: Timer?
     nonisolated(unsafe) private var peerObservation: NSObjectProtocol?
     nonisolated(unsafe) private var transportObservation: NSObjectProtocol?
+    nonisolated(unsafe) private var friendListObservation: NSObjectProtocol?
 
     // MARK: - Constants
 
@@ -152,6 +168,7 @@ final class MeshViewModel {
         refreshTimer?.invalidate()
         if let obs = peerObservation { NotificationCenter.default.removeObserver(obs) }
         if let obs = transportObservation { NotificationCenter.default.removeObserver(obs) }
+        if let obs = friendListObservation { NotificationCenter.default.removeObserver(obs) }
     }
 
     // MARK: - Lifecycle
@@ -208,8 +225,9 @@ final class MeshViewModel {
             // Detect bridge node status
             isBridgeNode = connectedPeers.count >= 6
 
-            // Refresh nearby friends
+            // Refresh nearby friends and all peers
             await refreshNearbyFriends(peers: connectedPeers, context: context)
+            await refreshNearbyPeers(peers: connectedPeers, context: context)
 
             // Refresh location channels
             await refreshLocationChannels(context: context)
@@ -277,6 +295,44 @@ final class MeshViewModel {
         }
 
         nearbyFriends = nearby.sorted { $0.rssi > $1.rssi }
+    }
+
+    // MARK: - Nearby Peers (All)
+
+    private func refreshNearbyPeers(peers: [MeshPeer], context: ModelContext) async {
+        // Fetch all friends to determine status
+        let friendDescriptor = FetchDescriptor<Friend>()
+        let allFriends: [Friend]
+        do {
+            allFriends = try context.fetch(friendDescriptor)
+        } catch {
+            logger.error("Failed to fetch friends for peer refresh: \(error.localizedDescription)")
+            return
+        }
+
+        // Build a lookup: noisePublicKey -> FriendStatus
+        var friendStatusByKey: [Data: FriendStatus] = [:]
+        for friend in allFriends {
+            guard let user = friend.user else { continue }
+            friendStatusByKey[user.noisePublicKey] = friend.status
+        }
+
+        var allPeers: [NearbyPeer] = []
+        for peer in peers {
+            let status = friendStatusByKey[peer.noisePublicKey]
+            allPeers.append(NearbyPeer(
+                id: peer.id,
+                peerID: peer.peerID,
+                username: peer.username,
+                displayName: peer.username,
+                rssi: peer.rssi,
+                lastSeen: peer.lastSeenAt,
+                isDirectPeer: peer.isDirectPeer,
+                friendStatus: status
+            ))
+        }
+
+        nearbyPeers = allPeers.sorted { $0.rssi > $1.rssi }
     }
 
     // MARK: - Location Channels
@@ -404,6 +460,16 @@ final class MeshViewModel {
                     self?.isWebSocketConnected = isWS
                 }
                 self?.updateTransportState()
+            }
+        }
+
+        friendListObservation = NotificationCenter.default.addObserver(
+            forName: .friendListDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.refreshMeshState()
             }
         }
     }
