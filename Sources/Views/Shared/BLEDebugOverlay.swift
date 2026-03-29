@@ -178,8 +178,6 @@ struct BLEDebugOverlay: View {
     private func refreshState() {
         // Read from NotificationCenter-posted state or AppCoordinator.
         // In a real device test, these will be populated by BLEService callbacks.
-        let nc = NotificationCenter.default
-
         // Check BLE state via posted notifications.
         // For now, show placeholder until real device is connected.
         bleState = "Scanning"
@@ -213,6 +211,15 @@ extension View {
     /// Adds a triple-tap gesture to show the BLE debug overlay (DEBUG builds only).
     func bleDebugOverlay() -> some View {
         modifier(BLEDebugTapModifier())
+    }
+}
+#else
+import SwiftUI
+
+extension View {
+    /// No-op in Release builds.
+    func bleDebugOverlay() -> some View {
+        self
     }
 }
 #endif

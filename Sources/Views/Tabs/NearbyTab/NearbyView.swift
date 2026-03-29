@@ -51,6 +51,7 @@ struct NearbyView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .bleDebugOverlay()
         .task {
             if meshViewModel == nil {
                 meshViewModel = MeshViewModel(modelContainer: modelContext.container)
