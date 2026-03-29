@@ -96,9 +96,11 @@ final class AppCoordinator {
         self.webSocketTransport = ws
         self.transportCoordinator = coordinator
 
-        // Create and configure MessageService
+        // Create and configure MessageService with TransportCoordinator
+        // so messages route through the full BLE → WebSocket → local queue chain.
         let msgService = MessageService(modelContainer: modelContainer, keyManager: keyManager)
-        msgService.configure(transport: ble, identity: identity)
+        msgService.configure(transport: coordinator, identity: identity)
+        coordinator.delegate = msgService
         self.messageService = msgService
 
         isReady = true

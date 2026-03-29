@@ -1017,6 +1017,33 @@ final class MessageService: @unchecked Sendable {
     }
 }
 
+// MARK: - TransportDelegate
+
+extension MessageService: TransportDelegate {
+
+    func transport(_ transport: any Transport, didReceiveData data: Data, from peerID: PeerID) {
+        Task { @MainActor in
+            do {
+                try await self.receive(data: data, from: peerID)
+            } catch {
+                self.logger.error("Failed to process incoming packet: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func transport(_ transport: any Transport, didConnect peerID: PeerID) {
+        // Connection handled by TransportCoordinator; no MessageService action needed.
+    }
+
+    func transport(_ transport: any Transport, didDisconnect peerID: PeerID) {
+        // Disconnection handled by TransportCoordinator; no MessageService action needed.
+    }
+
+    func transport(_ transport: any Transport, didChangeState state: TransportState) {
+        // State changes handled by TransportCoordinator; no MessageService action needed.
+    }
+}
+
 // MARK: - Notification Names
 
 extension Notification.Name {
