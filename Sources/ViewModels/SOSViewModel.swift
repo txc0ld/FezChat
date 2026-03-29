@@ -4,6 +4,7 @@ import CoreLocation
 import FestiChatProtocol
 import FestiChatMesh
 import FestiChatCrypto
+import os.log
 
 // MARK: - SOS Flow State
 
@@ -121,6 +122,7 @@ final class SOSViewModel {
     private let locationService: LocationService
     private let messageService: MessageService
     private let notificationService: NotificationService
+    private let logger = Logger(subsystem: "com.festichat", category: "SOSViewModel")
     nonisolated(unsafe) private var sosObservation: NSObjectProtocol?
 
     // MARK: - Constants
@@ -317,7 +319,13 @@ final class SOSViewModel {
         let context = ModelContext(modelContainer)
         let descriptor = FetchDescriptor<MedicalResponder>()
 
-        guard let responders = try? context.fetch(descriptor) else { return }
+        let responders: [MedicalResponder]
+        do {
+            responders = try context.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch medical responders: \(error.localizedDescription)")
+            return
+        }
 
         if let responder = responders.first {
             isMedicalResponder = true
@@ -331,12 +339,23 @@ final class SOSViewModel {
         let context = ModelContext(modelContainer)
         let descriptor = FetchDescriptor<MedicalResponder>()
 
-        guard let responder = try? context.fetch(descriptor).first else { return }
+        let responder: MedicalResponder
+        do {
+            guard let fetched = try context.fetch(descriptor).first else { return }
+            responder = fetched
+        } catch {
+            logger.error("Failed to fetch medical responder: \(error.localizedDescription)")
+            return
+        }
 
         responder.isOnDuty.toggle()
         isOnDuty = responder.isOnDuty
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save responder on-duty status: \(error.localizedDescription)")
+        }
     }
 
     /// Accept an SOS alert as a medical responder.
@@ -345,13 +364,29 @@ final class SOSViewModel {
         let idStr = alertInfo.id.uuidString
         let descriptor = FetchDescriptor<SOSAlert>(predicate: #Predicate { $0.id.uuidString == idStr })
 
-        guard let alert = try? context.fetch(descriptor).first else {
+        let alert: SOSAlert
+        do {
+            guard let fetched = try context.fetch(descriptor).first else {
+                errorMessage = "Alert not found"
+                return
+            }
+            alert = fetched
+        } catch {
+            logger.error("Failed to fetch SOS alert: \(error.localizedDescription)")
             errorMessage = "Alert not found"
             return
         }
 
         let responderDescriptor = FetchDescriptor<MedicalResponder>()
-        guard let responder = try? context.fetch(responderDescriptor).first else {
+        let responder: MedicalResponder
+        do {
+            guard let fetched = try context.fetch(responderDescriptor).first else {
+                errorMessage = "Responder profile not found"
+                return
+            }
+            responder = fetched
+        } catch {
+            logger.error("Failed to fetch medical responder: \(error.localizedDescription)")
             errorMessage = "Responder profile not found"
             return
         }
@@ -385,14 +420,18 @@ final class SOSViewModel {
         alert.resolvedAt = Date()
 
         let responderDescriptor = FetchDescriptor<MedicalResponder>()
-        if let responder = try? context.fetch(responderDescriptor).first {
-            responder.activeAlert = nil
-            // Update average response time
-            if let acceptedAt = alert.acceptedAt {
-                let responseTime = Date().timeIntervalSince(acceptedAt)
-                let count = Double(responder.responseCount)
-                responder.avgResponseTime = ((responder.avgResponseTime * (count - 1)) + responseTime) / count
+        do {
+            if let responder = try context.fetch(responderDescriptor).first {
+                responder.activeAlert = nil
+                // Update average response time
+                if let acceptedAt = alert.acceptedAt {
+                    let responseTime = Date().timeIntervalSince(acceptedAt)
+                    let count = Double(responder.responseCount)
+                    responder.avgResponseTime = ((responder.avgResponseTime * (count - 1)) + responseTime) / count
+                }
             }
+        } catch {
+            logger.error("Failed to fetch medical responder for resolution: \(error.localizedDescription)")
         }
 
         do {
@@ -417,7 +456,13 @@ final class SOSViewModel {
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
 
-        guard let alerts = try? context.fetch(descriptor) else { return }
+        let alerts: [SOSAlert]
+        do {
+            alerts = try context.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch visible SOS alerts: \(error.localizedDescription)")
+            return
+        }
 
         let userLocation = locationService.currentLocation
 
@@ -452,7 +497,17 @@ final class SOSViewModel {
     // MARK: - Private: Broadcasting
 
     private func broadcastSOSAlert(_ alert: SOSAlert, severity: SOSSeverity, fuzzyGeohash: String) async {
-        guard let identity = try? KeyManager.shared.loadIdentity() else { return }
+        let identity: Identity
+        do {
+            guard let loaded = try KeyManager.shared.loadIdentity() else {
+                logger.error("No identity found for SOS broadcast")
+                return
+            }
+            identity = loaded
+        } catch {
+            logger.error("Failed to load identity for SOS alert broadcast: \(error.localizedDescription)")
+            return
+        }
 
         // Build payload: severity (1 byte) + fuzzy geohash + optional message
         var payload = Data()
@@ -478,19 +533,33 @@ final class SOSViewModel {
             payload: payload
         )
 
-        let wireData = try? PacketSerializer.encode(packet)
-        // Transport handles the actual send via NotificationCenter
-        if let data = wireData {
-            NotificationCenter.default.post(
-                name: .shouldBroadcastPacket,
-                object: nil,
-                userInfo: ["data": data, "priority": "sos"]
-            )
+        let wireData: Data
+        do {
+            wireData = try PacketSerializer.encode(packet)
+        } catch {
+            logger.error("Failed to encode SOS alert packet: \(error.localizedDescription)")
+            return
         }
+        // Transport handles the actual send via NotificationCenter
+        NotificationCenter.default.post(
+            name: .shouldBroadcastPacket,
+            object: nil,
+            userInfo: ["data": wireData, "priority": "sos"]
+        )
     }
 
     private func broadcastSOSAccept(alertID: UUID) async {
-        guard let identity = try? KeyManager.shared.loadIdentity() else { return }
+        let identity: Identity
+        do {
+            guard let loaded = try KeyManager.shared.loadIdentity() else {
+                logger.error("No identity found for SOS broadcast")
+                return
+            }
+            identity = loaded
+        } catch {
+            logger.error("Failed to load identity for SOS accept broadcast: \(error.localizedDescription)")
+            return
+        }
 
         var payload = Data()
         payload.append(alertID.uuidString.data(using: .utf8) ?? Data())
@@ -504,17 +573,31 @@ final class SOSViewModel {
             payload: payload
         )
 
-        if let data = try? PacketSerializer.encode(packet) {
+        do {
+            let data = try PacketSerializer.encode(packet)
             NotificationCenter.default.post(
                 name: .shouldBroadcastPacket,
                 object: nil,
                 userInfo: ["data": data, "priority": "sos"]
             )
+        } catch {
+            logger.error("Failed to encode SOS accept packet: \(error.localizedDescription)")
+            return
         }
     }
 
     private func broadcastSOSResolve(alertID: UUID) async {
-        guard let identity = try? KeyManager.shared.loadIdentity() else { return }
+        let identity: Identity
+        do {
+            guard let loaded = try KeyManager.shared.loadIdentity() else {
+                logger.error("No identity found for SOS broadcast")
+                return
+            }
+            identity = loaded
+        } catch {
+            logger.error("Failed to load identity for SOS resolve broadcast: \(error.localizedDescription)")
+            return
+        }
 
         var payload = Data()
         payload.append(alertID.uuidString.data(using: .utf8) ?? Data())
@@ -528,12 +611,16 @@ final class SOSViewModel {
             payload: payload
         )
 
-        if let data = try? PacketSerializer.encode(packet) {
+        do {
+            let data = try PacketSerializer.encode(packet)
             NotificationCenter.default.post(
                 name: .shouldBroadcastPacket,
                 object: nil,
                 userInfo: ["data": data, "priority": "sos"]
             )
+        } catch {
+            logger.error("Failed to encode SOS resolve packet: \(error.localizedDescription)")
+            return
         }
     }
 
@@ -616,7 +703,11 @@ final class SOSViewModel {
             let context = ModelContext(modelContainer)
             if let alert = activeAlert {
                 alert.status = .accepted
-                try? context.save()
+                do {
+                    try context.save()
+                } catch {
+                    logger.error("Failed to save accepted SOS alert status: \(error.localizedDescription)")
+                }
             }
             flowState = .responderAccepted(
                 alertID: alertID,

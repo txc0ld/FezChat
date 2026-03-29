@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import FestiChatProtocol
 import FestiChatMesh
+import os.log
 
 // MARK: - Chat View Model
 
@@ -54,6 +55,7 @@ final class ChatViewModel {
     private let messageService: MessageService
     private let audioService: AudioService
     private let imageService: ImageService
+    private let logger = Logger(subsystem: "com.festichat", category: "ChatViewModel")
 
     /// Set of channel IDs the user has read up to (last read message timestamp).
     private var lastReadTimestamps: [UUID: Date] = [:]
@@ -177,7 +179,12 @@ final class ChatViewModel {
     func toggleMute(for channel: Channel) {
         let context = ModelContext(modelContainer)
         channel.muteStatus = channel.isMuted ? .unmuted : .mutedForever
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save mute status: \(error.localizedDescription)")
+            errorMessage = "Failed to save mute status: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Active Conversation
@@ -295,7 +302,11 @@ final class ChatViewModel {
     func sendTypingIndicator() {
         guard let channel = activeChannel else { return }
         Task {
-            try? await messageService.sendTypingIndicator(to: channel)
+            do {
+                try await messageService.sendTypingIndicator(to: channel)
+            } catch {
+                logger.warning("Failed to send typing indicator: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -347,17 +358,30 @@ final class ChatViewModel {
         let descriptor = FetchDescriptor<Message>(
             predicate: #Predicate { $0.channel?.id.uuidString == channelID && $0.statusRaw == "delivered" }
         )
-        if let unread = try? context.fetch(descriptor) {
+        do {
+            let unread = try context.fetch(descriptor)
             for message in unread {
                 if let sender = message.sender {
                     let peerID = PeerID(noisePublicKey: sender.noisePublicKey)
                     Task {
-                        try? await messageService.sendReadReceipt(for: message.id, to: peerID)
+                        do {
+                            try await messageService.sendReadReceipt(for: message.id, to: peerID)
+                        } catch {
+                            logger.warning("Failed to send read receipt: \(error.localizedDescription)")
+                        }
                     }
                 }
                 message.status = .read
             }
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                logger.error("Failed to save read status: \(error.localizedDescription)")
+                errorMessage = "Failed to save read status: \(error.localizedDescription)"
+            }
+        } catch {
+            logger.error("Failed to fetch unread messages: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch unread messages: \(error.localizedDescription)"
         }
     }
 

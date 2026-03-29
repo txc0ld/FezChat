@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import os.log
 import CoreLocation
 import MapKit
 import FestiChatProtocol
@@ -124,6 +125,7 @@ final class LocationViewModel {
 
     // MARK: - Dependencies
 
+    private let logger = Logger(subsystem: "com.festichat", category: "LocationViewModel")
     private let modelContainer: ModelContainer
     private let locationService: LocationService
     nonisolated(unsafe) private var refreshTimer: Timer?
@@ -200,10 +202,14 @@ final class LocationViewModel {
         let idStr = friendID.uuidString
         let descriptor = FetchDescriptor<Friend>(predicate: #Predicate { $0.id.uuidString == idStr })
 
-        guard let friend = try? context.fetch(descriptor).first else { return }
-
-        friend.locationSharingEnabled.toggle()
-        try? context.save()
+        do {
+            guard let friend = try context.fetch(descriptor).first else { return }
+            friend.locationSharingEnabled.toggle()
+            try context.save()
+        } catch {
+            logger.error("Failed to toggle location sharing for friend: \(error.localizedDescription)")
+            errorMessage = "Failed to update sharing: \(error.localizedDescription)"
+        }
     }
 
     /// Update location precision for a friend.
@@ -212,10 +218,14 @@ final class LocationViewModel {
         let idStr = friendID.uuidString
         let descriptor = FetchDescriptor<Friend>(predicate: #Predicate { $0.id.uuidString == idStr })
 
-        guard let friend = try? context.fetch(descriptor).first else { return }
-
-        friend.locationPrecision = precision
-        try? context.save()
+        do {
+            guard let friend = try context.fetch(descriptor).first else { return }
+            friend.locationPrecision = precision
+            try context.save()
+        } catch {
+            logger.error("Failed to set friend precision: \(error.localizedDescription)")
+            errorMessage = "Failed to update precision: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - "I'm Here" Beacon
@@ -248,7 +258,12 @@ final class LocationViewModel {
             expiresAt: beacon.expiresAt
         )
         context.insert(meetingPoint)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save beacon meeting point: \(error.localizedDescription)")
+            errorMessage = "Failed to save beacon: \(error.localizedDescription)"
+        }
 
         // Broadcast beacon via mesh (handled by transport layer)
         NotificationCenter.default.post(
@@ -318,7 +333,14 @@ final class LocationViewModel {
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
 
-        guard let locations = try? context.fetch(descriptor) else { return }
+        let locations: [FriendLocation]
+        do {
+            locations = try context.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch friend locations: \(error.localizedDescription)")
+            errorMessage = "Failed to load friend locations: \(error.localizedDescription)"
+            return
+        }
 
         // Group by friend, take most recent
         var latestByFriend: [UUID: FriendLocation] = [:]
@@ -353,7 +375,8 @@ final class LocationViewModel {
 
         // Refresh meeting points
         let mpDescriptor = FetchDescriptor<MeetingPoint>()
-        if let mps = try? context.fetch(mpDescriptor) {
+        do {
+            let mps = try context.fetch(mpDescriptor)
             meetingPoints = mps.filter { !$0.isExpired }.map { mp in
                 MeetingPointAnnotation(
                     id: mp.id,
@@ -366,6 +389,8 @@ final class LocationViewModel {
                     expiresAt: mp.expiresAt
                 )
             }
+        } catch {
+            logger.error("Failed to fetch meeting points: \(error.localizedDescription)")
         }
 
         // Update navigation if active

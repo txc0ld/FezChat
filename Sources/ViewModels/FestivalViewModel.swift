@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import CoreLocation
+import os.log
 
 // MARK: - Festival Discovery State
 
@@ -111,6 +112,7 @@ final class FestivalViewModel {
 
     // MARK: - Dependencies
 
+    private let logger = Logger(subsystem: "com.festichat", category: "FestivalViewModel")
     private let modelContainer: ModelContainer
     private let locationService: LocationService
     private let notificationService: NotificationService
@@ -228,7 +230,14 @@ final class FestivalViewModel {
         let context = ModelContext(modelContainer)
         let descriptor = FetchDescriptor<Festival>()
 
-        guard let festivals = try? context.fetch(descriptor) else { return }
+        let festivals: [Festival]
+        do {
+            festivals = try context.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch festivals for geofencing: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch festivals for geofencing: \(error.localizedDescription)"
+            return
+        }
 
         for festival in festivals where festival.isActive || festival.isUpcoming {
             do {
@@ -252,16 +261,34 @@ final class FestivalViewModel {
         let idStr = festivalID.uuidString
         let descriptor = FetchDescriptor<Festival>(predicate: #Predicate { $0.id.uuidString == idStr })
 
-        guard let festival = try? context.fetch(descriptor).first else { return }
+        let festival: Festival
+        do {
+            guard let fetched = try context.fetch(descriptor).first else { return }
+            festival = fetched
+        } catch {
+            logger.error("Failed to fetch festival for entry: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch festival for entry: \(error.localizedDescription)"
+            return
+        }
 
         activeFestival = festival
         isInsideFestival = true
 
         // Update preferences
         let prefsDescriptor = FetchDescriptor<UserPreferences>()
-        if let prefs = try? context.fetch(prefsDescriptor).first {
-            prefs.lastFestivalID = festivalID
-            try? context.save()
+        do {
+            if let prefs = try context.fetch(prefsDescriptor).first {
+                prefs.lastFestivalID = festivalID
+                do {
+                    try context.save()
+                } catch {
+                    logger.error("Failed to save user preferences: \(error.localizedDescription)")
+                    errorMessage = "Failed to save user preferences: \(error.localizedDescription)"
+                }
+            }
+        } catch {
+            logger.error("Failed to fetch user preferences: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch user preferences: \(error.localizedDescription)"
         }
 
         await loadStages(for: festival)
@@ -330,7 +357,13 @@ final class FestivalViewModel {
         // Load saved set times
         let context = ModelContext(modelContainer)
         let descriptor = FetchDescriptor<SetTime>(predicate: #Predicate { $0.savedByUser == true })
-        savedSetTimes = (try? context.fetch(descriptor)) ?? []
+        do {
+            savedSetTimes = try context.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch saved set times: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch saved set times: \(error.localizedDescription)"
+            savedSetTimes = []
+        }
     }
 
     /// Save/unsave a set time.
@@ -339,7 +372,15 @@ final class FestivalViewModel {
         let idStr = setTimeID.uuidString
         let descriptor = FetchDescriptor<SetTime>(predicate: #Predicate { $0.id.uuidString == idStr })
 
-        guard let setTime = try? context.fetch(descriptor).first else { return }
+        let setTime: SetTime
+        do {
+            guard let fetched = try context.fetch(descriptor).first else { return }
+            setTime = fetched
+        } catch {
+            logger.error("Failed to fetch set time for toggle save: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch set time for toggle save: \(error.localizedDescription)"
+            return
+        }
 
         setTime.savedByUser.toggle()
 
@@ -349,7 +390,12 @@ final class FestivalViewModel {
             savedSetTimes.removeAll { $0.id == setTimeID }
         }
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save set time toggle: \(error.localizedDescription)")
+            errorMessage = "Failed to save set time toggle: \(error.localizedDescription)"
+        }
 
         if let active = activeFestival {
             await loadSchedule(for: active)
@@ -362,10 +408,23 @@ final class FestivalViewModel {
         let idStr = setTimeID.uuidString
         let descriptor = FetchDescriptor<SetTime>(predicate: #Predicate { $0.id.uuidString == idStr })
 
-        guard let setTime = try? context.fetch(descriptor).first else { return }
+        let setTime: SetTime
+        do {
+            guard let fetched = try context.fetch(descriptor).first else { return }
+            setTime = fetched
+        } catch {
+            logger.error("Failed to fetch set time for toggle reminder: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch set time for toggle reminder: \(error.localizedDescription)"
+            return
+        }
 
         setTime.reminderSet.toggle()
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save reminder toggle: \(error.localizedDescription)")
+            errorMessage = "Failed to save reminder toggle: \(error.localizedDescription)"
+        }
 
         if setTime.reminderSet {
             // Schedule notification
@@ -397,7 +456,14 @@ final class FestivalViewModel {
             sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
         )
 
-        guard let pulses = try? context.fetch(descriptor) else { return }
+        let pulses: [CrowdPulse]
+        do {
+            pulses = try context.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch crowd pulse data: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch crowd pulse data: \(error.localizedDescription)"
+            return
+        }
 
         crowdPulseData = pulses.filter { !$0.isStale }.compactMap { pulse in
             guard let coords = Geohash.decode(pulse.geohash) else { return nil }
@@ -473,7 +539,15 @@ final class FestivalViewModel {
             // Check if festival already exists
             let idStr = uuid.uuidString
             let descriptor = FetchDescriptor<Festival>(predicate: #Predicate { $0.id.uuidString == idStr })
-            if let existing = try? context.fetch(descriptor).first {
+            let existing: Festival?
+            do {
+                existing = try context.fetch(descriptor).first
+            } catch {
+                logger.error("Failed to fetch existing festival during store: \(error.localizedDescription)")
+                continue
+            }
+
+            if let existing {
                 // Update
                 existing.name = mf.name
                 existing.coordinatesLatitude = mf.latitude
@@ -530,7 +604,12 @@ final class FestivalViewModel {
             }
         }
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save stored festivals: \(error.localizedDescription)")
+            errorMessage = "Failed to save stored festivals: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Private: Geofence Observer

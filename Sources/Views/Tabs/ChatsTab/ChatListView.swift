@@ -241,7 +241,7 @@ struct ChatListView: View {
                 isMuted: channel.isMuted,
                 isFromMe: lastMessage?.sender == nil,
                 deliveryStatus: lastMessage.map { Self.mapDeliveryStatus($0.status) } ?? .sent,
-                ringStyle: channel.isGroup ? .group : .standard,
+                ringStyle: channel.isGroup ? .none : .friend,
                 messageType: lastMessage.map { $0.type } ?? .text
             )
         }

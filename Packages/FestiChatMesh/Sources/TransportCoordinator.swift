@@ -38,7 +38,7 @@ struct PendingMessage: Sendable {
 /// 3. Queue locally (if neither available, deliver when either becomes available)
 ///
 /// Publishes transport state via Combine for the UI layer.
-public final class TransportCoordinator: @unchecked Sendable {
+public final class TransportCoordinator: @unchecked Sendable, Transport {
 
     // MARK: - Constants
 
@@ -73,6 +73,17 @@ public final class TransportCoordinator: @unchecked Sendable {
     /// Current connectivity state.
     public var connectivity: ConnectivityState {
         connectivityPublisher.value
+    }
+
+    /// Derived transport state based on whether any transport is running.
+    public var state: TransportState {
+        if bleTransport.state == .running || webSocketTransport.state == .running {
+            return .running
+        }
+        if bleTransport.state == .starting || webSocketTransport.state == .starting {
+            return .starting
+        }
+        return .idle
     }
 
     // MARK: - Local queue

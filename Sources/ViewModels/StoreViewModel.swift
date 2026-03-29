@@ -1,6 +1,7 @@
 import Foundation
 import StoreKit
 import SwiftData
+import os.log
 
 // MARK: - Store Error
 
@@ -86,6 +87,7 @@ final class StoreViewModel {
 
     // MARK: - Dependencies
 
+    private let logger = Logger(subsystem: "com.festichat", category: "StoreViewModel")
     private let modelContainer: ModelContainer
     nonisolated(unsafe) private var transactionListener: Task<Void, Error>?
     private var loadedProducts: [Product] = []
@@ -226,10 +228,13 @@ final class StoreViewModel {
 
             // Check all current entitlements
             for await result in Transaction.currentEntitlements {
-                if let transaction = try? checkVerified(result) {
+                do {
+                    let transaction = try checkVerified(result)
                     if let packInfo = Self.productIDs.first(where: { $0.0 == transaction.productID }) {
                         await creditPurchase(packType: packInfo.1, transaction: transaction)
                     }
+                } catch {
+                    logger.error("Entitlement verification failed during restore: \(error.localizedDescription)")
                 }
             }
 
@@ -300,12 +305,17 @@ final class StoreViewModel {
         transactionListener = Task.detached { [weak self] in
             for await result in Transaction.updates {
                 guard let self else { return }
-                if let transaction = try? await self.checkVerified(result) {
+                do {
+                    let transaction = try await self.checkVerified(result)
                     if let packInfo = Self.productIDs.first(where: { $0.0 == transaction.productID }) {
                         await self.creditPurchase(packType: packInfo.1, transaction: transaction)
                     }
                     await transaction.finish()
                     await self.refreshBalance()
+                } catch {
+                    await MainActor.run {
+                        self.logger.error("Transaction verification failed: \(error.localizedDescription)")
+                    }
                 }
             }
         }
@@ -336,10 +346,19 @@ final class StoreViewModel {
             "purchaseDate": ISO8601DateFormatter().string(from: transaction.purchaseDate),
             "environment": transaction.environment.rawValue
         ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            logger.error("Failed to serialize receipt body: \(error.localizedDescription)")
+            return
+        }
 
         // Send (best-effort; purchase is credited locally regardless)
-        _ = try? await URLSession.shared.data(for: request)
+        do {
+            _ = try await URLSession.shared.data(for: request)
+        } catch {
+            logger.error("Failed to verify receipt with server: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private: Credit Purchase
@@ -351,8 +370,15 @@ final class StoreViewModel {
         // Check for duplicate transaction
         let txID = String(transaction.id)
         let descriptor = FetchDescriptor<MessagePack>(predicate: #Predicate { $0.transactionID == txID })
-        if let existing = try? context.fetch(descriptor), !existing.isEmpty {
-            return // Already credited
+        do {
+            let existing = try context.fetch(descriptor)
+            if !existing.isEmpty {
+                return // Already credited
+            }
+        } catch {
+            logger.error("Failed to check for duplicate transaction: \(error.localizedDescription)")
+            errorMessage = "Failed to verify transaction: \(error.localizedDescription)"
+            return
         }
 
         // Handle subscription vs consumable
@@ -371,7 +397,12 @@ final class StoreViewModel {
         )
 
         context.insert(pack)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save purchased message pack: \(error.localizedDescription)")
+            errorMessage = "Failed to credit purchase: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Utility

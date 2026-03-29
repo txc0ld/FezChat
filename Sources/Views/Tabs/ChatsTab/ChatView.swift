@@ -225,7 +225,7 @@ struct ChatView: View {
                 senderName: message.sender?.resolvedDisplayName ?? "Unknown",
                 senderAvatarData: message.sender?.avatarThumbnail,
                 isFromMe: message.sender == nil,
-                showSenderName: conversation.ringStyle == .group,
+                showSenderName: conversation.ringStyle == .none,
                 text: String(data: message.encryptedPayload, encoding: .utf8) ?? "",
                 contentType: message.type,
                 deliveryStatus: Self.mapDeliveryStatus(message.status),

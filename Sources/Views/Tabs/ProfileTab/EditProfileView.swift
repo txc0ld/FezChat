@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import os.log
 
 // MARK: - EditProfileView
 
@@ -114,10 +115,15 @@ struct EditProfileView: View {
         }
         .onChange(of: selectedPhoto) { _, newItem in
             Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let uiImage = UIImage(data: data) {
-                    avatarImage = Image(uiImage: uiImage)
-                    showAvatarCrop = true
+                do {
+                    if let data = try await newItem?.loadTransferable(type: Data.self),
+                       let uiImage = UIImage(data: data) {
+                        avatarImage = Image(uiImage: uiImage)
+                        showAvatarCrop = true
+                    }
+                } catch {
+                    Logger(subsystem: Bundle.main.bundleIdentifier ?? "FestiChat", category: "EditProfileView")
+                        .warning("Failed to load photo: \(error.localizedDescription)")
                 }
             }
         }
