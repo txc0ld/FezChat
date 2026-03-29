@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import os.log
 #if os(iOS)
 import UIKit
 #endif
@@ -43,6 +44,10 @@ protocol AudioServiceDelegate: AnyObject, Sendable {
 /// - Audio level metering for UI visualization
 /// - Audio session management for BLE coexistence
 final class AudioService: NSObject, @unchecked Sendable {
+
+    // MARK: - Logging
+
+    private let logger = Logger(subsystem: "com.festichat", category: "AudioService")
 
     // MARK: - Constants
 
@@ -131,7 +136,11 @@ final class AudioService: NSObject, @unchecked Sendable {
 
     /// Deactivate the audio session when done.
     func deactivateAudioSession() {
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            logger.warning("Failed to deactivate audio session: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Microphone Permission
@@ -214,12 +223,23 @@ final class AudioService: NSObject, @unchecked Sendable {
         recordingDuration = 0
 
         // Read the recorded file
-        guard let url = recordingURL, let data = try? Data(contentsOf: url) else {
+        guard let url = recordingURL else {
+            throw AudioServiceError.recordingFailed("Failed to read recorded audio file")
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            logger.warning("Failed to read recorded audio file: \(error.localizedDescription)")
             throw AudioServiceError.recordingFailed("Failed to read recorded audio file")
         }
 
         // Clean up temp file
-        try? FileManager.default.removeItem(at: url)
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            logger.warning("Failed to remove temporary recording file: \(error.localizedDescription)")
+        }
         recordingURL = nil
 
         // Encode to Opus-like format
@@ -245,7 +265,11 @@ final class AudioService: NSObject, @unchecked Sendable {
         audioRecorder = nil
 
         if let url = recordingURL {
-            try? FileManager.default.removeItem(at: url)
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                logger.warning("Failed to remove temporary recording file on cancel: \(error.localizedDescription)")
+            }
             recordingURL = nil
         }
 
@@ -338,7 +362,11 @@ final class AudioService: NSObject, @unchecked Sendable {
         player.prepareToPlay()
 
         guard player.play() else {
-            try? FileManager.default.removeItem(at: url)
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                logger.warning("Failed to remove temporary playback file: \(error.localizedDescription)")
+            }
             throw AudioServiceError.playbackFailed("AVAudioPlayer failed to start")
         }
 
@@ -450,9 +478,17 @@ final class AudioService: NSObject, @unchecked Sendable {
         // Check max duration
         if recordingDuration >= maxDuration {
             if isPTTMode {
-                _ = try? stopPTTRecording()
+                do {
+                    _ = try stopPTTRecording()
+                } catch {
+                    logger.warning("Failed to auto-stop PTT recording at max duration: \(error.localizedDescription)")
+                }
             } else {
-                _ = try? stopRecording()
+                do {
+                    _ = try stopRecording()
+                } catch {
+                    logger.warning("Failed to auto-stop recording at max duration: \(error.localizedDescription)")
+                }
             }
         }
 
@@ -471,7 +507,14 @@ final class AudioService: NSObject, @unchecked Sendable {
         guard isRecording, isPTTMode else { return }
 
         // Read current recording data and emit the latest chunk
-        guard let url = recordingURL, let data = try? Data(contentsOf: url) else { return }
+        guard let url = recordingURL else { return }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            logger.warning("Failed to read PTT recording data: \(error.localizedDescription)")
+            return
+        }
 
         let previousLength = accumulatedPCMData.count
         guard data.count > previousLength else { return }

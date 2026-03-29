@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import os.log
 import FestiChatProtocol
 import FestiChatMesh
 
@@ -42,6 +43,10 @@ protocol MessageRetryServiceDelegate: AnyObject, Sendable {
 /// - Queue is capped at 500 entries; oldest expired entries are evicted first
 /// - Marks expired messages as failed and updates the corresponding Message status
 final class MessageRetryService: @unchecked Sendable {
+
+    // MARK: - Logging
+
+    private let logger = Logger(subsystem: "com.festichat", category: "MessageRetryService")
 
     // MARK: - Dependencies
 
@@ -257,7 +262,14 @@ final class MessageRetryService: @unchecked Sendable {
             let data = message.encryptedPayload
 
             // Reconstruct and resend the packet
-            guard let identity = try? KeyManager.shared.loadIdentity() else { return false }
+            let identity: Identity
+            do {
+                guard let loaded = try KeyManager.shared.loadIdentity() else { return false }
+                identity = loaded
+            } catch {
+                logger.error("Failed to load identity for retry: \(error.localizedDescription)")
+                return false
+            }
 
             let senderID = identity.peerID
 

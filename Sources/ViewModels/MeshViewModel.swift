@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import os.log
 import FestiChatProtocol
 import FestiChatMesh
 import FestiChatCrypto
@@ -124,6 +125,7 @@ final class MeshViewModel {
 
     // MARK: - Dependencies
 
+    private let logger = Logger(subsystem: "com.festichat", category: "MeshViewModel")
     private let modelContainer: ModelContainer
     private var refreshTimer: Timer?
     private var peerObservation: NSObjectProtocol?
@@ -247,7 +249,14 @@ final class MeshViewModel {
 
     private func refreshNearbyFriends(peers: [MeshPeer], context: ModelContext) async {
         let friendDescriptor = FetchDescriptor<Friend>(predicate: #Predicate { $0.statusRaw == "accepted" })
-        guard let friends = try? context.fetch(friendDescriptor) else { return }
+        let friends: [Friend]
+        do {
+            friends = try context.fetch(friendDescriptor)
+        } catch {
+            logger.error("Failed to fetch friends for nearby refresh: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch friends: \(error.localizedDescription)"
+            return
+        }
 
         var nearby: [NearbyFriend] = []
 
@@ -276,7 +285,14 @@ final class MeshViewModel {
         let descriptor = FetchDescriptor<Channel>(predicate: #Predicate {
             $0.typeRaw == "locationChannel" || $0.typeRaw == "stageChannel"
         })
-        guard let channels = try? context.fetch(descriptor) else { return }
+        let channels: [Channel]
+        do {
+            channels = try context.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch location channels: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch channels: \(error.localizedDescription)"
+            return
+        }
 
         locationChannels = channels.map { channel in
             LocationChannelInfo(
@@ -331,10 +347,15 @@ final class MeshViewModel {
         let context = ModelContext(modelContainer)
         let idStr = channelInfo.id.uuidString
         let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id.uuidString == idStr })
-        if let channel = try? context.fetch(descriptor).first {
-            channel.isAutoJoined = true
-            try? context.save()
-            logEvent("Joined channel: \(channelInfo.name)")
+        do {
+            if let channel = try context.fetch(descriptor).first {
+                channel.isAutoJoined = true
+                try context.save()
+                logEvent("Joined channel: \(channelInfo.name)")
+            }
+        } catch {
+            logger.error("Failed to join location channel: \(error.localizedDescription)")
+            errorMessage = "Failed to join channel: \(error.localizedDescription)"
         }
         await refreshMeshState()
     }
@@ -344,10 +365,15 @@ final class MeshViewModel {
         let context = ModelContext(modelContainer)
         let idStr = channelInfo.id.uuidString
         let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id.uuidString == idStr })
-        if let channel = try? context.fetch(descriptor).first {
-            channel.isAutoJoined = false
-            try? context.save()
-            logEvent("Left channel: \(channelInfo.name)")
+        do {
+            if let channel = try context.fetch(descriptor).first {
+                channel.isAutoJoined = false
+                try context.save()
+                logEvent("Left channel: \(channelInfo.name)")
+            }
+        } catch {
+            logger.error("Failed to leave location channel: \(error.localizedDescription)")
+            errorMessage = "Failed to leave channel: \(error.localizedDescription)"
         }
         await refreshMeshState()
     }

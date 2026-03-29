@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import os.log
 @preconcurrency import Sodium
 import FestiChatProtocol
 
@@ -65,6 +66,10 @@ public enum KeyManagerError: Error, Sendable {
 /// Keys are stored in the iOS Keychain with `kSecAttrAccessibleAfterFirstUnlock`
 /// so they survive device locks but are protected at rest.
 public final class KeyManager: @unchecked Sendable {
+
+    // MARK: - Logging
+
+    private let logger = Logger(subsystem: "com.festichat", category: "KeyManager")
 
     // MARK: - Keychain service tags
 
@@ -266,7 +271,11 @@ public final class KeyManager: @unchecked Sendable {
         )
 
         // Replace existing identity
-        try? deleteIdentity()
+        do {
+            try deleteIdentity()
+        } catch {
+            logger.error("Failed to delete existing identity before recovery import: \(error.localizedDescription)")
+        }
         try storeIdentity(identity)
 
         return identity

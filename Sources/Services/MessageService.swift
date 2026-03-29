@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import os.log
 import FestiChatProtocol
 import FestiChatMesh
 import FestiChatCrypto
@@ -43,6 +44,10 @@ protocol MessageServiceDelegate: AnyObject, Sendable {
 /// - SwiftData for persistence
 /// - MessagePack for balance tracking
 final class MessageService: @unchecked Sendable {
+
+    // MARK: - Logging
+
+    private let logger = Logger(subsystem: "com.festichat", category: "MessageService")
 
     // MARK: - Dependencies
 
@@ -498,7 +503,12 @@ final class MessageService: @unchecked Sendable {
         let senderUser: User? = peers.first.flatMap { peer in
             guard let username = peer.username else { return nil }
             let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
-            return try? context.fetch(userDesc).first
+            do {
+                return try context.fetch(userDesc).first
+            } catch {
+                logger.error("Failed to fetch user for peer username \(username): \(error.localizedDescription)")
+                return nil
+            }
         }
 
         // Resolve channel
@@ -532,8 +542,12 @@ final class MessageService: @unchecked Sendable {
         try context.save()
 
         // Send delivery ack
-        Task {
-            try? await sendDeliveryAck(for: messageID, to: senderPeerID)
+        Task { [logger] in
+            do {
+                try await sendDeliveryAck(for: messageID, to: senderPeerID)
+            } catch {
+                logger.warning("Failed to send delivery ack for message \(messageID): \(error.localizedDescription)")
+            }
         }
 
         // Notify delegate

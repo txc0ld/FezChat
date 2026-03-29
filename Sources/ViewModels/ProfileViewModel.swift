@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import SwiftData
+import os.log
 import FestiChatProtocol
 import FestiChatCrypto
 
@@ -66,6 +67,7 @@ final class ProfileViewModel {
 
     // MARK: - Dependencies
 
+    private let logger = Logger(subsystem: "com.festichat", category: "ProfileViewModel")
     private let modelContainer: ModelContainer
     private let keyManager: KeyManager
     private let imageService: ImageService
@@ -311,14 +313,24 @@ final class ProfileViewModel {
         let context = ModelContext(modelContainer)
         friend.locationSharingEnabled = enabled
         friend.locationPrecision = precision
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save location sharing settings: \(error.localizedDescription)")
+            errorMessage = "Failed to update location sharing: \(error.localizedDescription)"
+        }
     }
 
     /// Set a nickname for a friend.
     func setNickname(for friend: Friend, nickname: String?) {
         let context = ModelContext(modelContainer)
         friend.nickname = nickname?.isEmpty == true ? nil : nickname
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save nickname: \(error.localizedDescription)")
+            errorMessage = "Failed to update nickname: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Recovery Kit
@@ -365,7 +377,12 @@ final class ProfileViewModel {
         if let crowdPulse = crowdPulseVisible { prefs.crowdPulseVisible = crowdPulse }
         if let style = mapStyle { prefs.friendFinderMapStyle = style }
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save preferences: \(error.localizedDescription)")
+            errorMessage = "Failed to save preferences: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Message Balance
@@ -373,10 +390,13 @@ final class ProfileViewModel {
     private func refreshMessageBalance() async {
         let context = ModelContext(modelContainer)
         let descriptor = FetchDescriptor<MessagePack>()
-        guard let packs = try? context.fetch(descriptor) else { return }
-
-        isUnlimited = packs.contains { $0.isUnlimited }
-        messageBalance = packs.reduce(0) { $0 + $1.messagesRemaining }
+        do {
+            let packs = try context.fetch(descriptor)
+            isUnlimited = packs.contains { $0.isUnlimited }
+            messageBalance = packs.reduce(0) { $0 + $1.messagesRemaining }
+        } catch {
+            logger.error("Failed to fetch message packs: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Utility

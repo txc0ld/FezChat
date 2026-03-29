@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import SwiftData
 import CryptoKit
+import os.log
 
 // MARK: - Image Service Error
 
@@ -78,6 +79,10 @@ private struct CacheEntry {
 /// - Thread-safe concurrent access
 final class ImageService: @unchecked Sendable {
 
+    // MARK: - Logging
+
+    private let logger = Logger(subsystem: "com.festichat", category: "ImageService")
+
     // MARK: - Constants
 
     /// Maximum image size for mesh transport (500KB).
@@ -117,7 +122,11 @@ final class ImageService: @unchecked Sendable {
         cacheDirectory = paths[0].appendingPathComponent("com.festichat.images", isDirectory: true)
 
         // Create cache directory if needed
-        try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        } catch {
+            logger.warning("Failed to create image cache directory: \(error.localizedDescription)")
+        }
 
         // Load existing cache metadata
         loadCacheMetadata()
@@ -279,8 +288,13 @@ final class ImageService: @unchecked Sendable {
 
         // Write to disk asynchronously
         let fileURL = cacheDirectory.appendingPathComponent(key.sha256Hash)
+        let logger = self.logger
         DispatchQueue.global(qos: .utility).async {
-            try? data.write(to: fileURL)
+            do {
+                try data.write(to: fileURL)
+            } catch {
+                logger.warning("Failed to write image cache to disk: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -304,12 +318,15 @@ final class ImageService: @unchecked Sendable {
 
         // Check disk cache
         let fileURL = cacheDirectory.appendingPathComponent(key.sha256Hash)
-        if let data = try? Data(contentsOf: fileURL) {
+        do {
+            let data = try Data(contentsOf: fileURL)
             // Promote to memory cache
             let entry = CacheEntry(data: data, size: data.count, accessTime: Date(), key: key)
             cache[key] = entry
             cacheUsage += data.count
             return data
+        } catch {
+            logger.warning("Failed to read image cache from disk for key \(key): \(error.localizedDescription)")
         }
 
         return nil
@@ -325,7 +342,11 @@ final class ImageService: @unchecked Sendable {
         }
 
         let fileURL = cacheDirectory.appendingPathComponent(key.sha256Hash)
-        try? fileManager.removeItem(at: fileURL)
+        do {
+            try fileManager.removeItem(at: fileURL)
+        } catch {
+            logger.warning("Failed to remove cached image file for key \(key): \(error.localizedDescription)")
+        }
     }
 
     /// Clear the entire cache.
@@ -336,8 +357,16 @@ final class ImageService: @unchecked Sendable {
         cache.removeAll()
         cacheUsage = 0
 
-        try? fileManager.removeItem(at: cacheDirectory)
-        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        do {
+            try fileManager.removeItem(at: cacheDirectory)
+        } catch {
+            logger.warning("Failed to remove image cache directory: \(error.localizedDescription)")
+        }
+        do {
+            try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        } catch {
+            logger.warning("Failed to recreate image cache directory: \(error.localizedDescription)")
+        }
     }
 
     /// Get the number of cached entries.
@@ -358,12 +387,17 @@ final class ImageService: @unchecked Sendable {
             guard let ciImage = CIImage(image: image) else { return nil }
             let context = CIContext()
             let colorSpace = CGColorSpaceCreateDeviceRGB()
-            return try? context.heifRepresentation(
-                of: ciImage,
-                format: .RGBA8,
-                colorSpace: colorSpace,
-                options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): quality]
-            )
+            do {
+                return try context.heifRepresentation(
+                    of: ciImage,
+                    format: .RGBA8,
+                    colorSpace: colorSpace,
+                    options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): quality]
+                )
+            } catch {
+                logger.warning("Failed to create HEIF representation: \(error.localizedDescription)")
+                return nil
+            }
         }
     }
 
@@ -401,21 +435,33 @@ final class ImageService: @unchecked Sendable {
         cacheUsage -= oldest.size
 
         let fileURL = cacheDirectory.appendingPathComponent(oldest.key.sha256Hash)
-        try? fileManager.removeItem(at: fileURL)
+        do {
+            try fileManager.removeItem(at: fileURL)
+        } catch {
+            logger.warning("Failed to remove evicted cache file: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private: Cache Metadata
 
     private func loadCacheMetadata() {
-        guard let contents = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]) else {
+        let contents: [URL]
+        do {
+            contents = try fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])
+        } catch {
+            logger.warning("Failed to list image cache directory: \(error.localizedDescription)")
             return
         }
 
         var totalSize = 0
         for url in contents {
-            if let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
-               let size = values.fileSize {
-                totalSize += size
+            do {
+                let values = try url.resourceValues(forKeys: [.fileSizeKey])
+                if let size = values.fileSize {
+                    totalSize += size
+                }
+            } catch {
+                logger.warning("Failed to read resource values for cached file: \(error.localizedDescription)")
             }
         }
         cacheUsage = totalSize
