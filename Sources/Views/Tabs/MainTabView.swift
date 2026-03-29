@@ -41,13 +41,13 @@ struct MainTabView: View {
             ChatListView()
                 .transition(.opacity)
         case .nearby:
-            nearbyPlaceholder
+            NearbyView()
                 .transition(.opacity)
         case .festival:
-            festivalPlaceholder
+            FestivalView()
                 .transition(.opacity)
         case .profile:
-            profilePlaceholder
+            ProfileView()
                 .transition(.opacity)
         }
     }
