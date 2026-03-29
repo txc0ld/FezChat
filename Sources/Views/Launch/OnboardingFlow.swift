@@ -4,15 +4,13 @@ import SwiftUI
 
 /// Three-step onboarding using TabView with .page style.
 /// Steps: Welcome, Create Profile, Permissions.
-/// All steps are required (no skip).
+/// All steps are required (no skip) unless bypass code is entered.
 struct OnboardingFlow: View {
 
     /// Called when onboarding is complete.
     var onComplete: () -> Void = {}
 
     @State private var currentStep: Int = 0
-    @State private var showBypass = false
-    @State private var bypassCode = ""
     @Environment(\.theme) private var theme
     @Environment(\.colorScheme) private var colorScheme
 
@@ -27,9 +25,10 @@ struct OnboardingFlow: View {
             VStack(spacing: 0) {
                 // Page content
                 TabView(selection: $currentStep) {
-                    WelcomeStep {
-                        advanceToStep(1)
-                    }
+                    WelcomeStep(
+                        onContinue: { advanceToStep(1) },
+                        onBypass: { completeOnboarding() }
+                    )
                     .tag(0)
 
                     CreateProfileStep {
@@ -37,29 +36,19 @@ struct OnboardingFlow: View {
                     }
                     .tag(1)
 
-                    PermissionsStep {
-                        completeOnboarding()
-                    }
+                    PermissionsStep(
+                        onComplete: { completeOnboarding() },
+                        isActive: currentStep == 2
+                    )
                     .tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(SpringConstants.accessiblePageEntrance, value: currentStep)
 
-                // Custom page indicator — long-press to reveal bypass entry
+                // Custom page indicator
                 pageIndicator
-                    .onLongPressGesture(minimumDuration: 1.0) {
-                        showBypass = true
-                    }
                     .padding(.bottom, BlipSpacing.md)
             }
-        }
-        .alert("Dev Bypass", isPresented: $showBypass) {
-            TextField("Code", text: $bypassCode)
-                .keyboardType(.numberPad)
-            Button("Submit") { attemptBypass() }
-            Button("Cancel", role: .cancel) { bypassCode = "" }
-        } message: {
-            Text("Enter bypass code to skip onboarding")
         }
     }
 
@@ -95,14 +84,6 @@ struct OnboardingFlow: View {
 
     private func completeOnboarding() {
         onComplete()
-    }
-
-    private func attemptBypass() {
-        if bypassCode == "000000" {
-            showBypass = false
-            bypassCode = ""
-            onComplete()
-        }
     }
 }
 

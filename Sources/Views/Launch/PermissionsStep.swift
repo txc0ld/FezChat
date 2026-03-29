@@ -21,20 +21,21 @@ private final class BLEPermissionObserver: NSObject, CBCentralManagerDelegate {
 // MARK: - PermissionsStep
 
 /// Onboarding step 3: Bluetooth permission request.
-/// "Blip needs Bluetooth to connect with people nearby."
-/// One-tap grant with friendly illustration.
+/// BLE permission is ONLY requested when the user taps "Enable Bluetooth".
+/// No auto-advance — user must tap "Get started" to complete onboarding.
 struct PermissionsStep: View {
 
-    /// Called when the user grants permission or skips.
+    /// Called when the user taps "Get started" after granting permission.
     var onComplete: () -> Void = {}
+
+    /// Whether this step is the currently visible tab.
+    /// Guards onAppear logic so TabView pre-rendering doesn't trigger side effects.
+    var isActive = false
 
     @State private var contentVisible = false
     @State private var permissionGranted = false
     @State private var permissionDenied = false
     @State private var observer = BLEPermissionObserver()
-    #if DEBUG
-    @State private var autoAdvanceTask: Task<Void, Never>?
-    #endif
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -114,7 +115,7 @@ struct PermissionsStep: View {
                 }
                 .fullWidth()
 
-                if !permissionGranted {
+                if !permissionGranted && !permissionDenied {
                     Text("Required for Blip to work")
                         .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
@@ -125,24 +126,13 @@ struct PermissionsStep: View {
         }
         .opacity(contentVisible ? 1.0 : 0.0)
         .offset(y: contentVisible ? 0 : 15)
-        .onAppear {
+        .onChange(of: isActive) { _, active in
+            guard active else { return }
             withAnimation(SpringConstants.accessiblePageEntrance) {
                 contentVisible = true
             }
-            checkCurrentPermission()
-            #if DEBUG
-            autoAdvanceTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                guard !Task.isCancelled else { return }
-                onComplete()
-            }
-            #endif
+            refreshPermissionStatus()
         }
-        #if DEBUG
-        .onDisappear {
-            autoAdvanceTask?.cancel()
-        }
-        #endif
     }
 
     // MARK: - Illustration
@@ -202,18 +192,9 @@ struct PermissionsStep: View {
 
     // MARK: - Bluetooth Permission
 
-    private func checkCurrentPermission() {
-        handleAuthorization(CBManager.authorization)
-    }
-
-    private func requestBluetoothPermission() {
-        observer.onStateChange = { authorization in
-            handleAuthorization(authorization)
-        }
-        observer.startRequest()
-    }
-
-    private func handleAuthorization(_ authorization: CBManagerAuthorization) {
+    /// Read-only status check — never creates a CBCentralManager, never triggers a dialog.
+    private func refreshPermissionStatus() {
+        let authorization = CBManager.authorization
         withAnimation(SpringConstants.accessiblePageEntrance) {
             switch authorization {
             case .allowedAlways:
@@ -226,13 +207,26 @@ struct PermissionsStep: View {
                 break
             }
         }
+    }
 
-        if authorization == .allowedAlways {
-            // Auto-advance after a beat so the user sees the confirmation
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                onComplete()
+    /// Creates a CBCentralManager to trigger the system permission dialog.
+    /// Only called on explicit user tap.
+    private func requestBluetoothPermission() {
+        observer.onStateChange = { authorization in
+            withAnimation(SpringConstants.accessiblePageEntrance) {
+                switch authorization {
+                case .allowedAlways:
+                    permissionGranted = true
+                    permissionDenied = false
+                case .denied, .restricted:
+                    permissionDenied = true
+                    permissionGranted = false
+                default:
+                    break
+                }
             }
         }
+        observer.startRequest()
     }
 
     private func openSettings() {
@@ -247,7 +241,7 @@ struct PermissionsStep: View {
     ZStack {
         GradientBackground()
             .ignoresSafeArea()
-        PermissionsStep()
+        PermissionsStep(isActive: true)
     }
     .environment(\.theme, Theme.shared)
 }
@@ -255,7 +249,7 @@ struct PermissionsStep: View {
 #Preview("Permissions Step - Light") {
     ZStack {
         Color.white.ignoresSafeArea()
-        PermissionsStep()
+        PermissionsStep(isActive: true)
     }
     .environment(\.theme, Theme.resolved(for: .light))
     .preferredColorScheme(.light)

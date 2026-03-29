@@ -4,24 +4,33 @@ import SwiftUI
 
 /// Onboarding step 1: "Chat at festivals, even without signal."
 /// Animated gradient hero with a continue button.
+/// Long-press the hero illustration to enter the dev bypass code (000000).
 struct WelcomeStep: View {
 
     /// Called when the user taps "Continue".
     var onContinue: () -> Void = {}
 
+    /// Called when the user enters the correct bypass code (skips all onboarding).
+    var onBypass: () -> Void = {}
+
     @State private var heroVisible = false
     @State private var textVisible = false
     @State private var buttonVisible = false
+    @State private var showBypass = false
+    @State private var bypassCode = ""
     @Environment(\.theme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Hero illustration
+            // Hero illustration — long-press for dev bypass
             heroSection
                 .opacity(heroVisible ? 1.0 : 0.0)
                 .offset(y: heroVisible ? 0 : 20)
+                .onLongPressGesture(minimumDuration: 1.0) {
+                    showBypass = true
+                }
 
             Spacer()
                 .frame(height: BlipSpacing.xxl)
@@ -58,6 +67,20 @@ struct WelcomeStep: View {
         }
         .onAppear {
             animateEntrance()
+        }
+        .alert("Dev Bypass", isPresented: $showBypass) {
+            TextField("Code", text: $bypassCode)
+                .keyboardType(.numberPad)
+            Button("Submit") {
+                if bypassCode == "000000" {
+                    bypassCode = ""
+                    onBypass()
+                }
+                bypassCode = ""
+            }
+            Button("Cancel", role: .cancel) { bypassCode = "" }
+        } message: {
+            Text("Enter bypass code to skip onboarding")
         }
     }
 
