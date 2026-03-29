@@ -136,6 +136,8 @@ async function handleVerifyCode(
 
   if (stored.attempts >= MAX_VERIFY_ATTEMPTS) {
     await env.CODES.delete(codeKey(email));
+    // Clear rate limit so user can immediately request a fresh code.
+    await env.CODES.delete(rateKey(email));
     return json({ error: "Too many attempts. Request a new code." }, 429);
   }
 
