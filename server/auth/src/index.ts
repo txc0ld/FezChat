@@ -1,9 +1,9 @@
 /**
  * FestiChat email verification worker.
  *
- * POST /send-code   — generate 6-digit code, send via Resend, store in KV
- * POST /verify-code — validate code against KV
- * GET  /health      — liveness check
+ * POST /v1/auth/send-code   — generate 6-digit code, send via Resend, store in KV
+ * POST /v1/auth/verify-code — validate code against KV
+ * GET  /v1/auth/health      — liveness check
  */
 import { Resend } from "resend";
 
@@ -13,6 +13,8 @@ export interface Env {
   FROM_EMAIL: string;
   CODE_TTL_SECONDS: string;
   MAX_SENDS_PER_HOUR: string;
+  /** Set to e.g. "https://festichat.app" in production. Defaults to "*" for dev. */
+  CORS_ORIGIN?: string;
 }
 
 /** KV value stored alongside each code. */
@@ -29,35 +31,37 @@ interface RateEntry {
 
 const MAX_VERIFY_ATTEMPTS = 5;
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+function corsHeaders(env: Env): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": env.CORS_ORIGIN ?? "*",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: corsHeaders(env) });
     }
 
     const url = new URL(request.url);
 
-    if (url.pathname === "/health") {
-      return json({ status: "ok" }, 200);
+    if (url.pathname === "/v1/auth/health") {
+      return json({ status: "ok" }, 200, env);
     }
 
     if (request.method !== "POST") {
-      return json({ error: "Method not allowed" }, 405);
+      return json({ error: "Method not allowed" }, 405, env);
     }
 
     switch (url.pathname) {
-      case "/send-code":
+      case "/v1/auth/send-code":
         return handleSendCode(request, env);
-      case "/verify-code":
+      case "/v1/auth/verify-code":
         return handleVerifyCode(request, env);
       default:
-        return json({ error: "Not found" }, 404);
+        return json({ error: "Not found" }, 404, env);
     }
   },
 };
@@ -67,25 +71,38 @@ export default {
 async function handleSendCode(request: Request, env: Env): Promise<Response> {
   const body = await parseBody<{ email?: string }>(request);
   if (!body || !body.email) {
-    return json({ error: "Missing email" }, 400);
+    return json({ error: "Missing email" }, 400, env);
   }
 
   const email = body.email.trim().toLowerCase();
   if (!isValidEmail(email)) {
-    return json({ error: "Invalid email address" }, 400);
+    return json({ error: "Invalid email address" }, 400, env);
   }
 
   // Rate limit: max N sends per email per hour.
   const maxSends = parseInt(env.MAX_SENDS_PER_HOUR, 10) || 3;
   const rateLimited = await checkRateLimit(env, email, maxSends);
   if (rateLimited) {
-    return json({ error: "Too many requests. Try again later." }, 429);
+    return json({ error: "Too many requests. Try again later." }, 429, env);
   }
 
   const code = generateCode();
   const ttl = parseInt(env.CODE_TTL_SECONDS, 10) || 600;
 
-  // Store code in KV with TTL.
+  // Send email FIRST — only store code if delivery succeeds.
+  const resend = new Resend(env.RESEND_API_KEY);
+  const { error } = await resend.emails.send({
+    from: env.FROM_EMAIL,
+    to: email,
+    subject: "FestiChat — Your verification code",
+    html: emailTemplate(code),
+  });
+
+  if (error) {
+    return json({ error: "Failed to send email" }, 502, env);
+  }
+
+  // Email sent — now store code in KV with TTL.
   const stored: StoredCode = {
     code,
     attempts: 0,
@@ -98,20 +115,7 @@ async function handleSendCode(request: Request, env: Env): Promise<Response> {
   // Record rate limit timestamp.
   await recordSend(env, email);
 
-  // Send via Resend.
-  const resend = new Resend(env.RESEND_API_KEY);
-  const { error } = await resend.emails.send({
-    from: env.FROM_EMAIL,
-    to: email,
-    subject: "FestiChat — Your verification code",
-    html: emailTemplate(code),
-  });
-
-  if (error) {
-    return json({ error: "Failed to send email" }, 502);
-  }
-
-  return json({ sent: true });
+  return json({ sent: true }, 200, env);
 }
 
 // ─── Verify Code ─────────────────────────────────────────────
@@ -122,14 +126,14 @@ async function handleVerifyCode(
 ): Promise<Response> {
   const body = await parseBody<{ email?: string; code?: string }>(request);
   if (!body || !body.email || !body.code) {
-    return json({ error: "Missing email or code" }, 400);
+    return json({ error: "Missing email or code" }, 400, env);
   }
 
   const email = body.email.trim().toLowerCase();
   const raw = await env.CODES.get(codeKey(email));
 
   if (!raw) {
-    return json({ error: "Code expired or not found" }, 410);
+    return json({ error: "Code expired or not found" }, 410, env);
   }
 
   const stored: StoredCode = JSON.parse(raw);
@@ -138,7 +142,7 @@ async function handleVerifyCode(
     await env.CODES.delete(codeKey(email));
     // Clear rate limit so user can immediately request a fresh code.
     await env.CODES.delete(rateKey(email));
-    return json({ error: "Too many attempts. Request a new code." }, 429);
+    return json({ error: "Too many attempts. Request a new code." }, 429, env);
   }
 
   if (stored.code !== body.code.trim()) {
@@ -149,13 +153,13 @@ async function handleVerifyCode(
     await env.CODES.put(codeKey(email), JSON.stringify(stored), {
       expirationTtl: remaining,
     });
-    return json({ error: "Incorrect code" }, 401);
+    return json({ error: "Incorrect code" }, 401, env);
   }
 
   // Code matches — delete it so it can't be reused.
   await env.CODES.delete(codeKey(email));
 
-  return json({ verified: true });
+  return json({ verified: true }, 200, env);
 }
 
 // ─── Rate Limiting ───────────────────────────────────────────
@@ -215,10 +219,11 @@ async function parseBody<T>(request: Request): Promise<T | null> {
   }
 }
 
-function json(data: unknown, status = 200): Response {
+function json(data: unknown, status = 200, env?: Env): Response {
+  const cors = env ? corsHeaders(env) : { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, GET, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+    headers: { "Content-Type": "application/json", ...cors },
   });
 }
 

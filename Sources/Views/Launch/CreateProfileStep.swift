@@ -25,6 +25,7 @@ struct CreateProfileStep: View {
     @State private var emailError: String? = nil
     @State private var identityError: String? = nil
     @State private var contentVisible = false
+    @State private var resendCooldown: Int = 0
     @FocusState private var focusedField: Field?
 
     @Environment(\.theme) private var theme
@@ -287,11 +288,17 @@ struct CreateProfileStep: View {
             Button {
                 Task { await sendVerificationCode() }
             } label: {
-                Text("Resend code")
-                    .font(.custom(FCFontName.regular, size: 12, relativeTo: .caption2))
-                    .foregroundStyle(Color.fcAccentPurple)
+                if resendCooldown > 0 {
+                    Text("Resend in \(resendCooldown)s")
+                        .font(.custom(FCFontName.regular, size: 12, relativeTo: .caption2))
+                        .foregroundStyle(theme.colors.mutedText)
+                } else {
+                    Text("Resend code")
+                        .font(.custom(FCFontName.regular, size: 12, relativeTo: .caption2))
+                        .foregroundStyle(Color.fcAccentPurple)
+                }
             }
-            .disabled(isSendingCode)
+            .disabled(isSendingCode || resendCooldown > 0)
             .frame(minHeight: FCSizing.minTapTarget)
         }
     }
@@ -338,11 +345,23 @@ struct CreateProfileStep: View {
                 showOTPField = true
             }
             focusedField = .otp
+            startResendCooldown()
         } catch {
             emailError = error.localizedDescription
         }
 
         isSendingCode = false
+    }
+
+    private func startResendCooldown() {
+        resendCooldown = 60
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
+            if resendCooldown > 0 {
+                resendCooldown -= 1
+            } else {
+                timer.invalidate()
+            }
+        }
     }
 
     private func verifyOTP(_ code: String) async {
@@ -399,7 +418,7 @@ struct CreateProfileStep: View {
             let user = User(
                 username: username.trimmingCharacters(in: .whitespacesAndNewlines),
                 displayName: username,
-                phoneHash: emailHash,
+                emailHash: emailHash,
                 noisePublicKey: identity.noisePublicKey.rawRepresentation,
                 signingPublicKey: identity.signingPublicKey,
                 avatarThumbnail: thumbnailData

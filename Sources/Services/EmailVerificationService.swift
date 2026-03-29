@@ -63,7 +63,7 @@ final class EmailVerificationService: Sendable {
 
         switch http.statusCode {
         case 200:
-            logger.info("Verification code sent to \(trimmed)")
+            logger.info("Verification code sent to \(trimmed, privacy: .private)")
         case 429:
             throw EmailVerificationError.rateLimited
         default:
@@ -87,7 +87,7 @@ final class EmailVerificationService: Sendable {
 
         switch http.statusCode {
         case 200:
-            logger.info("Email verified: \(trimmed)")
+            logger.info("Email verified: \(trimmed, privacy: .private)")
         case 401:
             throw EmailVerificationError.incorrectCode
         case 410:
