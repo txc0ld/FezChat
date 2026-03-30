@@ -25,47 +25,13 @@ struct SplashView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: BlipSpacing.lg) {
-                // Logo icon with accent gradient
-                ZStack {
-                    // Glow behind logo
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.blipAccentPurple.opacity(0.3),
-                                    Color.blipAccentPurple.opacity(0.0)
-                                ],
-                                center: .center,
-                                startRadius: 20,
-                                endRadius: 80
-                            )
-                        )
-                        .frame(width: 160, height: 160)
-                        .opacity(logoOpacity)
-
-                    // Logo symbol
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                        .font(.system(size: 56, weight: .medium))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [
-                                    Color.blipAccentPurple,
-                                    Color(red: 0.55, green: 0.15, blue: 1.0)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-                .scaleEffect(logoScale)
-                .opacity(logoOpacity)
-
-                // App name
-                Text("Blip")
-                    .font(.custom(BlipFontName.bold, size: 38, relativeTo: .largeTitle))
-                    .foregroundStyle(theme.colors.text)
-                    .opacity(logoOpacity)
+                // Blip splash logo
+                Image("BlipSplash")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 280)
                     .scaleEffect(logoScale)
+                    .opacity(logoOpacity)
 
                 // Tagline
                 Text("Chat at festivals, even without signal.")
