@@ -97,12 +97,12 @@ struct NearbyView: View {
         meshViewModel?.connectedPeerCount ?? 0
     }
 
-    /// Connected peers who opted into visibility (have a username) and are NOT already friends.
+    /// Connected peers who opted into visibility (have a username) and are NOT already friends or blocked.
     private var nonFriendPeers: [MeshViewModel.NearbyPeer] {
         guard let vm = meshViewModel else { return [] }
         return vm.nearbyPeers.filter { peer in
             guard let username = peer.username, !username.isEmpty else { return false }
-            return peer.friendStatus != .accepted
+            return peer.friendStatus != .accepted && peer.friendStatus != .blocked
         }
     }
 

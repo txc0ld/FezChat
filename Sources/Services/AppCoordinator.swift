@@ -227,18 +227,22 @@ final class AppCoordinator {
                         existing.connectionStateRaw = PeerConnectionState.connected.rawValue
                     }
                     existing.lastSeenAt = Date()
-                    existing.hopCount = 1 // direct BLE peer
-                    // Populate noisePublicKey if still empty (PeerID bytes = noise key)
+                    existing.hopCount = 1
+                    // Update RSSI from real BLE reading
+                    if let realRSSI = bleService.rssi(for: peerID) {
+                        existing.rssi = realRSSI
+                    }
+                    // Populate noisePublicKey if still empty
                     if existing.noisePublicKey.isEmpty {
                         existing.noisePublicKey = peerData
                     }
                 } else {
-                    // Create new MeshPeer with peerData as initial noisePublicKey
+                    // Create new MeshPeer
                     let meshPeer = MeshPeer(
                         peerID: peerData,
                         noisePublicKey: peerData,
                         signingPublicKey: Data(),
-                        rssi: -60,
+                        rssi: bleService.rssi(for: peerID) ?? -80,
                         connectionState: .connected,
                         lastSeenAt: Date(),
                         hopCount: 1
@@ -249,24 +253,29 @@ final class AppCoordinator {
                 }
             }
 
-            // Mark disconnected peers that are no longer in connectedPeers
+            // Mark disconnected peers immediately — no 60s delay
             for (peerData, peer) in existingByPeerID {
                 if !connectedSet.contains(peerData) && peer.connectionState == .connected {
-                    let timeSinceLastSeen = Date().timeIntervalSince(peer.lastSeenAt)
-                    if timeSinceLastSeen > 60 {
-                        peer.connectionStateRaw = PeerConnectionState.disconnected.rawValue
-                    }
+                    peer.connectionStateRaw = PeerConnectionState.disconnected.rawValue
+                }
+            }
+
+            // Clean up stale disconnected records (>5 min old)
+            let staleThreshold = Date().addingTimeInterval(-300)
+            for (_, peer) in existingByPeerID {
+                if peer.connectionState == .disconnected && peer.lastSeenAt < staleThreshold {
+                    context.delete(peer)
                 }
             }
 
             try context.save()
 
-            // Post transport state so MeshViewModel.isBLEActive updates
+            // Post transport state — isBLEActive reflects BLE running, not peer count
             NotificationCenter.default.post(
                 name: .meshTransportStateChanged,
                 object: nil,
                 userInfo: [
-                    "bleActive": !connectedPeerIDs.isEmpty,
+                    "bleActive": bleService.state == .running,
                     "wsConnected": self.webSocketTransport?.state == .running,
                 ]
             )

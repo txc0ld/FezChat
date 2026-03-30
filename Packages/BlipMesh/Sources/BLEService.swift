@@ -63,6 +63,9 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     /// Strong references to connected peripherals to prevent deallocation.
     var connectedPeripheralRefs: [UUID: any BLEPeripheralProxy] = [:]
 
+    /// Latest RSSI reading per connected peripheral UUID.
+    var peripheralRSSI: [UUID: Int] = [:]
+
     // MARK: - Concurrency
 
     let lock = NSLock()
@@ -73,6 +76,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
 
     var isScanning = false
     private var scanTimer: DispatchSourceTimer?
+    private var rssiPollTimer: DispatchSourceTimer?
 
     // MARK: - Local peer ID
 
@@ -140,6 +144,8 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         state = .stopped
 
         stopScanning()
+        rssiPollTimer?.cancel()
+        rssiPollTimer = nil
 
         if peripheralManager?.bleIsAdvertising == true {
             peripheralManager?.bleStopAdvertising()
@@ -154,6 +160,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             peripheralCharacteristics.removeAll()
             connectingPeripherals.removeAll()
             connectedPeripheralRefs.removeAll()
+            peripheralRSSI.removeAll()
             subscribedCentrals.removeAll()
             centralToPeerID.removeAll()
         }
@@ -241,6 +248,36 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         logger.info("BLE scanning started")
 
         scheduleScanCycle()
+        startRSSIPolling()
+    }
+
+    /// Returns the last known RSSI for a peer, or nil if unavailable.
+    public func rssi(for peerID: PeerID) -> Int? {
+        lock.withLock {
+            // Try peripheral map first
+            if let uuid = peripheralToPeerID.first(where: { $0.value == peerID })?.key {
+                return peripheralRSSI[uuid]
+            }
+            return nil
+        }
+    }
+
+    /// Poll RSSI for all connected peripherals every 10 seconds.
+    private func startRSSIPolling() {
+        rssiPollTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 10.0, repeating: 10.0)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let peripherals: [any BLEPeripheralProxy] = self.lock.withLock {
+                Array(self.connectedPeripheralRefs.values)
+            }
+            for peripheral in peripherals {
+                (peripheral as? CBPeripheral)?.readRSSI()
+            }
+        }
+        timer.resume()
+        rssiPollTimer = timer
     }
 
     private func stopScanning() {
@@ -360,8 +397,8 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             : BLEConstants.defaultRSSIThreshold
         if rssi < threshold { return false }
 
-        // Connection count limit
-        let currentCount = connectedPeripheralRefs.count
+        // Connection count limit — use actual connected count, not refs (which includes connecting-in-progress)
+        let currentCount = peripheralToPeerID.count + centralToPeerID.count
         let maxConnections = BLEConstants.maxCentralConnectionsNormal
         if currentCount >= maxConnections { return false }
 
@@ -427,6 +464,9 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         }
 
         print("[Blip-BLE] Discovered peripheral \(peripheral.identifier), RSSI: \(rssi)")
+
+        // Always store latest RSSI for this peripheral
+        lock.withLock { peripheralRSSI[peripheral.identifier] = rssi }
 
         pruneTimedOutPeripherals()
 
@@ -517,6 +557,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             }
             peripheralCharacteristics.removeValue(forKey: uuid)
             connectedPeripheralRefs.removeValue(forKey: uuid)
+            peripheralRSSI.removeValue(forKey: uuid)
             connectingPeripherals.remove(uuid)
             return pid
         }
@@ -727,7 +768,12 @@ extension BLEService: CBPeripheralDelegate {
         didReadRSSI RSSI: NSNumber,
         error: Error?
     ) {
-        // RSSI updates handled by PeerManager.
+        guard error == nil else { return }
+        let rssiValue = RSSI.intValue
+        guard rssiValue != 127 else { return }
+        lock.withLock {
+            peripheralRSSI[peripheral.identifier] = rssiValue
+        }
     }
 }
 
