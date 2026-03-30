@@ -4,7 +4,9 @@ import SwiftUI
 
 /// Animated mesh gradient background for Blip.
 ///
-/// Slowly shifts between deep purple, midnight blue, and dark teal.
+/// Uses the surface hierarchy colors as the base with subtle accent ambient washes.
+/// Slowly shifts between deep purple, midnight blue, and dark teal orbs (dark mode).
+/// Light mode uses clean surface gradients with soft ambient color touches.
 /// Respects `UIAccessibility.isReduceMotionEnabled` by disabling the animation.
 struct GradientBackground: View {
 
@@ -18,6 +20,7 @@ struct GradientBackground: View {
         GeometryReader { geometry in
             ZStack {
                 baseLayer
+                ambientWashLayer
                 if colorScheme == .dark {
                     animatedOrbsLayer(size: geometry.size)
                 }
@@ -31,10 +34,43 @@ struct GradientBackground: View {
 
     // MARK: - Layers
 
-    /// Solid base layer matching the theme background.
+    /// Base layer using the surface hierarchy colors.
     private var baseLayer: some View {
-        Rectangle()
-            .fill(colorScheme == .dark ? Color.black : Color.white)
+        LinearGradient(
+            colors: colorScheme == .dark
+                ? [.blipSurfaceBaseDark, .black]
+                : [.blipSurfaceBaseLight, .white],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// Subtle ambient color washes using the new accent glow colors.
+    private var ambientWashLayer: some View {
+        ZStack {
+            // Purple ambient wash — top area
+            RadialGradient(
+                colors: [
+                    Color.blipAmbientPurple,
+                    Color.clear
+                ],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 400
+            )
+
+            // Cyan ambient wash — bottom trailing
+            RadialGradient(
+                colors: [
+                    Color.blipAmbientCyan,
+                    Color.clear
+                ],
+                center: .bottomTrailing,
+                startRadius: 0,
+                endRadius: 350
+            )
+        }
+        .blendMode(colorScheme == .dark ? .screen : .multiply)
     }
 
     /// Animated gradient orbs that drift slowly behind content (dark mode only).
@@ -145,17 +181,44 @@ struct GradientBackground: View {
 
 extension GradientBackground {
     /// A non-animated gradient for use in contexts where animation is undesirable.
+    /// Uses surface hierarchy colors with ambient accent washes.
     static var staticGradient: some View {
-        LinearGradient(
-            colors: [
-                .blipGradientNearBlack,
-                .blipGradientDeepPurple.opacity(0.3),
-                .blipGradientMidnightBlue.opacity(0.2),
-                .blipGradientNearBlack
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        ZStack {
+            LinearGradient(
+                colors: [
+                    .blipSurfaceBaseDark,
+                    .blipGradientDeepPurple.opacity(0.3),
+                    .blipGradientMidnightBlue.opacity(0.2),
+                    .blipSurfaceBaseDark
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Subtle ambient purple wash
+            RadialGradient(
+                colors: [
+                    Color.blipAmbientPurple,
+                    Color.clear
+                ],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 300
+            )
+            .blendMode(.screen)
+        }
         .ignoresSafeArea()
     }
+}
+
+// MARK: - Preview
+
+#Preview("GradientBackground — Dark") {
+    GradientBackground()
+        .preferredColorScheme(.dark)
+}
+
+#Preview("GradientBackground — Light") {
+    GradientBackground()
+        .preferredColorScheme(.light)
 }
