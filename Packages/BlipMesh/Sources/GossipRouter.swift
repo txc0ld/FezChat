@@ -147,10 +147,9 @@ public final class GossipRouter: @unchecked Sendable {
         }
 
         // Step 5: Check relay probability.
-        guard relayPacket.ttl > 0 else {
-            return true
-        }
-
+        // Note: packets with decremented TTL=0 are still relayed — the NEXT hop
+        // will see TTL=0 and deliver locally without further relay. This matches
+        // standard network behavior (TTL=1 = "one more hop").
         let shouldRelay = adaptiveRelay.shouldRelay(packet: relayPacket)
         if shouldRelay {
             lock.lock()

@@ -32,6 +32,7 @@ final class AppCoordinator {
     private(set) var bleService: BLEService?
     private(set) var webSocketTransport: WebSocketTransport?
     private(set) var transportCoordinator: TransportCoordinator?
+    private(set) var meshRelayService: MeshRelayService?
     private(set) var messageService: MessageService?
 
     // MARK: - Identity
@@ -104,7 +105,14 @@ final class AppCoordinator {
         // so messages route through the full BLE → WebSocket → local queue chain.
         let msgService = MessageService(modelContainer: modelContainer, keyManager: keyManager)
         msgService.configure(transport: coordinator, identity: identity)
-        coordinator.delegate = msgService
+
+        // Wire gossip relay middleware between transport and message service.
+        // Data flow: BLE → TransportCoordinator → MeshRelayService → MessageService
+        // Relay flow: MeshRelayService → TransportCoordinator.broadcast(excluding:)
+        let relay = MeshRelayService(transport: coordinator)
+        relay.delegate = msgService
+        coordinator.delegate = relay
+        self.meshRelayService = relay
         self.messageService = msgService
 
         // Listen for broadcast requests from ViewModels (e.g. SOSViewModel).
