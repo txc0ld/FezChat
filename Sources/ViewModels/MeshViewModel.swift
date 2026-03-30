@@ -280,9 +280,10 @@ final class MeshViewModel {
 
         for friend in friends {
             guard let user = friend.user else { continue }
-            let friendPeerData = PeerID(noisePublicKey: user.noisePublicKey).bytes
 
-            if let peer = peers.first(where: { $0.peerID == friendPeerData }) {
+            // Match by noisePublicKey (handles both 32-byte real key and legacy 8-byte PeerID)
+            let friendNoiseKey = user.noisePublicKey
+            if let peer = peers.first(where: { $0.noisePublicKey == friendNoiseKey }) {
                 nearby.append(NearbyFriend(
                     id: friend.id,
                     username: user.username,

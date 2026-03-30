@@ -367,6 +367,8 @@ final class MessageService: @unchecked Sendable {
             try createOrUpdateFriend(user: remoteUser, status: .pending, context: context)
         }
 
+        let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        DebugLogger.shared.log("TX", "FRIEND_REQ → \(shortID)")
         logger.info("Sent friend request to peer \(peerID)")
     }
 
@@ -396,8 +398,17 @@ final class MessageService: @unchecked Sendable {
         // Ensure DM channel exists
         try createDMChannel(with: friendUser, context: context)
 
-        // Send accept packet
-        let recipientPeerID = PeerID(noisePublicKey: friendUser.noisePublicKey)
+        // Resolve the transport PeerID for the friend so the accept reaches them
+        let recipientPeerID: PeerID
+        let friendNoiseKey = friendUser.noisePublicKey
+        let noiseKeyDesc = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.noisePublicKey == friendNoiseKey })
+        if let meshPeer = try context.fetch(noiseKeyDesc).first {
+            recipientPeerID = PeerID(bytes: meshPeer.peerID) ?? PeerID(noisePublicKey: friendUser.noisePublicKey)
+        } else if friendUser.noisePublicKey.count == PeerID.length {
+            recipientPeerID = PeerID(bytes: friendUser.noisePublicKey) ?? PeerID(noisePublicKey: friendUser.noisePublicKey)
+        } else {
+            recipientPeerID = PeerID(noisePublicKey: friendUser.noisePublicKey)
+        }
 
         let localUserDesc = FetchDescriptor<User>(sortBy: [SortDescriptor(\.createdAt, order: .forward)])
         guard let localUser = try context.fetch(localUserDesc).first else {
@@ -443,21 +454,24 @@ final class MessageService: @unchecked Sendable {
             throw MessageServiceError.senderNotFound
         }
 
-        // Payload: username + 0x00 + displayName
+        // Payload: username + 0x00 + displayName + 0x00 + noisePublicKey (32 bytes)
         var payload = Data()
         payload.append(localUser.username.data(using: .utf8) ?? Data())
         payload.append(0x00)
         payload.append(localUser.resolvedDisplayName.data(using: .utf8) ?? Data())
+        payload.append(0x00)
+        payload.append(identity.noisePublicKey.rawRepresentation) // real 32-byte Curve25519 key
 
         let packet = buildPacket(
             type: .announce,
             payload: payload,
-            flags: [.hasSignature],
+            flags: [],
             senderID: identity.peerID,
             recipientID: nil
         )
 
         try sendPacket(packet)
+        DebugLogger.shared.log("TX", "ANNOUNCE → \(localUser.username)")
     }
 
     // MARK: - Receive Message
@@ -576,35 +590,81 @@ final class MessageService: @unchecked Sendable {
     private func handleAnnounce(_ packet: Packet, from peerID: PeerID) async throws {
         let context = ModelContext(modelContainer)
 
-        let (username, displayName) = parseFriendPayload(packet.payload)
-        guard let username, !username.isEmpty else { return }
+        // Parse: username + 0x00 + displayName + 0x00 + noisePublicKey(32 bytes)
+        let payload = packet.payload
+        let bytes = Array(payload)
+        guard let firstSep = bytes.firstIndex(of: 0x00) else { return }
+        let username = String(data: Data(bytes[..<firstSep]), encoding: .utf8) ?? ""
+        guard !username.isEmpty else { return }
 
-        // Find the MeshPeer for this sender and populate identity fields
+        let afterFirst = firstSep + 1
+        var displayName = username
+        var realNoiseKey = Data() // 32-byte Curve25519 key if present
+
+        if afterFirst < bytes.count {
+            if let secondSep = bytes[afterFirst...].firstIndex(of: 0x00) {
+                displayName = String(data: Data(bytes[afterFirst..<secondSep]), encoding: .utf8) ?? username
+                let keyStart = secondSep + 1
+                if keyStart + 32 <= bytes.count {
+                    realNoiseKey = Data(bytes[keyStart..<keyStart + 32])
+                }
+            } else {
+                displayName = String(data: Data(bytes[afterFirst...]), encoding: .utf8) ?? username
+            }
+        }
+
+        // Fallback: use PeerID bytes if no 32-byte key in payload (legacy announces)
+        let noiseKeyToStore = realNoiseKey.isEmpty ? packet.senderID.bytes : realNoiseKey
+
         let senderData = peerID.bytes
-        let senderNoiseKey = packet.senderID.bytes
+        let peerHex = senderData.prefix(4).map { String(format: "%02x", $0) }.joined()
+
+        // Find or create MeshPeer for this sender
         let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == senderData })
         if let peer = try context.fetch(peerDescriptor).first {
             peer.username = username
-            peer.noisePublicKey = senderNoiseKey
+            peer.noisePublicKey = noiseKeyToStore
             peer.connectionStateRaw = PeerConnectionState.connected.rawValue
+            try context.save()
+        } else {
+            let newPeer = MeshPeer(
+                peerID: senderData,
+                noisePublicKey: noiseKeyToStore,
+                signingPublicKey: Data(),
+                username: username,
+                rssi: -60,
+                connectionState: .connected,
+                lastSeenAt: Date(),
+                hopCount: 1
+            )
+            context.insert(newPeer)
             try context.save()
         }
 
-        // Also ensure a User record exists so the peer can be added as a friend
+        // Create or update User record — always update noisePublicKey to latest
         let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
-        if try context.fetch(userDesc).isEmpty {
-            let senderKey = packet.senderID.bytes
+        if let existingUser = try context.fetch(userDesc).first {
+            if existingUser.noisePublicKey.isEmpty || existingUser.noisePublicKey.count < noiseKeyToStore.count {
+                existingUser.noisePublicKey = noiseKeyToStore
+                existingUser.displayName = displayName
+                try context.save()
+            }
+        } else {
             let user = User(
                 username: username,
                 displayName: displayName,
                 emailHash: "",
-                noisePublicKey: senderKey,
+                noisePublicKey: noiseKeyToStore,
                 signingPublicKey: Data()
             )
             context.insert(user)
             try context.save()
         }
 
+        // Trigger UI refresh so the peer card appears immediately
+        NotificationCenter.default.post(name: .meshPeerStateChanged, object: nil)
+
+        DebugLogger.shared.log("RX", "ANNOUNCE ← \(username) from \(peerHex) key=\(realNoiseKey.isEmpty ? "legacy" : "32B")")
         logger.debug("Announce received from \(username)")
     }
 
@@ -684,11 +744,10 @@ final class MessageService: @unchecked Sendable {
         let existing = try context.fetch(descriptor)
         if !existing.isEmpty { return }
 
-        // Resolve sender
+        // Resolve sender (try transport PeerID, then fallback to noisePublicKey)
         let senderPeerData = senderPeerID.bytes
-        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == senderPeerData })
-        let peers = try context.fetch(peerDescriptor)
-        let senderUser: User? = peers.first.flatMap { peer in
+        let meshPeer = try findMeshPeer(byPeerIDBytes: senderPeerData, context: context)
+        let senderUser: User? = meshPeer.flatMap { peer in
             guard let username = peer.username else { return nil }
             let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
             do {
@@ -930,10 +989,9 @@ final class MessageService: @unchecked Sendable {
         // Parse payload: username + 0x00 + displayName
         let (senderUsername, senderDisplayName) = parseFriendPayload(data)
 
-        // Resolve sender as a MeshPeer -> User
+        // Resolve sender as a MeshPeer -> User (try peerID then noisePublicKey fallback)
         let peerData = peerID.bytes
-        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
-        let meshPeer = try context.fetch(peerDescriptor).first
+        let meshPeer = try findMeshPeer(byPeerIDBytes: peerData, context: context)
 
         // Create or find User for the sender
         let senderUser: User
@@ -947,7 +1005,9 @@ final class MessageService: @unchecked Sendable {
                 senderUser.displayName = display
             }
         } else if let username = senderUsername, !username.isEmpty {
-            // No MeshPeer record yet — create User from payload
+            // No MeshPeer record yet — find or create User from payload.
+            // Don't store peerData (8-byte PeerID hash) as noisePublicKey — leave empty
+            // for handleAnnounce to populate with the real 32-byte key.
             let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
             if let existing = try context.fetch(userDesc).first {
                 senderUser = existing
@@ -956,7 +1016,7 @@ final class MessageService: @unchecked Sendable {
                     username: username,
                     displayName: senderDisplayName,
                     emailHash: "",
-                    noisePublicKey: peerData,
+                    noisePublicKey: Data(),
                     signingPublicKey: Data()
                 )
                 context.insert(senderUser)
@@ -1001,13 +1061,12 @@ final class MessageService: @unchecked Sendable {
         // Parse payload: username
         let (senderUsername, _) = parseFriendPayload(data)
 
-        // Find the Friend record for this peer
+        // Find the Friend record for this peer (try peerID then noisePublicKey fallback)
         let peerData = peerID.bytes
-        let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
 
         var friendUser: User?
 
-        if let meshPeer = try context.fetch(peerDescriptor).first {
+        if let meshPeer = try findMeshPeer(byPeerIDBytes: peerData, context: context) {
             friendUser = try? resolveOrCreateUser(for: meshPeer, context: context)
         }
 
@@ -1278,6 +1337,9 @@ final class MessageService: @unchecked Sendable {
         recipientID: PeerID?
     ) -> Packet {
         var effectiveFlags = flags
+        // Strip hasSignature — no signing layer yet. PacketSerializer.encode()
+        // throws missingSignature if the flag is set but signature is nil.
+        effectiveFlags.remove(.hasSignature)
         if recipientID != nil {
             effectiveFlags.insert(.hasRecipient)
         }
@@ -1290,7 +1352,7 @@ final class MessageService: @unchecked Sendable {
             senderID: senderID,
             recipientID: recipientID,
             payload: payload,
-            signature: nil // Signature applied by crypto layer before transport
+            signature: nil
         )
     }
 
@@ -1305,6 +1367,22 @@ final class MessageService: @unchecked Sendable {
         return idData
     }
 
+    // MARK: - Private: MeshPeer Lookup (handles transport PeerID vs noise PeerID mismatch)
+
+    /// Find a MeshPeer by transport PeerID first, then fallback to noisePublicKey.
+    /// This handles the identity mismatch between transport-level PeerIDs (from BLE UUID)
+    /// and protocol-level PeerIDs (from noise key hash) that appear in packet.senderID.
+    private func findMeshPeer(byPeerIDBytes peerData: Data, context: ModelContext) throws -> MeshPeer? {
+        // Primary: match by transport peerID
+        let peerDesc = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
+        if let found = try context.fetch(peerDesc).first {
+            return found
+        }
+        // Fallback: match by noisePublicKey (handles noise-derived PeerID from packet.senderID)
+        let noiseDesc = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.noisePublicKey == peerData })
+        return try context.fetch(noiseDesc).first
+    }
+
     // MARK: - Private: Channel Resolution
 
     @MainActor
@@ -1315,11 +1393,11 @@ final class MessageService: @unchecked Sendable {
     ) throws -> Channel {
         switch subType {
         case .privateMessage:
-            // Find the User for this sender (created by handleAnnounce)
+            // Find the User for this sender via MeshPeer (try peerID then noisePublicKey)
             let peerData = senderPeerID.bytes
-            let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
             let senderUser: User?
-            if let meshPeer = try context.fetch(peerDescriptor).first, !meshPeer.noisePublicKey.isEmpty {
+            if let meshPeer = try findMeshPeer(byPeerIDBytes: peerData, context: context),
+               !meshPeer.noisePublicKey.isEmpty {
                 let noiseKey = meshPeer.noisePublicKey
                 let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.noisePublicKey == noiseKey })
                 senderUser = try context.fetch(userDesc).first
@@ -1398,7 +1476,11 @@ final class MessageService: @unchecked Sendable {
                 return PeerID(bytes: meshPeer.peerID)
             }
 
-            // Fallback: use noise key directly (works if BLEService has mapped it)
+            // Fallback: construct PeerID from stored key.
+            // If already 8 bytes (PeerID-sized), use directly to avoid double-hashing.
+            if user.noisePublicKey.count == PeerID.length {
+                return PeerID(bytes: user.noisePublicKey)
+            }
             return PeerID(noisePublicKey: user.noisePublicKey)
         }
         return nil
@@ -1477,14 +1559,18 @@ extension MessageService: TransportDelegate {
     }
 
     func transport(_ transport: any Transport, didConnect peerID: PeerID) {
-        // Broadcast presence to newly connected peer so they can see our username.
+        let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in
+            DebugLogger.shared.log("PEER", "CONNECTED: \(shortID)")
             try? await self.broadcastPresence()
         }
     }
 
     func transport(_ transport: any Transport, didDisconnect peerID: PeerID) {
-        // Disconnection handled by TransportCoordinator; no MessageService action needed.
+        let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        Task { @MainActor in
+            DebugLogger.shared.log("PEER", "DISCONNECTED: \(shortID)")
+        }
     }
 
     func transport(_ transport: any Transport, didChangeState state: TransportState) {
