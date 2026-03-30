@@ -425,6 +425,15 @@ struct CreateProfileStep: View {
             )
 
             modelContext.insert(user)
+
+            // Seed a starter message pack so the user can send messages immediately
+            let starterPack = MessagePack(
+                packType: .starter10,
+                messagesRemaining: 100,
+                transactionID: "onboarding-starter-\(UUID().uuidString)"
+            )
+            modelContext.insert(starterPack)
+
             try modelContext.save()
 
             // Register on backend (fire-and-forget)
