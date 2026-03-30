@@ -196,6 +196,29 @@ public final class TransportCoordinator: @unchecked Sendable, Transport {
         }
     }
 
+    /// Broadcast data to all connected peers except the specified one.
+    ///
+    /// Used by gossip relay to forward packets without sending back to the source.
+    ///
+    /// - Parameters:
+    ///   - data: The binary data to broadcast.
+    ///   - excludedPeer: The peer to exclude (typically the original sender).
+    public func broadcastExcluding(data: Data, excludedPeer: PeerID) {
+        let peers = connectedPeers.filter { $0 != excludedPeer }
+        for peer in peers {
+            do {
+                try bleTransport.send(data: data, to: peer)
+            } catch {
+                // BLE send failed for this peer — try WebSocket fallback.
+                do {
+                    try webSocketTransport.send(data: data, to: peer)
+                } catch {
+                    logger.debug("Relay send failed to \(peer): \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     /// Send a location update, rate-limited to 1 per 30 seconds per peer.
     /// Returns `false` if rate limited (caller should skip this update).
     public func sendLocationUpdate(data: Data, to peerID: PeerID) -> Bool {
