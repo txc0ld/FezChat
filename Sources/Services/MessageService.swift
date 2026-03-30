@@ -579,11 +579,14 @@ final class MessageService: @unchecked Sendable {
         let (username, displayName) = parseFriendPayload(packet.payload)
         guard let username, !username.isEmpty else { return }
 
-        // Find the MeshPeer for this sender
+        // Find the MeshPeer for this sender and populate identity fields
         let senderData = peerID.bytes
+        let senderNoiseKey = packet.senderID.bytes
         let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == senderData })
         if let peer = try context.fetch(peerDescriptor).first {
             peer.username = username
+            peer.noisePublicKey = senderNoiseKey
+            peer.connectionStateRaw = PeerConnectionState.connected.rawValue
             try context.save()
         }
 
@@ -735,8 +738,16 @@ final class MessageService: @unchecked Sendable {
             }
         }
 
-        // Notify delegate
+        // Notify delegate and post notification for any active ChatViewModel
         delegate?.messageService(self, didReceiveMessage: message, in: channel)
+        NotificationCenter.default.post(
+            name: .didReceiveBlipMessage,
+            object: nil,
+            userInfo: [
+                "messageID": message.id,
+                "channelID": channel.id,
+            ]
+        )
     }
 
     @MainActor
@@ -1304,25 +1315,42 @@ final class MessageService: @unchecked Sendable {
     ) throws -> Channel {
         switch subType {
         case .privateMessage:
-            // Find or create DM channel with this peer
+            // Find the User for this sender (created by handleAnnounce)
             let peerData = senderPeerID.bytes
+            let peerDescriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate { $0.peerID == peerData })
+            let senderUser: User?
+            if let meshPeer = try context.fetch(peerDescriptor).first, !meshPeer.noisePublicKey.isEmpty {
+                let noiseKey = meshPeer.noisePublicKey
+                let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.noisePublicKey == noiseKey })
+                senderUser = try context.fetch(userDesc).first
+            } else {
+                senderUser = nil
+            }
+
+            // Look for existing DM channel with this peer via memberships
             let descriptor = FetchDescriptor<Channel>(predicate: #Predicate {
                 $0.typeRaw == "dm"
             })
             let channels = try context.fetch(descriptor)
 
-            // Look for existing DM with this peer via memberships
-            for ch in channels {
-                for membership in ch.memberships {
-                    if let user = membership.user, user.noisePublicKey == peerData {
-                        return ch
+            if let user = senderUser {
+                for ch in channels {
+                    for membership in ch.memberships {
+                        if membership.user?.id == user.id {
+                            return ch
+                        }
                     }
                 }
             }
 
-            // Create new DM channel
+            // Create new DM channel with proper membership for the remote user
             let channel = Channel(type: .dm)
             context.insert(channel)
+            if let user = senderUser {
+                let membership = GroupMembership(user: user, channel: channel)
+                context.insert(membership)
+            }
+            try context.save()
             return channel
 
         case .groupMessage:
@@ -1355,11 +1383,23 @@ final class MessageService: @unchecked Sendable {
 
     private func resolveRecipientPeerID(for channel: Channel) -> PeerID? {
         guard channel.type == .dm else { return nil }
-        // In a DM, the other membership's user has the peer ID
+
+        // In a DM, find the remote user's noise key via membership,
+        // then look up their MeshPeer to get the BLE transport-level PeerID.
         for membership in channel.memberships {
-            if let user = membership.user {
-                return PeerID(noisePublicKey: user.noisePublicKey)
+            guard let user = membership.user, !user.noisePublicKey.isEmpty else { continue }
+
+            let noiseKey = user.noisePublicKey
+            let context = ModelContext(modelContainer)
+            let descriptor = FetchDescriptor<MeshPeer>(predicate: #Predicate {
+                $0.noisePublicKey == noiseKey
+            })
+            if let meshPeer = try? context.fetch(descriptor).first {
+                return PeerID(bytes: meshPeer.peerID)
             }
+
+            // Fallback: use noise key directly (works if BLEService has mapped it)
+            return PeerID(noisePublicKey: user.noisePublicKey)
         }
         return nil
     }
@@ -1462,4 +1502,5 @@ extension Notification.Name {
     static let didReceiveFriendAccept = Notification.Name("com.blip.didReceiveFriendAccept")
     static let friendListDidChange = Notification.Name("com.blip.friendListDidChange")
     static let didReceiveGroupManagement = Notification.Name("com.blip.didReceiveGroupManagement")
+    static let didReceiveBlipMessage = Notification.Name("com.blip.didReceiveMessage")
 }

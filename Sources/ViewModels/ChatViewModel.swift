@@ -63,6 +63,9 @@ final class ChatViewModel {
     /// Typing indicator cleanup timers keyed by "\(channelID)_\(peerID)".
     private var typingTimers: [String: Timer] = [:]
 
+    /// Notification observer for incoming messages.
+    nonisolated(unsafe) private var messageObservation: NSObjectProtocol?
+
     // MARK: - Init
 
     init(
@@ -75,6 +78,23 @@ final class ChatViewModel {
         self.messageService = messageService
         self.audioService = audioService
         self.imageService = imageService
+
+        messageObservation = NotificationCenter.default.addObserver(
+            forName: .didReceiveBlipMessage,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            guard let channelID = notification.userInfo?["channelID"] as? UUID,
+                  let messageID = notification.userInfo?["messageID"] as? UUID else { return }
+            Task { @MainActor in
+                self.handleReceivedMessageNotification(messageID: messageID, channelID: channelID)
+            }
+        }
+    }
+
+    deinit {
+        if let obs = messageObservation { NotificationCenter.default.removeObserver(obs) }
     }
 
     // MARK: - Channel List
@@ -399,7 +419,17 @@ final class ChatViewModel {
 
     // MARK: - Message Reception
 
-    /// Handle a newly received message (called by MessageServiceDelegate).
+    /// Handle incoming message notification — fetch from SwiftData and update UI.
+    private func handleReceivedMessageNotification(messageID: UUID, channelID: UUID) {
+        let context = ModelContext(modelContainer)
+        let msgDesc = FetchDescriptor<Message>(predicate: #Predicate { $0.id == messageID })
+        let chDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
+        guard let message = try? context.fetch(msgDesc).first,
+              let channel = try? context.fetch(chDesc).first else { return }
+        handleReceivedMessage(message, in: channel)
+    }
+
+    /// Handle a newly received message (called by delegate or notification).
     func handleReceivedMessage(_ message: Message, in channel: Channel) {
         // Add to active messages if this is the open channel
         if activeChannel?.id == channel.id {
