@@ -8,13 +8,19 @@ final class GossipRouterIntegrationTests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// A relay entry storing the packet and the peer to exclude when forwarding.
+    private struct RelayEntry: @unchecked Sendable {
+        let packet: Packet
+        let excludedPeer: PeerID
+    }
+
     /// A simulated mesh node with its own gossip router and peer identity.
     private final class SimulatedNode: GossipRouterDelegate, @unchecked Sendable {
         let peerID: PeerID
         let router: GossipRouter
         var neighbors: [PeerID: SimulatedNode] = [:]
         var receivedPackets: [Packet] = []
-        var relayedPackets: [Packet] = []
+        var relayQueue: [RelayEntry] = []
         private let lock = NSLock()
 
         init(seed: UInt8) {
@@ -27,6 +33,8 @@ final class GossipRouterIntegrationTests: XCTestCase {
                 directedRouter: DirectedRouter()
             )
             self.router.delegate = self
+            // Set peer count to 1 so baseProbability = 1.0 (< 10 threshold).
+            self.router.adaptiveRelay.connectedPeerCount = 1
         }
 
         /// Connect this node bidirectionally to another node.
@@ -51,16 +59,14 @@ final class GossipRouterIntegrationTests: XCTestCase {
         /// Returns the total number of relay deliveries made.
         func drainRelayQueue() -> Int {
             lock.lock()
-            let toRelay = relayedPackets
-            relayedPackets.removeAll()
+            let toRelay = relayQueue
+            relayQueue.removeAll()
             lock.unlock()
 
             var deliveries = 0
-            for (relayPacket, excludedPeer) in toRelay.map({ ($0, $0.senderID) }) {
-                for (neighborID, neighbor) in neighbors {
-                    // The delegate already excluded the source peer;
-                    // in our simulation we just relay to all neighbors.
-                    _ = neighbor.injectPacket(relayPacket, from: peerID)
+            for entry in toRelay {
+                for (neighborID, neighbor) in neighbors where neighborID != entry.excludedPeer {
+                    _ = neighbor.injectPacket(entry.packet, from: peerID)
                     deliveries += 1
                 }
             }
@@ -71,7 +77,7 @@ final class GossipRouterIntegrationTests: XCTestCase {
 
         func gossipRouter(_ router: GossipRouter, shouldRelay packet: Packet, excluding excludedPeer: PeerID) {
             lock.lock()
-            relayedPackets.append(packet)
+            relayQueue.append(RelayEntry(packet: packet, excludedPeer: excludedPeer))
             lock.unlock()
         }
     }
@@ -88,23 +94,36 @@ final class GossipRouterIntegrationTests: XCTestCase {
     /// Run relay propagation across the mesh until no more relays occur or
     /// a maximum number of rounds is reached.
     @discardableResult
-    private func propagate(_ nodes: [SimulatedNode], maxRounds: Int = 20) -> Int {
+    private func propagate(_ nodes: [SimulatedNode], maxRounds: Int = 30) -> Int {
         var totalDeliveries = 0
+        var idleRounds = 0
         for _ in 0 ..< maxRounds {
+            // Allow jittered relay callbacks (8-25ms async GCD dispatch) to complete.
+            // 100ms provides 4x margin over max jitter for reliable multi-hop propagation.
+            Thread.sleep(forTimeInterval: 0.1)
+
             var roundDeliveries = 0
             for node in nodes {
                 roundDeliveries += node.drainRelayQueue()
             }
             totalDeliveries += roundDeliveries
-            if roundDeliveries == 0 { break }
+
+            // Need multiple idle rounds before stopping — async jitter may still be in-flight.
+            if roundDeliveries == 0 {
+                idleRounds += 1
+                if idleRounds >= 3 { break }
+            } else {
+                idleRounds = 0
+            }
         }
         return totalDeliveries
     }
 
     /// Create a test packet originating from a specific node.
+    /// Uses `.noiseEncrypted` by default (urgency 1.0) for deterministic relay.
     private func makePacket(
         from sender: SimulatedNode,
-        type: MessageType = .meshBroadcast,
+        type: MessageType = .noiseEncrypted,
         ttl: UInt8 = 5,
         flags: PacketFlags = .broadcastSigned,
         payload: Data = Data([0xDE, 0xAD]),
@@ -123,23 +142,23 @@ final class GossipRouterIntegrationTests: XCTestCase {
 
     // MARK: - Test: Message Delivery via Gossip
 
-    func testMessageDeliveryAcross10NodeMesh() {
-        let nodes = buildLinearMesh(count: 10)
+    func testMessageDeliveryAcross9NodeMesh() {
+        // 9 nodes: sender (node 0) + 8 receivers. TTL=7 covers 7 decrements + 1 final
+        // delivery at TTL=0, reaching 8 hops from the injection point.
+        let nodes = buildLinearMesh(count: 9)
 
         // Node 0 originates a broadcast with TTL 7.
         let packet = makePacket(from: nodes[0], ttl: 7)
 
-        // Inject into node 0 as if originating locally.
+        // Mark as seen at node 0 (originator), then inject at node 1.
         nodes[0].router.bloomFilter.insert(nodes[0].router.packetIdentifier(for: packet))
-        // Then relay to node 1.
         nodes[1].injectPacket(packet, from: nodes[0].peerID)
 
         // Propagate through the mesh.
         propagate(nodes)
 
-        // Verify all 10 nodes received the packet (node 0 originated it, node 1-9 via gossip).
-        // Node 0 did not formally "receive" it through handleIncoming (it originated it).
-        for i in 1 ..< 10 {
+        // Nodes 1-8 should all receive (8 hops = max reach with TTL 7).
+        for i in 1 ..< 9 {
             let received = nodes[i].receivedPackets.contains { p in
                 p.senderID == nodes[0].peerID && p.payload == packet.payload
             }
@@ -203,12 +222,13 @@ final class GossipRouterIntegrationTests: XCTestCase {
         // Inject at node 1.
         nodes[1].injectPacket(packet, from: nodes[0].peerID)
 
-        // After one relay, TTL should be decremented.
+        // Wait for jittered relay, then drain.
+        Thread.sleep(forTimeInterval: 0.05)
         nodes[1].drainRelayQueue()
 
         // Node 2 should see TTL = 2.
         let atNode2 = nodes[2].receivedPackets.first { $0.senderID == nodes[0].peerID }
-        XCTAssertNotNil(atNode2)
+        XCTAssertNotNil(atNode2, "Node 2 should have received the packet")
         XCTAssertEqual(atNode2?.ttl, 2, "TTL should be decremented from 3 to 2 at node 2")
 
         // Continue propagation.
@@ -216,7 +236,7 @@ final class GossipRouterIntegrationTests: XCTestCase {
 
         // Node 3 should see TTL = 1.
         let atNode3 = nodes[3].receivedPackets.first { $0.senderID == nodes[0].peerID }
-        XCTAssertNotNil(atNode3)
+        XCTAssertNotNil(atNode3, "Node 3 should have received the packet")
         XCTAssertEqual(atNode3?.ttl, 1, "TTL should be 1 at node 3")
     }
 
@@ -250,8 +270,7 @@ final class GossipRouterIntegrationTests: XCTestCase {
         XCTAssertTrue(nodes[1].receivedPackets.contains { $0.senderID == nodes[0].peerID })
         XCTAssertTrue(nodes[2].receivedPackets.contains { $0.senderID == nodes[0].peerID })
 
-        // Node 4+ may or may not receive it depending on relay probability.
-        // But nodes far beyond TTL range should definitely not.
+        // Nodes far beyond TTL range should not.
         let node8Received = nodes[8].receivedPackets.contains { $0.senderID == nodes[0].peerID }
         let node9Received = nodes[9].receivedPackets.contains { $0.senderID == nodes[0].peerID }
         XCTAssertFalse(node8Received, "Node 8 should be unreachable with TTL=2")
@@ -307,7 +326,7 @@ final class GossipRouterIntegrationTests: XCTestCase {
         nodes[0].router.sosBloomFilter.insert(nodes[0].router.packetIdentifier(for: sosPacket))
         nodes[1].injectPacket(sosPacket, from: nodes[0].peerID)
 
-        // Propagate step by step to observe TTL at each node.
+        // SOS relay is synchronous (no jitter) — drain immediately.
         nodes[1].drainRelayQueue()
 
         // At node 2: SOS with TTL=7, first hop -- TTL should remain 7 (>4 rule).
@@ -340,7 +359,7 @@ final class GossipRouterIntegrationTests: XCTestCase {
         )
 
         let normalPacket = Packet(
-            type: .meshBroadcast,
+            type: .noiseEncrypted,
             ttl: 5,
             timestamp: Packet.currentTimestamp(),
             flags: .broadcastSigned,
@@ -354,7 +373,6 @@ final class GossipRouterIntegrationTests: XCTestCase {
 
         // The normal Bloom filter should NOT contain the SOS packet ID.
         let sosID = node.router.packetIdentifier(for: sosPacket)
-        let normalContains = node.router.bloomFilter.contains(sosID)
         let sosContains = node.router.sosBloomFilter.contains(sosID)
 
         // SOS should be in the SOS filter.
@@ -378,7 +396,7 @@ final class GossipRouterIntegrationTests: XCTestCase {
         XCTAssertEqual(node.router.packetsDropped, 0)
 
         let packet = Packet(
-            type: .meshBroadcast,
+            type: .noiseEncrypted,
             ttl: 5,
             timestamp: Packet.currentTimestamp(),
             flags: .broadcastSigned,
@@ -403,7 +421,7 @@ final class GossipRouterIntegrationTests: XCTestCase {
         let source = PeerID(bytes: Data(repeating: 0x02, count: 8))!
 
         let packet = Packet(
-            type: .meshBroadcast,
+            type: .noiseEncrypted,
             ttl: 5,
             timestamp: Packet.currentTimestamp(),
             flags: [],
