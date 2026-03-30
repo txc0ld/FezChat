@@ -22,6 +22,14 @@ enum SpringConstants {
     /// Gentle spring for subtle transitions (fades, small movements).
     static let gentle = Spring(mass: 1.0, stiffness: 150, damping: 20)
 
+    /// Snappy spring: stiffness 500, damping 28.
+    /// Used for toggles and quick state changes.
+    static let snappy = Spring(mass: 1.0, stiffness: 500, damping: 28)
+
+    /// Elastic spring: stiffness 250, damping 12.
+    /// Used for playful elements (emoji reactions, badge pops).
+    static let elastic = Spring(mass: 1.0, stiffness: 250, damping: 12)
+
     // MARK: - SwiftUI Animation values
 
     /// Page entrance animation wrapping the page entrance spring.
@@ -35,6 +43,12 @@ enum SpringConstants {
 
     /// Gentle animation for subtle transitions.
     static let gentleAnimation: Animation = .spring(gentle)
+
+    /// Snappy animation for toggles and quick state changes.
+    static let snappyAnimation: Animation = .spring(snappy)
+
+    /// Elastic animation for playful elements (emoji, badge pops).
+    static let elasticAnimation: Animation = .spring(elastic)
 
     /// Custom bezier-like reveal animation (approximated with easeOut).
     /// Approximates cubic-bezier(0.16, 1, 0.3, 1) for reveals.
@@ -72,6 +86,16 @@ enum SpringConstants {
     /// Returns an accessible reveal animation.
     static var accessibleReveal: Animation {
         accessibleAnimation(revealAnimation)
+    }
+
+    /// Returns an accessible snappy animation for toggles.
+    static var accessibleSnappy: Animation {
+        accessibleAnimation(snappyAnimation)
+    }
+
+    /// Returns an accessible elastic animation for playful elements.
+    static var accessibleElastic: Animation {
+        accessibleAnimation(elasticAnimation)
     }
 
     // MARK: - Reduce Motion detection

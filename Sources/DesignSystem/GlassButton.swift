@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - GlassButton
 
 /// A glass-styled button with accent purple gradient fill.
-/// Provides visual feedback for hover (macOS) and press states.
+/// Provides visual feedback for hover (macOS) and press states with spring animations.
 /// Enforces minimum 44pt tap target for accessibility.
 struct GlassButton: View {
 
@@ -56,6 +56,7 @@ struct GlassButton: View {
     let action: () -> Void
 
     @State private var isPressed = false
+    @State private var pressScale: CGFloat = 1.0
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled
 
@@ -107,19 +108,42 @@ struct GlassButton: View {
             .padding(.horizontal, size.horizontalPadding)
             .frame(minHeight: BlipSizing.minTapTarget)
             .background(background)
-            .clipShape(RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous))
+            .clipShape(buttonShape)
             .overlay(borderOverlay)
             .opacity(isEnabled ? 1.0 : 0.5)
-            .scaleEffect(isPressed ? 0.97 : 1.0)
-            .animation(SpringConstants.buttonPress, value: isPressed)
+            .scaleEffect(pressScale)
         }
         .buttonStyle(.plain)
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
-                .onChanged { _ in isPressed = true }
-                .onEnded { _ in isPressed = false }
+                .onChanged { _ in
+                    guard !isPressed else { return }
+                    isPressed = true
+                    withAnimation(.spring(response: 0.20, dampingFraction: 0.65)) {
+                        pressScale = 0.985
+                    }
+                }
+                .onEnded { _ in
+                    isPressed = false
+                    // Overshoot to 1.002 then settle to 1.0
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.5)) {
+                        pressScale = 1.002
+                    }
+                    // Settle back to 1.0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        withAnimation(.spring(response: 0.20, dampingFraction: 0.8)) {
+                            pressScale = 1.0
+                        }
+                    }
+                }
         )
         .accessibilityAddTraits(.isButton)
+    }
+
+    // MARK: - Private
+
+    private var buttonShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous)
     }
 
     // MARK: - Style resolution
@@ -130,18 +154,23 @@ struct GlassButton: View {
         case .primary:
             LinearGradient.blipAccent
                 .opacity(isPressed ? 0.85 : 1.0)
+                .overlay(
+                    isPressed
+                        ? Color.white.opacity(0.10)
+                        : Color.clear
+                )
         case .secondary:
-            RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous)
+            buttonShape
                 .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous)
-                        .fill(isPressed ? hoverFill : Color.clear)
+                    buttonShape
+                        .fill(isPressed ? brightenedFill : Color.clear)
                 )
         case .outline:
             Color.clear
                 .overlay(
-                    RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous)
-                        .fill(isPressed ? hoverFill : Color.clear)
+                    buttonShape
+                        .fill(isPressed ? brightenedFill : Color.clear)
                 )
         }
     }
@@ -152,11 +181,42 @@ struct GlassButton: View {
         case .primary:
             EmptyView()
         case .secondary:
-            RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous)
-                .stroke(borderColor, lineWidth: BlipSizing.hairline)
+            buttonShape
+                .stroke(
+                    LinearGradient(
+                        colors: gradientBorderColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: BlipSizing.hairline
+                )
         case .outline:
-            RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous)
-                .stroke(Color.blipAccentPurple.opacity(0.6), lineWidth: 1)
+            buttonShape
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.blipAccentPurple.opacity(0.8),
+                            Color.blipAccentPurple.opacity(0.3)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+    }
+
+    private var gradientBorderColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                .white.opacity(isPressed ? 0.25 : 0.15),
+                .white.opacity(isPressed ? 0.08 : 0.04)
+            ]
+        } else {
+            return [
+                .black.opacity(isPressed ? 0.05 : 0.03),
+                .black.opacity(isPressed ? 0.15 : 0.10)
+            ]
         }
     }
 
@@ -180,6 +240,13 @@ struct GlassButton: View {
             ? .white.opacity(0.05)
             : .black.opacity(0.05)
     }
+
+    /// Brightened fill for press state — 10% more opacity than hover.
+    private var brightenedFill: Color {
+        colorScheme == .dark
+            ? .white.opacity(0.10)
+            : .black.opacity(0.08)
+    }
 }
 
 // MARK: - SpringConstants helper for button
@@ -198,4 +265,24 @@ extension GlassButton {
     func fullWidth() -> some View {
         self.frame(maxWidth: .infinity)
     }
+}
+
+// MARK: - Preview
+
+#Preview("GlassButton Styles") {
+    ZStack {
+        GradientBackground()
+
+        VStack(spacing: BlipSpacing.md) {
+            GlassButton("Primary Action", icon: "bolt.fill", style: .primary) { }
+
+            GlassButton("Secondary", icon: "gear", style: .secondary) { }
+
+            GlassButton("Outline", icon: "arrow.right", style: .outline) { }
+
+            GlassButton("Loading", style: .primary, isLoading: true) { }
+        }
+        .padding()
+    }
+    .preferredColorScheme(.dark)
 }
