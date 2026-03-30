@@ -214,10 +214,12 @@ final class MeshViewModel {
                 averageRSSI = -100
             }
 
-            // Estimate mesh size (direct peers + their announced neighbors)
-            let allPeersDescriptor = FetchDescriptor<MeshPeer>()
-            let allPeers = try context.fetch(allPeersDescriptor)
-            estimatedMeshSize = allPeers.count
+            // Estimate mesh size — only count peers seen in the last 5 minutes
+            let recentThreshold = Date().addingTimeInterval(-300)
+            let recentPredicate = #Predicate<MeshPeer> { $0.lastSeenAt > recentThreshold }
+            let recentDescriptor = FetchDescriptor<MeshPeer>(predicate: recentPredicate)
+            let recentPeers = try context.fetch(recentDescriptor)
+            estimatedMeshSize = recentPeers.count
 
             // Update crowd scale
             updateCrowdScale(peerEstimate: estimatedMeshSize)

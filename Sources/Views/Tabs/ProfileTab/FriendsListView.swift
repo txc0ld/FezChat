@@ -181,6 +181,34 @@ struct FriendsListView: View {
                 LazyVStack(spacing: BlipSpacing.sm) {
                     ForEach(Array(filteredFriends.enumerated()), id: \.element.id) { index, friend in
                         FriendRow(friend: friend, onTap: { selectedFriend = friend })
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if friend.status == .accepted {
+                                    Button(role: .destructive) {
+                                        removeFriend(friend)
+                                    } label: {
+                                        Label("Remove", systemImage: "person.badge.minus")
+                                    }
+                                    Button {
+                                        blockFriend(friend)
+                                    } label: {
+                                        Label("Block", systemImage: "hand.raised")
+                                    }
+                                    .tint(.orange)
+                                } else if friend.status == .blocked {
+                                    Button {
+                                        unblockFriend(friend)
+                                    } label: {
+                                        Label("Unblock", systemImage: "hand.raised.slash")
+                                    }
+                                    .tint(.green)
+                                } else if friend.status == .pending {
+                                    Button(role: .destructive) {
+                                        declineFriend(friend)
+                                    } label: {
+                                        Label("Decline", systemImage: "xmark")
+                                    }
+                                }
+                            }
                             .staggeredReveal(index: index)
                     }
                 }
@@ -253,6 +281,50 @@ struct FriendsListView: View {
             try? await messageService.acceptFriendRequest(from: friend)
             loadFriends()
         }
+    }
+
+    private func removeFriend(_ item: FriendListItem) {
+        let context = ModelContext(modelContext.container)
+        let friendID = item.id
+        let desc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        guard let friend = try? context.fetch(desc).first else { return }
+        context.delete(friend)
+        try? context.save()
+        loadFriends()
+        NotificationCenter.default.post(name: .friendListDidChange, object: nil)
+    }
+
+    private func blockFriend(_ item: FriendListItem) {
+        let context = ModelContext(modelContext.container)
+        let friendID = item.id
+        let desc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        guard let friend = try? context.fetch(desc).first else { return }
+        friend.statusRaw = FriendStatus.blocked.rawValue
+        try? context.save()
+        loadFriends()
+        NotificationCenter.default.post(name: .friendListDidChange, object: nil)
+    }
+
+    private func unblockFriend(_ item: FriendListItem) {
+        let context = ModelContext(modelContext.container)
+        let friendID = item.id
+        let desc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        guard let friend = try? context.fetch(desc).first else { return }
+        friend.statusRaw = FriendStatus.accepted.rawValue
+        try? context.save()
+        loadFriends()
+        NotificationCenter.default.post(name: .friendListDidChange, object: nil)
+    }
+
+    private func declineFriend(_ item: FriendListItem) {
+        let context = ModelContext(modelContext.container)
+        let friendID = item.id
+        let desc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        guard let friend = try? context.fetch(desc).first else { return }
+        context.delete(friend)
+        try? context.save()
+        loadFriends()
+        NotificationCenter.default.post(name: .friendListDidChange, object: nil)
     }
 
     private func loadFriends() {

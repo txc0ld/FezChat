@@ -31,8 +31,8 @@ public enum BLEConstants: Sendable {
     /// Connection timeout in seconds.
     public static let connectionTimeout: TimeInterval = 10.0
 
-    /// Timeout before retrying a failed peripheral (spec: 120s backoff).
-    public static let reconnectBackoff: TimeInterval = 120.0
+    /// Timeout before retrying a failed peripheral (reduced from 120s for festival density).
+    public static let reconnectBackoff: TimeInterval = 30.0
 
     /// Peer stale threshold: a peer not heard from in this interval is considered gone.
     public static let peerStaleTimeout: TimeInterval = 60.0
