@@ -8,7 +8,6 @@ import BlipCrypto
 // MARK: - Message Service Error
 
 enum MessageServiceError: Error, Sendable {
-    case insufficientBalance
     case channelNotFound
     case senderNotFound
     case encryptionFailed(String)
@@ -42,7 +41,7 @@ protocol MessageServiceDelegate: AnyObject, Sendable {
 /// - `BlipProtocol.PacketSerializer` for wire format
 /// - `BlipMesh.Transport` for BLE/WebSocket delivery
 /// - SwiftData for persistence
-/// - MessagePack for balance tracking
+/// - MessageQueue for retry tracking
 final class MessageService: @unchecked Sendable {
 
     // MARK: - Logging
@@ -113,15 +112,6 @@ final class MessageService: @unchecked Sendable {
 
         DebugLogger.shared.log("TX", "sendTextMessage: channelID=\(channel.id) contentLen=\(content.utf8.count) type=\(channel.type)")
 
-        // Check message balance (text = 1 message credit)
-        do {
-            try await deductMessageBalance()
-            DebugLogger.shared.log("TX", "Balance deducted OK")
-        } catch {
-            DebugLogger.shared.log("TX", "BALANCE CHECK FAILED: \(error)", isError: true)
-            throw error
-        }
-
         let context = ModelContext(modelContainer)
 
         // Create the message model
@@ -165,8 +155,6 @@ final class MessageService: @unchecked Sendable {
         guard let identity = getIdentity() else {
             throw MessageServiceError.senderNotFound
         }
-
-        try await deductMessageBalance()
 
         let context = ModelContext(modelContainer)
 
@@ -219,8 +207,6 @@ final class MessageService: @unchecked Sendable {
         guard imageData.count <= 500_000 else {
             throw MessageServiceError.payloadTooLarge(imageData.count)
         }
-
-        try await deductMessageBalance()
 
         let context = ModelContext(modelContainer)
 
@@ -1728,34 +1714,6 @@ final class MessageService: @unchecked Sendable {
         print("[Blip-TX] ERROR resolveRecipient: no valid remote user found in channel \(channelID)")
         DebugLogger.emit("DM", "resolveRecipient FAILED: no valid remote user in channel \(channelID)", isError: true)
         return nil
-    }
-
-    // MARK: - Private: Balance Management
-
-    @MainActor
-    private func deductMessageBalance() async throws {
-        let context = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<MessagePack>(
-            sortBy: [SortDescriptor(\.purchaseDate, order: .forward)]
-        )
-        let packs = try context.fetch(descriptor)
-
-        // Find a pack with remaining balance
-        for pack in packs {
-            if pack.isUnlimited {
-                DebugLogger.shared.log("TX", "Balance: unlimited pack found")
-                return
-            }
-            if pack.messagesRemaining > 0 {
-                pack.messagesRemaining -= 1
-                try context.save()
-                DebugLogger.shared.log("TX", "Balance deducted: \(pack.messagesRemaining) remaining")
-                return
-            }
-        }
-
-        DebugLogger.shared.log("TX", "INSUFFICIENT BALANCE: \(packs.count) packs, all exhausted", isError: true)
-        throw MessageServiceError.insufficientBalance
     }
 
     // MARK: - Private: Retry Queue

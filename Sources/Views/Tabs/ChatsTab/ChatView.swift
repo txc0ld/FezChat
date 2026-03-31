@@ -14,7 +14,6 @@ struct ChatView: View {
     @State private var messageText: String = ""
     @State private var showImageViewer = false
     @State private var selectedImageData: Data? = nil
-    @State private var showPaywall = false
     @State private var scrollToBottomID: UUID? = nil
     @State private var isPTTRecording = false
     @State private var pttAudioLevels: [Float] = []
@@ -81,8 +80,8 @@ struct ChatView: View {
                         }
                     }
                 ),
-                onSend: { _ in
-                    Task { await sendMessage() }
+                onSend: { trimmedText in
+                    Task { await sendMessage(text: trimmedText) }
                 },
                 onAttachment: {
                     // Attachment handling
@@ -94,12 +93,6 @@ struct ChatView: View {
                 onPTTEnd: {
                     isPTTRecording = false
                     pttAudioLevels = []
-                },
-                messagesRemaining: coordinator.profileViewModel?.isUnlimited == true
-                    ? nil
-                    : coordinator.profileViewModel?.messageBalance,
-                onLowBalanceTap: {
-                    showPaywall = true
                 }
             )
         }
@@ -111,13 +104,6 @@ struct ChatView: View {
             }
         }
         .toolbarBackground(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showPaywall, onDismiss: {
-            Task {
-                await coordinator.profileViewModel?.loadProfile()
-            }
-        }) {
-            PaywallSheet(storeViewModel: coordinator.storeViewModel)
-        }
         .fullScreenCover(isPresented: $showImageViewer) {
             ImageViewer(imageData: selectedImageData, isPresented: $showImageViewer)
         }
@@ -296,9 +282,9 @@ struct ChatView: View {
         await vm.openConversation(channel)
     }
 
-    private func sendMessage() async {
+    private func sendMessage(text: String) async {
         guard let vm = chatViewModel else { return }
-        await vm.sendTextMessage()
+        await vm.sendTextMessage(text: text)
         await coordinator.profileViewModel?.loadProfile()
     }
 

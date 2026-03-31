@@ -133,14 +133,6 @@ struct OnboardingFlow: View {
                 )
                 modelContext.insert(user)
 
-                // Seed starter message pack so sends work immediately
-                let starterPack = MessagePack(
-                    packType: .starter10,
-                    messagesRemaining: 100,
-                    transactionID: "bypass-starter-\(UUID().uuidString)"
-                )
-                modelContext.insert(starterPack)
-
                 try modelContext.save()
 
                 // Register on backend (fire-and-forget)
@@ -149,18 +141,6 @@ struct OnboardingFlow: View {
                         emailHash: emailHash,
                         username: username
                     )
-                }
-            } else {
-                // User exists — ensure they have a message pack
-                let packDesc = FetchDescriptor<MessagePack>()
-                if try modelContext.fetch(packDesc).isEmpty {
-                    let starterPack = MessagePack(
-                        packType: .starter10,
-                        messagesRemaining: 100,
-                        transactionID: "bypass-starter-\(UUID().uuidString)"
-                    )
-                    modelContext.insert(starterPack)
-                    try modelContext.save()
                 }
             }
 

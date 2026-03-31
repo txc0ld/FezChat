@@ -24,7 +24,6 @@ enum BlipSchema {
         BreadcrumbPoint.self,
         CrowdPulse.self,
         UserPreferences.self,
-        MessagePack.self,
         GroupSenderKey.self,
         NoiseSessionModel.self
     ]

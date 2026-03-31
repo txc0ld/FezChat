@@ -146,10 +146,8 @@ struct MessagePackStore: View {
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
 
-                let balance = resolvedStoreViewModel?.messageBalance ?? 0
-
                 HStack(alignment: .firstTextBaseline, spacing: BlipSpacing.xs) {
-                    Text(resolvedStoreViewModel?.balanceDisplay ?? "\(balance)")
+                    Text(resolvedStoreViewModel?.balanceDisplay ?? "Unlimited")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
                         .foregroundStyle(.blipAccentPurple)
                         .contentTransition(.numericText())
@@ -159,7 +157,7 @@ struct MessagePackStore: View {
                         .foregroundStyle(theme.colors.mutedText)
                 }
 
-                if balance <= 5 && resolvedStoreViewModel?.isUnlimited != true {
+                if false {
                     HStack(spacing: BlipSpacing.xs) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 12))
@@ -224,7 +222,7 @@ struct MessagePackStore: View {
     }
 
     private func packCard(_ product: ProductInfo) -> some View {
-        let isBestValue = product.packType == .festival50
+        let isBestValue = product.messageCount == 50
 
         return Button(action: {
             Task { await resolvedStoreViewModel?.purchase(product) }

@@ -54,12 +54,6 @@ final class ProfileViewModel {
     /// Whether the user has completed phone verification.
     var isPhoneVerified = false
 
-    /// Total message balance across all packs.
-    var messageBalance: Int = 0
-
-    /// Whether the user has an unlimited subscription.
-    var isUnlimited = false
-
     /// Editing state fields
     var editingUsername: String = ""
     var editingDisplayName: String = ""
@@ -126,9 +120,6 @@ final class ProfileViewModel {
 
             // Phone verification removed (FEZ-21: switched to email + social login)
             isPhoneVerified = false
-
-            // Calculate message balance
-            await refreshMessageBalance()
 
         } catch {
             errorMessage = "Failed to load profile: \(error.localizedDescription)"
@@ -381,20 +372,6 @@ final class ProfileViewModel {
         } catch {
             logger.error("Failed to save preferences: \(error.localizedDescription)")
             errorMessage = "Failed to save preferences: \(error.localizedDescription)"
-        }
-    }
-
-    // MARK: - Message Balance
-
-    private func refreshMessageBalance() async {
-        let context = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<MessagePack>()
-        do {
-            let packs = try context.fetch(descriptor)
-            isUnlimited = packs.contains { $0.isUnlimited }
-            messageBalance = packs.reduce(0) { $0 + $1.messagesRemaining }
-        } catch {
-            logger.error("Failed to fetch message packs: \(error.localizedDescription)")
         }
     }
 

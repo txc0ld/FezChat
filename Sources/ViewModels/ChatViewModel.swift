@@ -240,9 +240,12 @@ final class ChatViewModel {
     // MARK: - Send Messages
 
     /// Send a text message in the active channel.
-    func sendTextMessage() async {
+    /// - Parameter override: Pre-captured text from the send button. When provided,
+    ///   this is used instead of `composingText` to avoid the race where the input
+    ///   binding clears `composingText` before this async method reads it.
+    func sendTextMessage(text override: String? = nil) async {
         guard let channel = activeChannel else { return }
-        let text = composingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = (override ?? composingText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
         isSending = true

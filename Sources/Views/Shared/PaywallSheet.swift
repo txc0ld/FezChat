@@ -173,7 +173,7 @@ struct PaywallSheet: View {
                             .font(.custom(BlipFontName.semiBold, size: 16, relativeTo: .body))
                             .foregroundStyle(theme.colors.text)
 
-                        if product.packType == .festival50 {
+                        if product.messageCount == 50 {
                             Text("BEST VALUE")
                                 .font(.custom(BlipFontName.bold, size: 9, relativeTo: .caption2))
                                 .foregroundStyle(.white)

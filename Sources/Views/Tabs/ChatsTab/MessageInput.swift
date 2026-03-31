@@ -19,12 +19,6 @@ struct MessageInput: View {
     /// Called when PTT ends (finger up).
     var onPTTEnd: () -> Void = {}
 
-    /// Remaining message count. Nil means unlimited.
-    var messagesRemaining: Int? = nil
-
-    /// Called when the low balance pill is tapped.
-    var onLowBalanceTap: () -> Void = {}
-
     @State private var isSendMode = false
     @State private var isPTTActive = false
     @State private var showAttachmentMenu = false
@@ -38,11 +32,6 @@ struct MessageInput: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Low balance nudge
-            if let remaining = messagesRemaining, remaining <= 5, remaining > 0 {
-                lowBalancePill(remaining: remaining)
-            }
-
             // Input bar
             HStack(alignment: .bottom, spacing: BlipSpacing.sm) {
                 // Attachment button
@@ -194,35 +183,6 @@ struct MessageInput: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    // MARK: - Low Balance Pill
-
-    private func lowBalancePill(remaining: Int) -> some View {
-        Button {
-            onLowBalanceTap()
-        } label: {
-            HStack(spacing: BlipSpacing.xs) {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 12))
-                Text("\(remaining) message\(remaining == 1 ? "" : "s") left")
-                    .font(.custom(BlipFontName.medium, size: 12, relativeTo: .caption2))
-            }
-            .foregroundStyle(theme.colors.statusAmber)
-            .padding(.horizontal, BlipSpacing.md)
-            .padding(.vertical, BlipSpacing.xs + 2)
-            .background(
-                Capsule()
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(theme.colors.statusAmber.opacity(0.3), lineWidth: BlipSizing.hairline)
-            )
-        }
-        .buttonStyle(.plain)
-        .frame(minHeight: BlipSizing.minTapTarget)
-        .padding(.bottom, BlipSpacing.xs)
-    }
-
     // MARK: - Background
 
     @ViewBuilder
@@ -249,7 +209,7 @@ struct MessageInput: View {
         var body: some View {
             VStack {
                 Spacer()
-                MessageInput(text: $text, messagesRemaining: 3)
+                MessageInput(text: $text)
             }
             .background(GradientBackground())
             .environment(\.theme, Theme.shared)

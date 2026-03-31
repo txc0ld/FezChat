@@ -55,6 +55,7 @@ targets:
     postBuildScripts:
       - name: Embed Git Info
         script: |
+          cd "${SRCROOT}"
           GIT_HASH=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
           GIT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

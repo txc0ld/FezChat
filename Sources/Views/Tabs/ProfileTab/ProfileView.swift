@@ -17,7 +17,6 @@ struct ProfileView: View {
     @State private var showEditProfile = false
     @State private var showFriends = false
     @State private var showSettings = false
-    @State private var showMessageStore = false
     @State private var showQRCode = false
 
     @Environment(\.theme) private var theme
@@ -25,8 +24,6 @@ struct ProfileView: View {
 
     /// The local user (first User in SwiftData).
     private var user: User? { profileViewModel?.currentUser ?? users.first }
-    private var resolvedMessageBalance: Int { profileViewModel?.messageBalance ?? 0 }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -84,18 +81,6 @@ struct ProfileView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.ultraThinMaterial)
             }
-            .sheet(isPresented: $showMessageStore, onDismiss: {
-                Task {
-                    await profileViewModel?.loadProfile()
-                }
-            }) {
-                NavigationStack {
-                    MessagePackStore(storeViewModel: storeViewModel)
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.ultraThinMaterial)
-            }
             .sheet(isPresented: $showQRCode) {
                 if let user {
                     QRCodeSheet(user: user)
@@ -106,12 +91,6 @@ struct ProfileView: View {
             }
             .task {
                 await profileViewModel?.loadProfile()
-            }
-            .onChange(of: showMessageStore) { _, isPresented in
-                guard !isPresented else { return }
-                Task {
-                    await profileViewModel?.loadProfile()
-                }
             }
             .onChange(of: showSettings) { _, isPresented in
                 guard !isPresented else { return }
@@ -134,11 +113,8 @@ struct ProfileView: View {
                     .padding(.horizontal, BlipSpacing.md)
                     .staggeredReveal(index: 1)
 
-                balanceCard
-                    .staggeredReveal(index: 2)
-
                 quickActions(user)
-                    .staggeredReveal(index: 3)
+                    .staggeredReveal(index: 2)
 
                 Spacer().frame(height: BlipSpacing.xxl)
             }
@@ -260,42 +236,6 @@ struct ProfileView: View {
         .padding(.horizontal, BlipSpacing.md)
     }
 
-    // MARK: - Balance Card
-
-    private var balanceCard: some View {
-        Button(action: { showMessageStore = true }) {
-            GlassCard(thickness: .regular) {
-                HStack(spacing: BlipSpacing.md) {
-                    VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-                        Text("Message Balance")
-                            .font(theme.typography.secondary)
-                            .foregroundStyle(theme.colors.mutedText)
-
-                        HStack(alignment: .firstTextBaseline, spacing: BlipSpacing.xs) {
-                            Text("\(resolvedMessageBalance)")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .foregroundStyle(.blipAccentPurple)
-                                .contentTransition(.numericText())
-
-                            Text("messages left")
-                                .font(theme.typography.secondary)
-                                .foregroundStyle(theme.colors.mutedText)
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(.blipAccentPurple)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, BlipSpacing.md)
-        .accessibilityLabel("Message balance: \(resolvedMessageBalance) messages left. Tap to buy more.")
-    }
-
     // MARK: - Quick Actions
 
     private func quickActions(_ user: User) -> some View {
@@ -311,10 +251,6 @@ struct ProfileView: View {
             }
 
             HStack(spacing: BlipSpacing.md) {
-                quickActionCard(icon: "bag.fill", title: "Message Packs", subtitle: "\(resolvedMessageBalance) left") {
-                    showMessageStore = true
-                }
-
                 quickActionCard(icon: "qrcode", title: "My QR Code", subtitle: "Share profile") {
                     showQRCode = true
                 }

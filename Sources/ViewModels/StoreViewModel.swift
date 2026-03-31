@@ -24,7 +24,6 @@ struct ProductInfo: Identifiable, Sendable {
     let description: String
     let displayPrice: String
     let messageCount: Int
-    let packType: PackType
     let isSubscription: Bool
     var isPurchased: Bool = false
 
@@ -52,12 +51,6 @@ final class StoreViewModel {
     /// Available products for purchase.
     var products: [ProductInfo] = []
 
-    /// Current total message balance.
-    var messageBalance: Int = 0
-
-    /// Whether the user has an active unlimited subscription.
-    var isUnlimited = false
-
     /// Whether products are currently loading.
     var isLoadingProducts = false
 
@@ -80,7 +73,6 @@ final class StoreViewModel {
 
     struct PurchaseRecord: Identifiable, Sendable {
         let id: UUID
-        let packType: PackType
         let date: Date
         let transactionID: String
     }
@@ -95,14 +87,14 @@ final class StoreViewModel {
 
     // MARK: - Product IDs
 
-    /// StoreKit product identifiers mapped to pack types.
-    private static let productIDs: [(String, PackType)] = [
-        ("au.heyblip.Blip.starter10", .starter10),
-        ("au.heyblip.Blip.social25", .social25),
-        ("au.heyblip.Blip.festival50", .festival50),
-        ("au.heyblip.Blip.squad100", .squad100),
-        ("au.heyblip.Blip.season1000", .season1000),
-        ("au.heyblip.Blip.unlimited", .unlimited)
+    /// StoreKit product identifiers.
+    private static let productIDs: [(String, Int)] = [
+        ("au.heyblip.Blip.starter10", 10),
+        ("au.heyblip.Blip.social25", 25),
+        ("au.heyblip.Blip.festival50", 50),
+        ("au.heyblip.Blip.squad100", 100),
+        ("au.heyblip.Blip.season1000", 1000),
+        ("au.heyblip.Blip.unlimited", Int.max)
     ]
 
     private static let allProductIDs: Set<String> = Set(productIDs.map(\.0))
@@ -156,8 +148,7 @@ final class StoreViewModel {
                     displayName: product.displayName,
                     description: product.description,
                     displayPrice: product.displayPrice,
-                    messageCount: packInfo.1.messageCount,
-                    packType: packInfo.1,
+                    messageCount: packInfo.1,
                     isSubscription: product.type == .autoRenewable,
                     product: product
                 )
@@ -192,8 +183,8 @@ final class StoreViewModel {
                 // Verify receipt with backend
                 await verifyReceipt(transaction: transaction)
 
-                // Credit the message pack
-                await creditPurchase(packType: productInfo.packType, transaction: transaction)
+                // Credit the purchase (message packs disabled — placeholder for future monetization)
+                logger.info("Purchase completed: \(productInfo.displayName)")
 
                 await transaction.finish()
 
@@ -236,9 +227,7 @@ final class StoreViewModel {
             for await result in Transaction.currentEntitlements {
                 do {
                     let transaction = try checkVerified(result)
-                    if let packInfo = Self.productIDs.first(where: { $0.0 == transaction.productID }) {
-                        await creditPurchase(packType: packInfo.1, transaction: transaction)
-                    }
+                    logger.info("Restored transaction: \(transaction.productID)")
                 } catch {
                     logger.error("Entitlement verification failed during restore: \(error.localizedDescription)")
                 }
@@ -255,54 +244,18 @@ final class StoreViewModel {
         isRestoring = false
     }
 
-    // MARK: - Balance
+    // MARK: - Balance (disabled — messaging is free during testing)
 
-    /// Refresh the message balance from SwiftData.
-    func refreshBalance() async {
-        let context = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<MessagePack>()
+    func refreshBalance() async {}
 
-        do {
-            let packs = try context.fetch(descriptor)
-            isUnlimited = packs.contains { $0.isUnlimited }
-            messageBalance = isUnlimited ? Int.max : packs.reduce(0) { $0 + $1.messagesRemaining }
-        } catch {
-            messageBalance = 0
-        }
-    }
+    var balanceDisplay: String { "Unlimited" }
 
-    /// Formatted balance string for display.
-    var balanceDisplay: String {
-        if isUnlimited { return "Unlimited" }
-        return "\(messageBalance)"
-    }
-
-    /// Whether the user can send a message (has balance).
-    var canSendMessage: Bool {
-        isUnlimited || messageBalance > 0
-    }
+    var canSendMessage: Bool { true }
 
     // MARK: - Purchase History
 
     private func loadPurchaseHistory() async {
-        let context = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<MessagePack>(
-            sortBy: [SortDescriptor(\.purchaseDate, order: .reverse)]
-        )
-
-        do {
-            let packs = try context.fetch(descriptor)
-            purchaseHistory = packs.map { pack in
-                PurchaseRecord(
-                    id: pack.id,
-                    packType: pack.packType,
-                    date: pack.purchaseDate,
-                    transactionID: pack.transactionID
-                )
-            }
-        } catch {
-            purchaseHistory = []
-        }
+        purchaseHistory = []
     }
 
     // MARK: - Private: Transaction Listener
@@ -314,8 +267,8 @@ final class StoreViewModel {
                 guard let self else { return }
                 do {
                     let transaction = try await self.checkVerified(result)
-                    if let packInfo = productIDs.first(where: { $0.0 == transaction.productID }) {
-                        await self.creditPurchase(packType: packInfo.1, transaction: transaction)
+                    await MainActor.run {
+                        self.logger.info("Transaction update: \(transaction.productID)")
                     }
                     await transaction.finish()
                     await self.refreshBalance()
@@ -365,50 +318,6 @@ final class StoreViewModel {
             _ = try await URLSession.shared.data(for: request)
         } catch {
             logger.error("Failed to verify receipt with server: \(error.localizedDescription)")
-        }
-    }
-
-    // MARK: - Private: Credit Purchase
-
-    @MainActor
-    private func creditPurchase(packType: PackType, transaction: Transaction) async {
-        let context = ModelContext(modelContainer)
-
-        // Check for duplicate transaction
-        let txID = String(transaction.id)
-        let descriptor = FetchDescriptor<MessagePack>(predicate: #Predicate { $0.transactionID == txID })
-        do {
-            let existing = try context.fetch(descriptor)
-            if !existing.isEmpty {
-                return // Already credited
-            }
-        } catch {
-            logger.error("Failed to check for duplicate transaction: \(error.localizedDescription)")
-            errorMessage = "Failed to verify transaction: \(error.localizedDescription)"
-            return
-        }
-
-        // Handle subscription vs consumable
-        if transaction.productType == .autoRenewable {
-            // For subscriptions, check if the subscription is still active
-            if transaction.revocationDate != nil {
-                // Subscription was revoked
-                return
-            }
-        }
-
-        let pack = MessagePack(
-            packType: packType,
-            purchaseDate: transaction.purchaseDate,
-            transactionID: txID
-        )
-
-        context.insert(pack)
-        do {
-            try context.save()
-        } catch {
-            logger.error("Failed to save purchased message pack: \(error.localizedDescription)")
-            errorMessage = "Failed to credit purchase: \(error.localizedDescription)"
         }
     }
 
