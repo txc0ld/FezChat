@@ -18,6 +18,8 @@ struct BLEDebugOverlay: View {
     @State private var peerCount = 0
     @State private var meshPeers: [MeshPeer] = []
     @State private var copiedToast = false
+    @State private var copiedDebugToast = false
+    @State private var showShareSheet = false
 
     @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
@@ -30,6 +32,7 @@ struct BLEDebugOverlay: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: BlipSpacing.md) {
+                    buildBanner
                     transportSection
                     peerTableSection
                     relaySection
@@ -42,15 +45,35 @@ struct BLEDebugOverlay: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        UIPasteboard.general.string = DebugLogger.shared.exportText
-                        copiedToast = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedToast = false }
-                    } label: {
-                        Label("Copy Log", systemImage: "doc.on.doc")
-                            .font(.system(.caption, design: .monospaced))
+                    HStack(spacing: BlipSpacing.sm) {
+                        Button {
+                            UIPasteboard.general.string = DebugLogger.shared.exportText
+                            copiedToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedToast = false }
+                        } label: {
+                            Label("Copy Log", systemImage: "doc.on.doc")
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        .foregroundStyle(.blipAccentPurple)
+
+                        Button {
+                            showShareSheet = true
+                        } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        .foregroundStyle(.blipAccentPurple)
+
+                        Button {
+                            UIPasteboard.general.string = DebugLogger.shared.exportTextForDebug
+                            copiedDebugToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedDebugToast = false }
+                        } label: {
+                            Label("Copy for Debug", systemImage: "ladybug")
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        .foregroundStyle(.blipAccentPurple)
                     }
-                    .foregroundStyle(.blipAccentPurple)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
@@ -66,12 +89,36 @@ struct BLEDebugOverlay: View {
                         .background(.ultraThinMaterial, in: Capsule())
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                if copiedDebugToast {
+                    Text("Debug log copied")
+                        .font(.system(.caption, design: .monospaced))
+                        .padding(.horizontal, BlipSpacing.md)
+                        .padding(.vertical, BlipSpacing.sm)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
             .animation(.easeInOut(duration: 0.2), value: copiedToast)
+            .animation(.easeInOut(duration: 0.2), value: copiedDebugToast)
             .onReceive(timer) { _ in refreshState() }
             .onAppear { refreshState() }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(text: DebugLogger.shared.exportText)
+            }
         }
         .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Build Banner
+
+    private var buildBanner: some View {
+        Text(BuildInfo.fullBuildString)
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.gray)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, BlipSpacing.sm)
+            .padding(.vertical, BlipSpacing.xs)
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
     }
 
     // MARK: - Transport Status
@@ -244,6 +291,8 @@ struct BLEDebugOverlay: View {
         case "PEER": return .yellow
         case "SYNC": return .orange
         case "RELAY": return .purple
+        case "DM": return .mint
+        case "BLE": return .blue
         default: return .gray
         }
     }
@@ -290,6 +339,19 @@ struct BLEDebugOverlay: View {
         )
         meshPeers = (try? modelContext.fetch(descriptor)) ?? []
     }
+}
+
+// MARK: - Share Sheet
+
+/// UIActivityViewController wrapper for sharing debug log text.
+private struct ShareSheet: UIViewControllerRepresentable {
+    let text: String
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [text], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Debug Overlay Modifier

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Centralized debug logger for the BLE Debug Overlay.
 ///
@@ -23,8 +26,11 @@ final class DebugLogger {
         }
     }
 
+    /// Unique session ID to correlate logs across devices.
+    let sessionID = UUID()
+
     private(set) var entries: [Entry] = []
-    private let maxEntries = 200
+    private let maxEntries = 500
 
     func log(_ category: String, _ message: String, isError: Bool = false) {
         let entry = Entry(category: category, message: message, isError: isError)
@@ -37,8 +43,61 @@ final class DebugLogger {
         entries.removeAll()
     }
 
-    /// All entries formatted for clipboard export.
+    /// Thread-safe logging entry point for non-MainActor contexts.
+    /// Dispatches to the main actor asynchronously.
+    nonisolated static func emit(_ category: String, _ message: String, isError: Bool = false) {
+        Task { @MainActor in
+            shared.log(category, message, isError: isError)
+        }
+    }
+
+    /// All entries formatted for clipboard export, with a header block.
     var exportText: String {
-        entries.reversed().map { "[\($0.formattedTime)] [\($0.category)] \($0.message)" }.joined(separator: "\n")
+        let deviceName: String
+        #if canImport(UIKit)
+        deviceName = UIDevice.current.name
+        #else
+        deviceName = Host.current().localizedName ?? "Mac"
+        #endif
+
+        let iso8601 = ISO8601DateFormatter()
+        let now = iso8601.string(from: Date())
+
+        var lines: [String] = []
+        lines.append("=== Blip Debug Log ===")
+        lines.append("Session: \(sessionID.uuidString)")
+        lines.append("Device: \(deviceName)")
+        lines.append("Build: \(BuildInfo.version) (\(BuildInfo.gitHash))")
+        lines.append("Exported: \(now)")
+        lines.append("Entries: \(entries.count)")
+        lines.append("========================")
+        lines.append("")
+
+        let entryLines = entries.reversed().map { "[\($0.formattedTime)] [\($0.category)] \($0.message)" }
+        lines.append(contentsOf: entryLines)
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// Formatted export specifically for pasting into an LLM for analysis.
+    var exportTextForDebug: String {
+        let deviceName: String
+        #if canImport(UIKit)
+        deviceName = UIDevice.current.name
+        #else
+        deviceName = Host.current().localizedName ?? "Mac"
+        #endif
+
+        var lines: [String] = []
+        lines.append("The following is a debug log from Blip (BLE mesh chat app).")
+        lines.append("We are testing DM messaging between two phones.")
+        lines.append("Build: \(BuildInfo.version) (\(BuildInfo.gitHash))")
+        lines.append("Device: \(deviceName)")
+        lines.append("")
+        lines.append(exportText)
+        lines.append("")
+        lines.append("Please analyze this log and identify where the DM pipeline is failing.")
+
+        return lines.joined(separator: "\n")
     }
 }
