@@ -227,11 +227,32 @@ struct SettingsView: View {
 
     // MARK: - About
 
+    @State private var buildStringCopied = false
+
     private var aboutSection: some View {
         settingsGroup(title: "About", icon: "info.circle.fill") {
             VStack(spacing: BlipSpacing.md) {
-                settingsInfoRow(title: "Version", value: "1.0.0")
-                settingsInfoRow(title: "Build", value: "2026.03.28")
+                settingsInfoRow(title: "Version", value: BuildInfo.version)
+                settingsInfoRow(title: "Build", value: BuildInfo.buildNumber)
+
+                settingsInfoRow(title: "Commit", value: BuildInfo.gitHash)
+                    .onTapGesture {
+                        UIPasteboard.general.string = BuildInfo.fullBuildString
+                        buildStringCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { buildStringCopied = false }
+                    }
+                    .overlay(alignment: .trailing) {
+                        if buildStringCopied {
+                            Text("Copied!")
+                                .font(theme.typography.caption)
+                                .foregroundStyle(.blipAccentPurple)
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: buildStringCopied)
+
+                settingsInfoRow(title: "Branch", value: BuildInfo.gitBranch)
+                settingsInfoRow(title: "Built", value: BuildInfo.buildDate)
 
                 Button(action: {}) {
                     HStack {

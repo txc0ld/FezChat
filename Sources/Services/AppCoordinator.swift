@@ -116,6 +116,13 @@ final class AppCoordinator {
             webSocketTransport: ws
         )
 
+        // Wire BLE transport events to DebugLogger
+        ble.transportEventHandler = { category, message in
+            Task { @MainActor in
+                DebugLogger.shared.log(category, message)
+            }
+        }
+
         self.bleService = ble
         self.webSocketTransport = ws
         self.transportCoordinator = coordinator

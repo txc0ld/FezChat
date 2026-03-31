@@ -52,6 +52,23 @@ targets:
         Release:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
           SWIFT_OPTIMIZATION_LEVEL: -O
+    postBuildScripts:
+      - name: Embed Git Info
+        script: |
+          GIT_HASH=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+          GIT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          PLIST="${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}"
+          if [ -f "$PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Add :GitCommitHash string $GIT_HASH" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :GitCommitHash $GIT_HASH" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :GitBranch string $GIT_BRANCH" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :GitBranch $GIT_BRANCH" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :BuildDate string $BUILD_DATE" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :BuildDate $BUILD_DATE" "$PLIST"
+          fi
+        basedOnDependencyAnalysis: false
     dependencies:
       - package: BlipProtocol
       - package: BlipMesh

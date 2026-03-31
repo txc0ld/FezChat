@@ -78,6 +78,12 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     private var scanTimer: DispatchSourceTimer?
     private var rssiPollTimer: DispatchSourceTimer?
 
+    // MARK: - Transport Event Callback
+
+    /// Optional callback for surfacing BLE transport events to the app layer (e.g. DebugLogger).
+    /// Parameters: (category: String, message: String)
+    public var transportEventHandler: ((String, String) -> Void)?
+
     // MARK: - Local peer ID
 
     /// The local device's PeerID, derived from its Noise public key.
@@ -205,7 +211,10 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         }
 
         if !sent {
+            transportEventHandler?("BLE", "SEND FAILED: peer not connected \(peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined())")
             throw TransportError.peerNotConnected(peerID)
+        } else {
+            transportEventHandler?("BLE", "SENT \(data.count)B to \(peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined())")
         }
     }
 
@@ -246,6 +255,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         )
         print("[Blip-BLE] Scanning STARTED for service \(BLEConstants.serviceUUID.uuidString)")
         logger.info("BLE scanning started")
+        transportEventHandler?("BLE", "Scan STARTED")
 
         scheduleScanCycle()
         startRSSIPolling()
@@ -410,6 +420,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     /// Handle central manager state change.
     func handleCentralStateChange(_ newState: CBManagerState) {
         print("[Blip-BLE] Central state changed: \(newState.rawValue) (\(newState.debugName))")
+        transportEventHandler?("BLE", "Central state → \(newState.debugName)")
         switch newState {
         case .poweredOn:
             logger.info("Central powered on")
@@ -436,6 +447,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     /// Handle peripheral manager state change.
     func handlePeripheralManagerStateChange(_ newState: CBManagerState) {
         print("[Blip-BLE] Peripheral manager state changed: \(newState.rawValue) (\(newState.debugName))")
+        transportEventHandler?("BLE", "Peripheral mgr state → \(newState.debugName)")
         switch newState {
         case .poweredOn:
             logger.info("Peripheral manager powered on")
@@ -511,6 +523,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     func handleDidConnect(peripheral: any BLEPeripheralProxy) {
         print("[Blip-BLE] CONNECTED to peripheral \(peripheral.identifier)")
         logger.info("Connected to peripheral \(peripheral.identifier)")
+        transportEventHandler?("BLE", "CONNECTED peripheral \(peripheral.identifier.uuidString.prefix(8))")
 
         lock.withLock {
             connectingPeripherals.remove(peripheral.identifier)
@@ -538,6 +551,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     /// Handle failed connection.
     func handleDidFailToConnect(peripheralUUID uuid: UUID) {
         logger.error("Failed to connect to \(uuid)")
+        transportEventHandler?("BLE", "CONNECT FAILED peripheral \(uuid.uuidString.prefix(8))")
 
         lock.withLock {
             connectingPeripherals.remove(uuid)
@@ -549,6 +563,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     /// Handle disconnection.
     func handleDidDisconnect(peripheralUUID uuid: UUID) {
         logger.info("Disconnected from \(uuid)")
+        transportEventHandler?("BLE", "DISCONNECTED peripheral \(uuid.uuidString.prefix(8))")
 
         let peerID: PeerID? = lock.withLock {
             let pid = peripheralToPeerID.removeValue(forKey: uuid)
@@ -748,6 +763,9 @@ extension BLEService: CBPeripheralDelegate {
     ) {
         if let error = error {
             logger.error("Write error to \(peripheral.identifier): \(error.localizedDescription)")
+            transportEventHandler?("BLE", "WRITE FAILED → \(peripheral.identifier.uuidString.prefix(8)): \(error.localizedDescription)")
+        } else {
+            transportEventHandler?("BLE", "WRITE OK → \(peripheral.identifier.uuidString.prefix(8))")
         }
     }
 
@@ -845,6 +863,7 @@ extension BLEService: CBPeripheralManagerDelegate {
     ) {
         print("[Blip-BLE] Central SUBSCRIBED: \(central.identifier)")
         logger.info("Central subscribed: \(central.identifier)")
+        transportEventHandler?("BLE", "Central SUBSCRIBED \(central.identifier.uuidString.prefix(8))")
 
         let tempPeerID = temporaryPeerID(from: central.identifier)
 
@@ -865,6 +884,7 @@ extension BLEService: CBPeripheralManagerDelegate {
         didUnsubscribeFrom characteristic: CBCharacteristic
     ) {
         logger.info("Central unsubscribed: \(central.identifier)")
+        transportEventHandler?("BLE", "Central UNSUBSCRIBED \(central.identifier.uuidString.prefix(8))")
 
         let peerID: PeerID? = lock.withLock {
             subscribedCentrals.removeAll { $0.identifier == central.identifier }

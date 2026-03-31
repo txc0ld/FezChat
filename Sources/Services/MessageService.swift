@@ -107,12 +107,16 @@ final class MessageService: @unchecked Sendable {
         replyTo: Message? = nil
     ) async throws -> Message {
         guard let identity = getIdentity() else {
+            DebugLogger.shared.log("TX", "sendTextMessage FAILED: no local identity", isError: true)
             throw MessageServiceError.senderNotFound
         }
+
+        DebugLogger.shared.log("TX", "sendTextMessage: channelID=\(channel.id) contentLen=\(content.utf8.count) type=\(channel.type)")
 
         // Check message balance (text = 1 message credit)
         do {
             try await deductMessageBalance()
+            DebugLogger.shared.log("TX", "Balance deducted OK")
         } catch {
             DebugLogger.shared.log("TX", "BALANCE CHECK FAILED: \(error)", isError: true)
             throw error
@@ -147,6 +151,7 @@ final class MessageService: @unchecked Sendable {
         message.status = .sent
         try context.save()
 
+        DebugLogger.shared.log("TX", "sendTextMessage COMPLETE: msgID=\(message.id)")
         return message
     }
 
@@ -500,17 +505,23 @@ final class MessageService: @unchecked Sendable {
     /// Flow: deserialize -> deduplicate -> decrypt -> store -> notify delegate
     @MainActor
     func receive(data: Data, from peerID: PeerID) async throws {
+        let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        DebugLogger.shared.log("RX", "receive(): \(data.count)B from \(peerHex)")
+
         // Deserialize the packet
         let packet: Packet
         do {
             packet = try PacketSerializer.decode(data)
+            DebugLogger.shared.log("RX", "Decoded packet: type=\(packet.type) flags=\(packet.flags)")
         } catch {
+            DebugLogger.shared.log("RX", "DESERIALIZE FAILED: \(error)", isError: true)
             throw MessageServiceError.deserializationFailed(error.localizedDescription)
         }
 
         // Verify Ed25519 signature if present
         if packet.flags.contains(.hasSignature) {
             let senderData = packet.senderID.bytes
+            let senderHex = senderData.prefix(4).map { String(format: "%02x", $0) }.joined()
             let context = ModelContext(modelContainer)
             let signingKey: Data?
 
@@ -523,30 +534,36 @@ final class MessageService: @unchecked Sendable {
             }
 
             if let key = signingKey {
+                let keyPrefix = key.prefix(4).map { String(format: "%02x", $0) }.joined()
                 do {
                     let valid = try Signer.verify(packet: packet, publicKey: key)
                     if !valid {
-                        print("[Blip-RX] SIGNATURE INVALID — dropping packet from \(senderData.prefix(4).map { String(format: "%02x", $0) }.joined())")
-                        DebugLogger.shared.log("RX", "SIG INVALID — dropped", isError: true)
+                        print("[Blip-RX] SIGNATURE INVALID — dropping packet from \(senderHex)")
+                        DebugLogger.shared.log("RX", "SIG INVALID from \(senderHex) key=\(keyPrefix) — dropped", isError: true)
                         return
                     }
                     print("[Blip-RX] Signature verified")
+                    DebugLogger.shared.log("RX", "SIG OK from \(senderHex) key=\(keyPrefix)")
                 } catch {
                     // Verification threw (e.g. malformed) — accept with warning
                     print("[Blip-RX] Signature check error: \(error) — accepting anyway")
+                    DebugLogger.shared.log("RX", "SIG CHECK ERROR from \(senderHex): \(error) — accepting", isError: true)
                 }
             } else {
                 // No signing key known yet (pre-announce bootstrap) — accept unverified
                 print("[Blip-RX] No signing key for sender — accepting unverified")
+                DebugLogger.shared.log("RX", "No signing key for \(senderHex) — accepting unverified")
             }
         }
 
         // Deduplicate via Bloom filter
         let packetIDData = buildPacketID(packet)
         if bloomFilter.contains(packetIDData) {
+            DebugLogger.shared.log("RX", "DUPLICATE packet — skipping")
             return // Already processed
         }
         bloomFilter.insert(packetIDData)
+        DebugLogger.shared.log("RX", "Bloom: new packet, inserted")
 
         // Route based on packet type
         switch packet.type {
@@ -578,11 +595,15 @@ final class MessageService: @unchecked Sendable {
         identity: Identity,
         messageID: UUID?
     ) async throws {
+        DebugLogger.emit("TX", "encryptAndSend: subType=\(subType) payloadSize=\(payload.count)")
         let taggedPayload = prependSubType(subType, to: payload)
 
         // Determine compression: skip for pre-compressed types
         let isPreCompressed = (subType == .voiceNote || subType == .imageMessage)
         let compressed = PayloadCompressor.compressIfNeeded(taggedPayload, isPreCompressed: isPreCompressed)
+
+        let ratio = taggedPayload.count > 0 ? Double(compressed.data.count) / Double(taggedPayload.count) : 1.0
+        DebugLogger.emit("TX", "Compression: \(taggedPayload.count)B → \(compressed.data.count)B (ratio=\(String(format: "%.2f", ratio)), compressed=\(compressed.wasCompressed))")
 
         // Build flags
         var flags: PacketFlags = [.isReliable]
@@ -595,6 +616,7 @@ final class MessageService: @unchecked Sendable {
             flags.insert(.hasRecipient)
             let recipientPeerID = resolveRecipientPeerID(for: channel)
             let recipientHex = recipientPeerID?.bytes.prefix(4).map { String(format: "%02x", $0) }.joined() ?? "nil"
+            DebugLogger.emit("DM", "DM send: subType=\(subType) → recipient=\(recipientHex) size=\(compressed.data.count)B")
             print("[Blip-TX] DM \(subType) → \(recipientHex) (\(compressed.data.count)B)")
 
             if recipientPeerID == nil {
@@ -632,6 +654,7 @@ final class MessageService: @unchecked Sendable {
     private func sendPacket(_ packet: Packet) throws {
         guard let transport else {
             print("[Blip-TX] SEND FAILED: no transport available")
+            DebugLogger.emit("TX", "SEND FAILED: no transport available", isError: true)
             throw MessageServiceError.noTransportAvailable
         }
 
@@ -640,8 +663,10 @@ final class MessageService: @unchecked Sendable {
         if let identity = getIdentity() {
             do {
                 signedPacket = try Signer.sign(packet: packet, secretKey: identity.signingSecretKey)
+                DebugLogger.emit("TX", "Ed25519 signing OK")
             } catch {
                 print("[Blip-TX] SIGNING FAILED: \(error) — sending unsigned")
+                DebugLogger.emit("TX", "Ed25519 SIGNING FAILED: \(error) — sending unsigned", isError: true)
                 signedPacket = packet
             }
         } else {
@@ -653,20 +678,26 @@ final class MessageService: @unchecked Sendable {
             wireData = try PacketSerializer.encode(signedPacket)
         } catch {
             print("[Blip-TX] ENCODE FAILED: \(error)")
+            DebugLogger.emit("TX", "ENCODE FAILED: \(error)", isError: true)
             throw error
         }
 
         if let recipientID = signedPacket.recipientID, !recipientID.isBroadcast {
+            let recipientHex = recipientID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
             do {
                 try transport.send(data: wireData, to: recipientID)
-                print("[Blip-TX] SENT \(wireData.count)B (signed) to \(recipientID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined())")
+                print("[Blip-TX] SENT \(wireData.count)B (signed) to \(recipientHex)")
+                DebugLogger.emit("TX", "SENT \(wireData.count)B → \(recipientHex) (peer-specific)")
             } catch {
                 print("[Blip-TX] SEND FAILED to peer: \(error) — falling back to broadcast")
+                DebugLogger.emit("TX", "SEND FAILED to \(recipientHex): \(error) — fallback broadcast", isError: true)
                 transport.broadcast(data: wireData)
+                DebugLogger.emit("TX", "BROADCAST fallback \(wireData.count)B")
             }
         } else {
             transport.broadcast(data: wireData)
             print("[Blip-TX] BROADCAST \(wireData.count)B (signed)")
+            DebugLogger.emit("TX", "BROADCAST \(wireData.count)B")
         }
     }
 
@@ -771,7 +802,7 @@ final class MessageService: @unchecked Sendable {
         // Trigger UI refresh so the peer card appears immediately
         NotificationCenter.default.post(name: .meshPeerStateChanged, object: nil)
 
-        DebugLogger.shared.log("RX", "ANNOUNCE ← \(username) from \(peerHex) key=\(realNoiseKey.isEmpty ? "legacy" : "32B")")
+        DebugLogger.shared.log("RX", "ANNOUNCE ← \(username) from \(peerHex) noiseKey=\(realNoiseKey.isEmpty ? "legacy" : "\(realNoiseKey.count)B") sigKey=\(realSigningKey.isEmpty ? "none" : "\(realSigningKey.count)B")")
         logger.debug("Announce received from \(username)")
     }
 
@@ -843,20 +874,28 @@ final class MessageService: @unchecked Sendable {
         senderPeerID: PeerID,
         timestamp: Date
     ) async throws {
+        let senderHex = senderPeerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        DebugLogger.shared.log("DM", "handleIncomingMessage: \(data.count)B from \(senderHex) subType=\(subType)")
+
         let context = ModelContext(modelContainer)
 
         // Parse message ID and content from payload
         let (messageID, content, replyToID) = parseTextPayload(data)
+        DebugLogger.shared.log("DM", "Parsed msgID=\(messageID) contentLen=\(content.count) replyTo=\(replyToID?.uuidString ?? "nil")")
 
         // Check for duplicate
         let targetID = messageID
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
         let existing = try context.fetch(descriptor)
-        if !existing.isEmpty { return }
+        if !existing.isEmpty {
+            DebugLogger.shared.log("DM", "DUPLICATE msgID=\(messageID) — skipping")
+            return
+        }
 
         // Resolve sender (try transport PeerID, then fallback to noisePublicKey)
         let senderPeerData = senderPeerID.bytes
         let meshPeer = try findMeshPeer(byPeerIDBytes: senderPeerData, context: context)
+        DebugLogger.shared.log("DM", "Sender lookup: MeshPeer=\(meshPeer != nil ? "found (\(meshPeer?.username ?? "no name"))" : "NOT FOUND")")
         let senderUser: User? = meshPeer.flatMap { peer in
             guard let username = peer.username else { return nil }
             let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
@@ -867,6 +906,7 @@ final class MessageService: @unchecked Sendable {
                 return nil
             }
         }
+        DebugLogger.shared.log("DM", "Sender resolution: User=\(senderUser?.username ?? "NOT FOUND")")
 
         // Resolve channel
         let channel = try resolveChannel(
@@ -874,6 +914,7 @@ final class MessageService: @unchecked Sendable {
             senderPeerID: senderPeerID,
             context: context
         )
+        DebugLogger.shared.log("DM", "Channel resolved: \(channel.id) type=\(channel.type)")
 
         // Create and store message
         let message = Message(
@@ -896,7 +937,13 @@ final class MessageService: @unchecked Sendable {
 
         // Update channel activity
         channel.lastActivityAt = Date()
-        try context.save()
+        do {
+            try context.save()
+            DebugLogger.shared.log("DM", "MSG stored OK: \(messageID) in channel \(channel.id)")
+        } catch {
+            DebugLogger.shared.log("DM", "MSG STORE FAILED: \(messageID) error=\(error)", isError: true)
+            throw error
+        }
 
         // Send delivery ack
         Task { [logger] in
@@ -904,11 +951,11 @@ final class MessageService: @unchecked Sendable {
                 try await sendDeliveryAck(for: messageID, to: senderPeerID)
             } catch {
                 logger.warning("Failed to send delivery ack for message \(messageID): \(error.localizedDescription)")
+                DebugLogger.shared.log("DM", "Delivery ack FAILED for \(messageID): \(error)", isError: true)
             }
         }
 
         // Notify delegate and post notification for any active ChatViewModel
-        DebugLogger.shared.log("RX", "MSG stored: \(messageID) in channel \(channel.id)")
         delegate?.messageService(self, didReceiveMessage: message, in: channel)
         NotificationCenter.default.post(
             name: .didReceiveBlipMessage,
@@ -1095,14 +1142,19 @@ final class MessageService: @unchecked Sendable {
 
     @MainActor
     private func handleFriendRequest(data: Data, from peerID: PeerID) async throws {
+        let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        DebugLogger.shared.log("DM", "handleFriendRequest: \(data.count)B from \(peerHex)")
+
         let context = ModelContext(modelContainer)
 
         // Parse payload: username + 0x00 + displayName
         let (senderUsername, senderDisplayName) = parseFriendPayload(data)
+        DebugLogger.shared.log("DM", "FRIEND_REQ from \(senderUsername ?? "nil") display=\(senderDisplayName ?? "nil")")
 
         // Resolve sender as a MeshPeer -> User (try peerID then noisePublicKey fallback)
         let peerData = peerID.bytes
         let meshPeer = try findMeshPeer(byPeerIDBytes: peerData, context: context)
+        DebugLogger.shared.log("DM", "FRIEND_REQ: MeshPeer=\(meshPeer != nil ? "found" : "NOT FOUND") noiseKey=\(meshPeer?.noisePublicKey.count ?? 0)B")
 
         // Create or find User for the sender
         let senderUser: User
@@ -1181,10 +1233,14 @@ final class MessageService: @unchecked Sendable {
 
     @MainActor
     private func handleFriendAccept(data: Data, from peerID: PeerID) async throws {
+        let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        DebugLogger.shared.log("DM", "handleFriendAccept: \(data.count)B from \(peerHex)")
+
         let context = ModelContext(modelContainer)
 
         // Parse payload: username
         let (senderUsername, _) = parseFriendPayload(data)
+        DebugLogger.shared.log("DM", "FRIEND_ACCEPT from \(senderUsername ?? "nil")")
 
         // Find the Friend record for this peer (try peerID then noisePublicKey fallback)
         let peerData = peerID.bytes
@@ -1193,6 +1249,7 @@ final class MessageService: @unchecked Sendable {
 
         if let meshPeer = try findMeshPeer(byPeerIDBytes: peerData, context: context) {
             friendUser = try? resolveOrCreateUser(for: meshPeer, context: context)
+            DebugLogger.shared.log("DM", "FRIEND_ACCEPT: resolved user=\(friendUser?.username ?? "nil") via MeshPeer")
         }
 
         // Fallback: find by username
@@ -1603,6 +1660,7 @@ final class MessageService: @unchecked Sendable {
         // Get local identity to filter out self from memberships
         guard let identity = getIdentity() else {
             print("[Blip-TX] ERROR resolveRecipient: no local identity")
+            DebugLogger.emit("DM", "resolveRecipient FAILED: no local identity", isError: true)
             return nil
         }
         let localNoiseKey = identity.noisePublicKey.rawRepresentation
@@ -1614,24 +1672,35 @@ final class MessageService: @unchecked Sendable {
         let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
         guard let freshChannel = try? freshContext.fetch(channelDesc).first else {
             print("[Blip-TX] ERROR resolveRecipient: channel not found in fresh context")
+            DebugLogger.emit("DM", "resolveRecipient FAILED: channel \(channelID) not found in fresh context", isError: true)
             return nil
         }
 
         let memberships = freshChannel.memberships
         print("[Blip-TX] resolveRecipient: channel has \(memberships.count) memberships")
+        DebugLogger.emit("DM", "resolveRecipient: channel \(channelID) has \(memberships.count) memberships")
 
         for membership in memberships {
-            guard let user = membership.user else { continue }
+            guard let user = membership.user else {
+                DebugLogger.emit("DM", "resolveRecipient: membership has nil user — skipping")
+                continue
+            }
+
+            let keyLen = user.noisePublicKey.count
+            let keyPresent = !user.noisePublicKey.isEmpty
+            DebugLogger.emit("DM", "resolveRecipient: checking \(user.username) noiseKey=\(keyPresent ? "\(keyLen)B" : "empty")")
 
             // Skip local user
             if user.noisePublicKey == localNoiseKey {
                 print("[Blip-TX] resolveRecipient: skipping local user \(user.username)")
+                DebugLogger.emit("DM", "resolveRecipient: skipping local user \(user.username)")
                 continue
             }
 
             // Skip users with empty keys
             if user.noisePublicKey.isEmpty {
                 print("[Blip-TX] resolveRecipient: user \(user.username) has empty noisePublicKey — skipping")
+                DebugLogger.emit("DM", "resolveRecipient: \(user.username) has EMPTY noisePublicKey — skipping", isError: true)
                 continue
             }
 
@@ -1641,19 +1710,23 @@ final class MessageService: @unchecked Sendable {
             if let meshPeer = try? freshContext.fetch(peerDesc).first {
                 let peerHex = meshPeer.peerID.prefix(4).map { String(format: "%02x", $0) }.joined()
                 print("[Blip-TX] resolveRecipient: resolved \(user.username) → peerID \(peerHex)")
+                DebugLogger.emit("DM", "resolveRecipient: RESOLVED \(user.username) → MeshPeer \(peerHex)")
                 return PeerID(bytes: meshPeer.peerID)
             }
 
             // Fallback: construct PeerID from stored key
             if user.noisePublicKey.count == PeerID.length {
                 print("[Blip-TX] resolveRecipient: using raw key as PeerID for \(user.username)")
+                DebugLogger.emit("DM", "resolveRecipient: using raw key as PeerID for \(user.username) (no MeshPeer)")
                 return PeerID(bytes: user.noisePublicKey)
             }
             print("[Blip-TX] resolveRecipient: user \(user.username) has key but no MeshPeer found")
+            DebugLogger.emit("DM", "resolveRecipient: \(user.username) has \(keyLen)B key but no MeshPeer — using noisePublicKey derived PeerID", isError: true)
             return PeerID(noisePublicKey: user.noisePublicKey)
         }
 
         print("[Blip-TX] ERROR resolveRecipient: no valid remote user found in channel \(channelID)")
+        DebugLogger.emit("DM", "resolveRecipient FAILED: no valid remote user in channel \(channelID)", isError: true)
         return nil
     }
 
@@ -1669,14 +1742,19 @@ final class MessageService: @unchecked Sendable {
 
         // Find a pack with remaining balance
         for pack in packs {
-            if pack.isUnlimited { return }
+            if pack.isUnlimited {
+                DebugLogger.shared.log("TX", "Balance: unlimited pack found")
+                return
+            }
             if pack.messagesRemaining > 0 {
                 pack.messagesRemaining -= 1
                 try context.save()
+                DebugLogger.shared.log("TX", "Balance deducted: \(pack.messagesRemaining) remaining")
                 return
             }
         }
 
+        DebugLogger.shared.log("TX", "INSUFFICIENT BALANCE: \(packs.count) packs, all exhausted", isError: true)
         throw MessageServiceError.insufficientBalance
     }
 
@@ -1724,7 +1802,9 @@ extension MessageService: TransportDelegate {
             do {
                 try await self.receive(data: data, from: peerID)
             } catch {
+                let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
                 self.logger.error("Failed to process incoming packet: \(error.localizedDescription)")
+                DebugLogger.shared.log("RX", "PROCESS FAILED from \(peerHex): \(error)", isError: true)
             }
         }
     }
