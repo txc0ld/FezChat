@@ -305,7 +305,9 @@ struct AlertDetailSheet: View {
         responseTimer = elapsed
 
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            responseTimer += 1
+            Task { @MainActor in
+                responseTimer += 1
+            }
         }
     }
 }

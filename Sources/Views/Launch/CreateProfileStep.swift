@@ -357,10 +357,12 @@ struct CreateProfileStep: View {
     private func startResendCooldown() {
         resendCooldown = 60
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
-            if resendCooldown > 0 {
-                resendCooldown -= 1
-            } else {
-                timer.invalidate()
+            Task { @MainActor [weak timer] in
+                if resendCooldown > 0 {
+                    resendCooldown -= 1
+                } else {
+                    timer?.invalidate()
+                }
             }
         }
     }

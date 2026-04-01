@@ -85,8 +85,10 @@ struct TypewriterText: View {
         let clampedDelay = max(0.005, delay)
 
         timer = Timer.scheduledTimer(withTimeInterval: clampedDelay, repeats: false) { _ in
-            visibleCount += 1
-            scheduleNextCharacter()
+            Task { @MainActor [self] in
+                visibleCount += 1
+                scheduleNextCharacter()
+            }
         }
     }
 

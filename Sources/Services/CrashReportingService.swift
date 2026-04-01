@@ -5,7 +5,7 @@ import os
 /// Thin wrapper around Sentry SDK for crash reporting, ANR detection,
 /// and breadcrumb logging. All mesh/BLE events are forwarded as
 /// breadcrumbs via DebugLogger integration.
-final class CrashReportingService {
+final class CrashReportingService: @unchecked Sendable {
 
     static let shared = CrashReportingService()
 

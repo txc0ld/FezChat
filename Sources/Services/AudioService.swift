@@ -73,7 +73,7 @@ final class AudioService: NSObject, @unchecked Sendable {
     static let opusFrameDuration = 20
 
     /// Recording format settings for AVAudioRecorder.
-    private static let recordingSettings: [String: Any] = [
+    nonisolated(unsafe) private static let recordingSettings: [String: Any] = [
         AVFormatIDKey: Int(kAudioFormatLinearPCM),
         AVSampleRateKey: sampleRate,
         AVNumberOfChannelsKey: 1,
@@ -122,7 +122,7 @@ final class AudioService: NSObject, @unchecked Sendable {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playAndRecord, mode: .default, options: [
-                .allowBluetooth,
+                .allowBluetoothA2DP,
                 .defaultToSpeaker,
                 .mixWithOthers
             ])
@@ -495,8 +495,10 @@ final class AudioService: NSObject, @unchecked Sendable {
         // Haptic warning before auto-stop
         if recordingDuration >= (maxDuration - Self.hapticWarningThreshold) {
             #if os(iOS)
-            let generator = UIImpactFeedbackGenerator(style: .heavy)
-            generator.impactOccurred()
+            Task { @MainActor in
+                let generator = UIImpactFeedbackGenerator(style: .heavy)
+                generator.impactOccurred()
+            }
             #endif
         }
     }
