@@ -338,4 +338,73 @@ struct GossipRouterTests {
             #expect(jitter <= BLEConstants.relayJitterMax)
         }
     }
+
+    // MARK: - TTL boundary behavior
+
+    @Test("TTL 0 is delivered locally but never relayed")
+    func ttlZeroNeverRelayed() {
+        let router = GossipRouter()
+        let delegate = MockGossipDelegate()
+        router.delegate = delegate
+        router.adaptiveRelay.connectedPeerCount = 1
+
+        let packet = makePacket(ttl: 0)
+        let isNew = router.handleIncoming(packet: packet, from: makePeerID(0x20))
+
+        #expect(isNew == true, "TTL 0 should still be delivered locally")
+        Thread.sleep(forTimeInterval: 0.1)
+        #expect(delegate.relayCount == 0, "TTL 0 should never be relayed")
+        #expect(router.packetsReceived == 1)
+        #expect(router.packetsRelayed == 0)
+    }
+
+    @Test("TTL 1 hits last-hop suppression — delivered locally, not relayed")
+    func ttlOneLastHopSuppression() {
+        let router = GossipRouter()
+        let delegate = MockGossipDelegate()
+        router.delegate = delegate
+        router.adaptiveRelay.connectedPeerCount = 1
+
+        let packet = makePacket(ttl: 1)
+        let isNew = router.handleIncoming(packet: packet, from: makePeerID(0x20))
+
+        #expect(isNew == true, "TTL 1 should be delivered locally")
+        Thread.sleep(forTimeInterval: 0.1)
+        #expect(delegate.relayCount == 0, "TTL 1 after decrement to 0 triggers last-hop suppression")
+    }
+
+    @Test("TTL 2 is relayed with TTL decremented to 1")
+    func ttlTwoRelayed() {
+        let router = GossipRouter()
+        let delegate = MockGossipDelegate()
+        router.delegate = delegate
+        router.adaptiveRelay.connectedPeerCount = 1
+
+        let packet = makePacket(ttl: 2)
+        _ = router.handleIncoming(packet: packet, from: makePeerID(0x20))
+
+        Thread.sleep(forTimeInterval: 0.1)
+        #expect(delegate.relayCount == 1, "TTL 2 should be relayed")
+
+        let relayed = delegate.relayedPackets[0].0
+        #expect(relayed.ttl == 1, "Relayed TTL should be decremented by 1")
+    }
+
+    @Test("High TTL packet is relayed with TTL decremented by 1")
+    func highTTLDecremented() {
+        let router = GossipRouter()
+        let delegate = MockGossipDelegate()
+        router.delegate = delegate
+        router.adaptiveRelay.connectedPeerCount = 1
+
+        let packet = makePacket(ttl: 7)
+        _ = router.handleIncoming(packet: packet, from: makePeerID(0x20))
+
+        // Wait for jitter (up to 25ms) + async dispatch
+        Thread.sleep(forTimeInterval: 0.3)
+        #expect(delegate.relayCount == 1)
+
+        let relayed = delegate.relayedPackets[0].0
+        #expect(relayed.ttl == 6, "Relayed TTL should be original - 1")
+    }
 }

@@ -351,4 +351,67 @@ struct PacketSerializerTests {
         #expect(decoded.payload.count == 0)
         #expect(decoded == packet)
     }
+
+    // MARK: - Every MessageType round-trips
+
+    @Test("Every MessageType round-trips through serialize/deserialize",
+          arguments: MessageType.allCases)
+    func allMessageTypesRoundTrip(type: MessageType) throws {
+        let payload = Data("test payload for \(type)".utf8)
+        let packet = Packet(
+            type: type, ttl: 5, timestamp: 1_700_000_000_000,
+            flags: [], senderID: sender, payload: payload
+        )
+
+        let encoded = try PacketSerializer.encode(packet)
+        let decoded = try PacketSerializer.decode(encoded)
+
+        #expect(decoded.type == type)
+        #expect(decoded.ttl == 5)
+        #expect(decoded.senderID == sender)
+        #expect(decoded.payload == payload)
+    }
+
+    // MARK: - Fragmentation threshold round-trip
+
+    @Test("Payload at fragmentation threshold does not fragment")
+    func atFragmentationThreshold() throws {
+        let maxChunk = FragmentSplitter.maxFragmentPayload
+        let payload = Data(repeating: 0xBB, count: maxChunk)
+        #expect(!FragmentSplitter.needsFragmentation(payload))
+
+        let packet = Packet(
+            type: .meshBroadcast, ttl: 3, timestamp: 1_000,
+            flags: [], senderID: sender, payload: payload
+        )
+        let encoded = try PacketSerializer.encode(packet)
+        let decoded = try PacketSerializer.decode(encoded)
+        #expect(decoded.payload == payload)
+    }
+
+    @Test("Payload over fragmentation threshold splits and reassembles")
+    func overFragmentationThreshold() throws {
+        let maxChunk = FragmentSplitter.maxFragmentPayload
+        let payload = Data(repeating: 0xCC, count: maxChunk + 100)
+        #expect(FragmentSplitter.needsFragmentation(payload))
+
+        let fragments = FragmentSplitter.split(payload)
+        #expect(fragments.count == 2)
+
+        let assembler = FragmentAssembler()
+        let result1 = try assembler.receive(fragments[0])
+        guard case .incomplete(let received, let total) = result1 else {
+            Issue.record("Expected incomplete after first fragment")
+            return
+        }
+        #expect(received == 1)
+        #expect(total == 2)
+
+        let result2 = try assembler.receive(fragments[1])
+        guard case .complete(let reassembled) = result2 else {
+            Issue.record("Expected complete after second fragment")
+            return
+        }
+        #expect(reassembled == payload)
+    }
 }
