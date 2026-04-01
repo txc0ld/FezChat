@@ -523,7 +523,11 @@ final class MessageService: @unchecked Sendable {
                !peerInfo.noisePublicKey.isEmpty {
                 friendUser.noisePublicKey = peerInfo.noisePublicKey
                 friendUser.signingPublicKey = peerInfo.signingPublicKey
-                try? context.save()
+                do {
+                    try context.save()
+                } catch {
+                    DebugLogger.shared.log("DB", "Failed to save backfilled keys: \(error.localizedDescription)", isError: true)
+                }
                 DebugLogger.shared.log("DM", "Backfilled keys for \(friendUsername) before createDMChannel")
             }
         }
@@ -805,7 +809,7 @@ final class MessageService: @unchecked Sendable {
             }
         } else {
             // Group/channel: broadcast (no Noise encryption for groups yet)
-            print("[Blip-TX] BROADCAST \(subType) (\(compressed.data.count)B)")
+            DebugLogger.emit("TX", "BROADCAST \(subType) (\(compressed.data.count)B)")
             let packet = buildPacket(
                 type: .noiseEncrypted,
                 payload: compressed.data,
@@ -1203,9 +1207,13 @@ final class MessageService: @unchecked Sendable {
         let context = ModelContext(modelContainer)
         let targetID = messageID
         let desc = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
-        if let message = try? context.fetch(desc).first {
-            message.statusRaw = status.rawValue
-            try? context.save()
+        do {
+            if let message = try context.fetch(desc).first {
+                message.statusRaw = status.rawValue
+                try context.save()
+            }
+        } catch {
+            DebugLogger.emit("DB", "Failed to update message status: \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -1601,7 +1609,11 @@ final class MessageService: @unchecked Sendable {
                 if existing.noisePublicKey.isEmpty && !fallbackNoiseKey.isEmpty {
                     existing.noisePublicKey = fallbackNoiseKey
                     existing.signingPublicKey = fallbackSigningKey
-                    try? context.save()
+                    do {
+                        try context.save()
+                    } catch {
+                        DebugLogger.shared.log("DB", "Failed to save backfilled friend keys: \(error.localizedDescription)", isError: true)
+                    }
                     DebugLogger.shared.log("RX", "FRIEND_REQ: backfilled keys on existing User \(username)")
                 }
             } else {
@@ -1627,11 +1639,15 @@ final class MessageService: @unchecked Sendable {
         // Send local push notification
         let senderUserID = senderUser.id
         let friendDesc2 = FetchDescriptor<Friend>(predicate: #Predicate { $0.user?.id == senderUserID })
-        if let friendRecord = try? context.fetch(friendDesc2).first {
-            NotificationService().notifyFriendRequest(
-                fromName: senderUser.resolvedDisplayName,
-                friendID: friendRecord.id
-            )
+        do {
+            if let friendRecord = try context.fetch(friendDesc2).first {
+                NotificationService().notifyFriendRequest(
+                    fromName: senderUser.resolvedDisplayName,
+                    friendID: friendRecord.id
+                )
+            }
+        } catch {
+            DebugLogger.shared.log("DB", "Failed to fetch friend for notification: \(error.localizedDescription)", isError: true)
         }
 
         // Notify UI
@@ -1696,7 +1712,11 @@ final class MessageService: @unchecked Sendable {
                !backfillPeer.noisePublicKey.isEmpty {
                 resolvedUser.noisePublicKey = backfillPeer.noisePublicKey
                 resolvedUser.signingPublicKey = backfillPeer.signingPublicKey
-                try? context.save()
+                do {
+                    try context.save()
+                } catch {
+                    DebugLogger.shared.log("DB", "Failed to save backfilled keys: \(error.localizedDescription)", isError: true)
+                }
                 DebugLogger.shared.log("DM", "Backfilled keys for \(resolvedUsername) before createDMChannel")
             }
         }
@@ -2059,7 +2079,7 @@ final class MessageService: @unchecked Sendable {
 
         // Get local identity to filter out self from memberships
         guard let identity = getIdentity() else {
-            print("[Blip-TX] ERROR resolveRecipient: no local identity")
+            DebugLogger.emit("DM", "resolveRecipient FAILED: no local identity", isError: true)
             DebugLogger.emit("DM", "resolveRecipient FAILED: no local identity", isError: true)
             return nil
         }
@@ -2071,13 +2091,13 @@ final class MessageService: @unchecked Sendable {
         let channelID = channel.id
         let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
         guard let freshChannel = try? freshContext.fetch(channelDesc).first else {
-            print("[Blip-TX] ERROR resolveRecipient: channel not found in fresh context")
+            DebugLogger.emit("DM", "resolveRecipient FAILED: channel not found in fresh context", isError: true)
             DebugLogger.emit("DM", "resolveRecipient FAILED: channel \(channelID) not found in fresh context", isError: true)
             return nil
         }
 
         let memberships = freshChannel.memberships
-        print("[Blip-TX] resolveRecipient: channel has \(memberships.count) memberships")
+        DebugLogger.emit("DM", "resolveRecipient: channel has \(memberships.count) memberships")
         DebugLogger.emit("DM", "resolveRecipient: channel \(channelID) has \(memberships.count) memberships")
 
         for membership in memberships {
@@ -2092,14 +2112,14 @@ final class MessageService: @unchecked Sendable {
 
             // Skip local user
             if user.noisePublicKey == localNoiseKey {
-                print("[Blip-TX] resolveRecipient: skipping local user \(user.username)")
+                DebugLogger.emit("DM", "resolveRecipient: skipping local user \(user.username)")
                 DebugLogger.emit("DM", "resolveRecipient: skipping local user \(user.username)")
                 continue
             }
 
             // Skip users with empty keys
             if user.noisePublicKey.isEmpty {
-                print("[Blip-TX] resolveRecipient: user \(user.username) has empty noisePublicKey — skipping")
+                DebugLogger.emit("DM", "resolveRecipient: \(user.username) has empty noisePublicKey — skipping", isError: true)
                 DebugLogger.emit("DM", "resolveRecipient: \(user.username) has EMPTY noisePublicKey — skipping", isError: true)
                 continue
             }
@@ -2108,25 +2128,25 @@ final class MessageService: @unchecked Sendable {
             let userKey = user.noisePublicKey
             if let recipientPeer = peerStore.peer(byNoisePublicKey: userKey) {
                 let peerHex = recipientPeer.peerID.prefix(4).map { String(format: "%02x", $0) }.joined()
-                print("[Blip-TX] resolveRecipient: resolved \(user.username) → peerID \(peerHex)")
+                DebugLogger.emit("DM", "resolveRecipient: resolved \(user.username) → peerID \(peerHex)")
                 DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(peerHex) via=ble (\(user.username))")
                 return PeerID(bytes: recipientPeer.peerID)
             }
 
             // Fallback: construct PeerID from stored key
             if user.noisePublicKey.count == PeerID.length {
-                print("[Blip-TX] resolveRecipient: using raw key as PeerID for \(user.username)")
+                DebugLogger.emit("DM", "resolveRecipient: using raw key as PeerID for \(user.username)")
                 let keyHex = user.noisePublicKey.prefix(4).map { String(format: "%02x", $0) }.joined()
                 DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(keyHex) via=cache (raw key, \(user.username))")
                 return PeerID(bytes: user.noisePublicKey)
             }
-            print("[Blip-TX] resolveRecipient: user \(user.username) has key but no peer in PeerStore")
+            DebugLogger.emit("DM", "resolveRecipient: \(user.username) has key but no peer in PeerStore", isError: true)
             let derivedHex = user.noisePublicKey.prefix(4).map { String(format: "%02x", $0) }.joined()
             DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(derivedHex) via=relay (derived, \(user.username))")
             return PeerID(noisePublicKey: user.noisePublicKey)
         }
 
-        print("[Blip-TX] ERROR resolveRecipient: no valid remote user found in channel \(channelID)")
+        DebugLogger.emit("DM", "resolveRecipient FAILED: no valid remote user in channel \(channelID)", isError: true)
         DebugLogger.emit("DM", "resolveRecipient FAILED: no valid remote user in channel \(channelID)", isError: true)
         return nil
     }

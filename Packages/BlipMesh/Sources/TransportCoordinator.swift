@@ -366,14 +366,18 @@ public final class TransportCoordinator: @unchecked Sendable, Transport {
                     do {
                         try bleTransport.send(data: message.data, to: target)
                         sent = true
-                    } catch { /* fallthrough */ }
+                    } catch {
+                        logger.debug("Queue drain: BLE send failed to \(target): \(error.localizedDescription)")
+                    }
                 }
 
                 if !sent && webSocketTransport.state == .running {
                     do {
                         try webSocketTransport.send(data: message.data, to: target)
                         sent = true
-                    } catch { /* fallthrough */ }
+                    } catch {
+                        logger.debug("Queue drain: WS send failed to \(target): \(error.localizedDescription)")
+                    }
                 }
             } else {
                 // Broadcast.

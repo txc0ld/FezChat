@@ -230,9 +230,16 @@ final class UserSyncService: Sendable {
             throw SyncError.serverError("Invalid response body")
         }
 
+        guard let id = userDict["id"] as? String, !id.isEmpty else {
+            throw SyncError.serverError("Missing user ID in lookup response")
+        }
+        guard let username = userDict["username"] as? String, !username.isEmpty else {
+            throw SyncError.serverError("Missing username in lookup response")
+        }
+
         return RemoteLookupResult(
-            id: userDict["id"] as? String ?? "",
-            username: userDict["username"] as? String ?? "",
+            id: id,
+            username: username,
             isVerified: userDict["isVerified"] as? Bool ?? false,
             noisePublicKey: userDict["noisePublicKey"] as? String,
             signingPublicKey: userDict["signingPublicKey"] as? String,
