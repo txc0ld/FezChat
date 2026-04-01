@@ -140,6 +140,19 @@ struct FestivalView: View {
                 outOfRangeBanner
             }
 
+            // Loading indicator when festival data is being fetched
+            if festivalViewModel?.discoveryState == .fetching {
+                VStack(spacing: BlipSpacing.md) {
+                    ProgressView()
+                        .tint(.blipAccentPurple)
+                    Text("Loading festival data...")
+                        .font(theme.typography.secondary)
+                        .foregroundStyle(theme.colors.mutedText)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, BlipSpacing.xl)
+            }
+
             // Section picker
             sectionPicker
 

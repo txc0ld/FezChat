@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
 import MapKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - NearbyView
 
@@ -359,26 +362,57 @@ struct NearbyView: View {
             .padding(.horizontal, BlipSpacing.md)
 
             if nearbyFriends.isEmpty && nonFriendPeers.isEmpty {
-                HStack(spacing: BlipSpacing.sm) {
-                    if resolvedMeshViewModel?.isBLEActive == true {
+                if resolvedMeshViewModel?.isBLEActive == true {
+                    // Scanning state — show pulsing animation
+                    VStack(spacing: BlipSpacing.md) {
                         ProgressView()
-                            .tint(theme.colors.mutedText)
-                    } else {
-                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                            .tint(.blipAccentPurple)
+                            .scaleEffect(1.2)
+
+                        Text("Scanning for nearby peers...")
+                            .font(theme.typography.secondary)
                             .foregroundStyle(theme.colors.mutedText)
+
+                        Text("Make sure Bluetooth is enabled and you're near other Blip users.")
+                            .font(theme.typography.caption)
+                            .foregroundStyle(theme.colors.mutedText.opacity(0.7))
+                            .multilineTextAlignment(.center)
                     }
-                    Text(emptyNearbyStateText)
-                        .font(theme.typography.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, BlipSpacing.xl)
+                    .padding(.horizontal, BlipSpacing.md)
+                } else {
+                    EmptyStateView(
+                        icon: "antenna.radiowaves.left.and.right.slash",
+                        title: "Bluetooth is off",
+                        subtitle: "Turn on Bluetooth to discover people nearby and join the mesh network.",
+                        ctaTitle: "Open Settings"
+                    ) {
+                        #if canImport(UIKit)
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                        #endif
+                    }
+                    .padding(.vertical, BlipSpacing.lg)
+                }
+            } else if nearbyFriends.isEmpty {
+                VStack(spacing: BlipSpacing.sm) {
+                    Image(systemName: "person.2.slash")
+                        .font(.system(size: 24))
+                        .foregroundStyle(theme.colors.mutedText)
+
+                    Text("No friends nearby")
+                        .font(theme.typography.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(theme.colors.text)
+
+                    Text("Tap a peer above to send a friend request.")
+                        .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, BlipSpacing.lg)
-            } else if nearbyFriends.isEmpty {
-                Text("No friends nearby yet. Tap a peer above to add them.")
-                    .font(theme.typography.secondary)
-                    .foregroundStyle(theme.colors.mutedText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, BlipSpacing.md)
             } else {
                 ForEach(Array(nearbyFriends.enumerated()), id: \.element.id) { index, friend in
                     NearbyPeerCard(
