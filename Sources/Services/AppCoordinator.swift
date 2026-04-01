@@ -395,7 +395,9 @@ final class AppCoordinator {
 
         // Prune peers not seen in 2 minutes (separate from announce staleness)
         let pruneTimer = Timer(timeInterval: 60.0, repeats: true) { [weak self] _ in
-            self?.peerStore.pruneStale(olderThan: 120)
+            Task { @MainActor in
+                self?.peerStore.pruneStale(olderThan: 120)
+            }
         }
         RunLoop.main.add(pruneTimer, forMode: .common)
         peerPruneTimer = pruneTimer

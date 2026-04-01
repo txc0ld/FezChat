@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - SettingsComponents
 
 /// Shared helper views used across all settings sub-sections.
+@MainActor
 enum SettingsComponents {
 
     /// A glass-backed group with a title bar (icon + label) and custom content.

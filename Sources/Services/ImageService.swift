@@ -152,7 +152,7 @@ final class ImageService: @unchecked Sendable {
         case .heif(let q): quality = q
         }
 
-        var compressed = compressWithFormat(scaled, format: format)
+        let compressed = compressWithFormat(scaled, format: format)
         guard var data = compressed else {
             throw ImageServiceError.compressionFailed
         }
@@ -304,7 +304,7 @@ final class ImageService: @unchecked Sendable {
         defer { lock.unlock() }
 
         // Check memory cache
-        if var entry = cache[key] {
+        if let entry = cache[key] {
             // Update access time
             let updated = CacheEntry(
                 data: entry.data,
@@ -387,17 +387,12 @@ final class ImageService: @unchecked Sendable {
             guard let ciImage = CIImage(image: image) else { return nil }
             let context = CIContext()
             let colorSpace = CGColorSpaceCreateDeviceRGB()
-            do {
-                return try context.heifRepresentation(
-                    of: ciImage,
-                    format: .RGBA8,
-                    colorSpace: colorSpace,
-                    options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): quality]
-                )
-            } catch {
-                logger.warning("Failed to create HEIF representation: \(error.localizedDescription)")
-                return nil
-            }
+            return context.heifRepresentation(
+                of: ciImage,
+                format: .RGBA8,
+                colorSpace: colorSpace,
+                options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): quality]
+            )
         }
     }
 

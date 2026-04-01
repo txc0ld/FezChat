@@ -1,6 +1,7 @@
 import Foundation
 import CoreLocation
 import SwiftData
+@preconcurrency import ObjectiveC
 import os
 
 // MARK: - Location Service Error

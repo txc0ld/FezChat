@@ -101,7 +101,8 @@ enum SpringConstants {
     // MARK: - Reduce Motion detection
 
     /// Checks the system accessibility setting for Reduce Motion.
-    static var isReduceMotionEnabled: Bool {
+    /// Safe to call from any context — UIAccessibility is thread-safe for reads.
+    nonisolated(unsafe) static var isReduceMotionEnabled: Bool {
         #if canImport(UIKit)
         return UIAccessibility.isReduceMotionEnabled
         #elseif canImport(AppKit)

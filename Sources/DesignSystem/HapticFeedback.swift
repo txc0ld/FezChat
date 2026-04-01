@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Centralized haptic feedback triggers for consistent tactile responses.
 /// All haptics are no-ops on platforms without UIKit.
+@MainActor
 enum BlipHaptics {
 
     /// Light impact for button taps, card presses.
