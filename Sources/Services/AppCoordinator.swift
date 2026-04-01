@@ -132,7 +132,8 @@ final class AppCoordinator {
         let ble = BLEService(localPeerID: peerID)
         let ws = WebSocketTransport(
             localPeerID: peerID,
-            noisePublicKey: identity.noisePublicKey.rawRepresentation
+            noisePublicKey: identity.noisePublicKey.rawRepresentation,
+            relayURL: ServerConfig.relayWebSocketURL
         )
         let coordinator = TransportCoordinator(
             bleTransport: ble,
