@@ -359,13 +359,21 @@ final class AppCoordinator {
         // Broadcast presence after a short delay to let connections establish
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
-            try? await messageService?.broadcastPresence()
+            do {
+                try await messageService?.broadcastPresence()
+            } catch {
+                DebugLogger.shared.log("PRESENCE", "Failed to broadcast presence: \(error.localizedDescription)", isError: true)
+            }
         }
 
         // Re-broadcast presence every 30s so late-joining peers see our username
         let aTimer = Timer(timeInterval: 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                try? await self?.messageService?.broadcastPresence()
+                do {
+                    try await self?.messageService?.broadcastPresence()
+                } catch {
+                    DebugLogger.emit("PRESENCE", "Failed to re-broadcast presence: \(error.localizedDescription)", isError: true)
+                }
             }
         }
         RunLoop.main.add(aTimer, forMode: .common)
