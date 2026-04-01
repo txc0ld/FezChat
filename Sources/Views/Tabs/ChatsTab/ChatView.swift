@@ -299,7 +299,8 @@ struct ChatView: View {
             return "Yesterday"
         } else {
             let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE, MMM d"
+            formatter.dateStyle = .medium
+            formatter.locale = .current
             return formatter.string(from: date)
         }
     }
