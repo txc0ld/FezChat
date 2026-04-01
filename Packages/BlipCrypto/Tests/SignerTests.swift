@@ -116,8 +116,8 @@ struct SignerTests {
         let wire1 = try PacketSerializer.encode(packet1)
         let wire2 = try PacketSerializer.encode(packet2)
 
-        let signable1 = Signer.extractSignableData(from: wire1)
-        let signable2 = Signer.extractSignableData(from: wire2)
+        let signable1 = try Signer.extractSignableData(from: wire1)
+        let signable2 = try Signer.extractSignableData(from: wire2)
 
         #expect(signable1 == signable2, "Signable data should be identical regardless of TTL")
     }
