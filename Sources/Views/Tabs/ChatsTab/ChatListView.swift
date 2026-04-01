@@ -14,6 +14,7 @@ struct ChatListView: View {
     @State private var isRefreshing = false
     @State private var showNewMessage = false
     @State private var showAddFriend = false
+    @State private var showMessageSearch = false
     @State private var selectedConversation: ConversationPreview? = nil
     @Environment(\.theme) private var theme
 
@@ -35,6 +36,16 @@ struct ChatListView: View {
                 prompt: "Search conversations"
             )
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showMessageSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.blipAccentPurple)
+                    }
+                    .accessibilityLabel("Search messages")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showAddFriend = true
@@ -47,6 +58,9 @@ struct ChatListView: View {
             }
             .sheet(isPresented: $showAddFriend) {
                 AddFriendByUsernameSheet()
+            }
+            .sheet(isPresented: $showMessageSearch) {
+                MessageSearchView()
             }
             .sheet(isPresented: $showNewMessage) {
                 newMessageSheet
