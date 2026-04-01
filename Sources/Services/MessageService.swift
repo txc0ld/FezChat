@@ -67,6 +67,11 @@ final class MessageService: @unchecked Sendable {
     // Transport reference (set externally after initialization)
     private var transport: (any Transport)?
 
+    // MARK: - Fragment Reassembly
+
+    /// Reassembles incoming fragment packets into complete payloads.
+    private let fragmentAssembler = FragmentAssembler()
+
     // MARK: - Noise Sessions
 
     /// Manages Noise XX handshakes and active encrypted sessions.
@@ -715,8 +720,16 @@ final class MessageService: @unchecked Sendable {
                         try await self.handlePTTAudio(packet, from: peerID)
                     case .orgAnnouncement:
                         try await self.handleOrgAnnouncement(packet)
-                    default:
-                        break
+                    case .leave:
+                        self.handleLeave(packet)
+                    case .fragment:
+                        self.handleFragment(packet, from: peerID)
+                    case .syncRequest:
+                        self.handleSyncRequest(packet, from: peerID)
+                    case .fileTransfer:
+                        self.handleFileTransfer(packet, from: peerID)
+                    case .channelUpdate:
+                        self.handleChannelUpdate(packet)
                     }
                 } catch {
                     let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
@@ -1546,6 +1559,67 @@ final class MessageService: @unchecked Sendable {
         try context.save()
 
         delegate?.messageService(self, didReceiveMessage: message, in: channel)
+    }
+
+    // MARK: - Leave
+
+    private func handleLeave(_ packet: Packet) {
+        let senderBytes = packet.senderID.bytes
+        let senderHex = senderBytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        DebugLogger.emit("PEER", "Received LEAVE from \(senderHex) — marking disconnected")
+        peerStore.markDisconnected(peerID: senderBytes)
+    }
+
+    // MARK: - Fragment Reassembly
+
+    private func handleFragment(_ packet: Packet, from peerID: PeerID) {
+        let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+
+        guard let fragment = Fragment.parse(packet.payload) else {
+            DebugLogger.emit("RX", "FRAGMENT from \(senderHex): failed to parse header", isError: true)
+            return
+        }
+
+        let fragIDHex = fragment.fragmentID.prefix(2).map { String(format: "%02x", $0) }.joined()
+        DebugLogger.emit("RX", "FRAGMENT from \(senderHex): id=\(fragIDHex) \(fragment.index + 1)/\(fragment.total)")
+
+        do {
+            let result = try fragmentAssembler.receive(fragment)
+            switch result {
+            case .incomplete(let received, let total):
+                DebugLogger.emit("RX", "FRAGMENT assembly \(fragIDHex): \(received)/\(total)")
+            case .complete(let reassembled):
+                DebugLogger.emit("RX", "FRAGMENT assembly \(fragIDHex): COMPLETE (\(reassembled.count) bytes) — re-dispatching")
+                // Re-dispatch the reassembled data through the normal receive pipeline
+                receive(data: reassembled, from: peerID)
+            }
+        } catch {
+            DebugLogger.emit("RX", "FRAGMENT assembly error: \(error)", isError: true)
+        }
+    }
+
+    // MARK: - Sync Request (stub)
+
+    private func handleSyncRequest(_ packet: Packet, from peerID: PeerID) {
+        let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        let payloadSize = packet.payload.count
+        DebugLogger.emit("SYNC", "Received syncRequest from \(senderHex) (\(payloadSize) bytes) — not yet implemented")
+    }
+
+    // MARK: - File Transfer (stub)
+
+    private func handleFileTransfer(_ packet: Packet, from peerID: PeerID) {
+        let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        let payloadSize = packet.payload.count
+        DebugLogger.emit("RX", "Received fileTransfer from \(senderHex) (\(payloadSize) bytes) — not yet implemented")
+    }
+
+    // MARK: - Channel Update (stub)
+
+    private func handleChannelUpdate(_ packet: Packet) {
+        let senderHex = packet.senderID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        let payloadSize = packet.payload.count
+        DebugLogger.emit("RX", "Received channelUpdate from \(senderHex) (\(payloadSize) bytes) — not yet implemented")
     }
 
     private func handleDeliveryAck(data: Data) {
