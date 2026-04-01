@@ -61,13 +61,18 @@ final class EmailVerificationService: Sendable {
             throw EmailVerificationError.networkError("Invalid response")
         }
 
+        let responseBody = String(data: data, encoding: .utf8) ?? "<non-UTF8>"
+        DebugLogger.emit("AUTH", "send-code \(trimmed): \(http.statusCode) — \(responseBody)")
+
         switch http.statusCode {
         case 200:
             logger.info("Verification code sent to \(trimmed, privacy: .private)")
         case 429:
             throw EmailVerificationError.rateLimited
+        case 502, 503:
+            throw EmailVerificationError.serverError("Email service temporarily unavailable. Please try again.")
         default:
-            let message = parseError(data) ?? "Status \(http.statusCode)"
+            let message = parseError(data) ?? "Unexpected error (status \(http.statusCode))"
             throw EmailVerificationError.serverError(message)
         }
     }
