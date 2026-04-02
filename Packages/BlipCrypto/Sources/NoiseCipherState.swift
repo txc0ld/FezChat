@@ -93,9 +93,15 @@ public final class NoiseCipherState: @unchecked Sendable {
 
     // MARK: - Decrypt
 
+    /// Maximum number of skipped nonces to try when decryption fails.
+    /// Covers dropped packets that desync the nonce counter.
+    public static let nonceRecoveryWindow: UInt64 = 5
+
     /// Decrypt a ciphertext message with optional associated data.
     ///
     /// Increments the nonce counter after successful decryption.
+    /// If decryption fails at the expected nonce, tries up to `nonceRecoveryWindow`
+    /// subsequent nonces to recover from dropped-packet desync.
     ///
     /// - Parameters:
     ///   - ciphertext: The ciphertext + 16-byte Poly1305 tag.
@@ -109,7 +115,6 @@ public final class NoiseCipherState: @unchecked Sendable {
             throw NoiseCipherError.nonceOverflow
         }
 
-        // Store expected nonce for monotonic validation
         let expectedNonce = nonce
 
         // ChaChaPoly tag is 16 bytes
@@ -117,30 +122,36 @@ public final class NoiseCipherState: @unchecked Sendable {
             throw NoiseCipherError.decryptionFailed
         }
 
-        let chachaNonce = try makeNonce(expectedNonce)
         let tagOffset = ciphertext.count - 16
         let ct = ciphertext[ciphertext.startIndex ..< ciphertext.startIndex + tagOffset]
         let tag = ciphertext[ciphertext.startIndex + tagOffset ..< ciphertext.endIndex]
 
-        let sealedBox = try ChaChaPoly.SealedBox(
-            nonce: chachaNonce,
-            ciphertext: ct,
-            tag: tag
-        )
+        // Try the expected nonce first, then nonce+1..nonce+window for recovery
+        let maxAttempt = min(expectedNonce + Self.nonceRecoveryWindow, Self.maxNonce)
+        for candidate in expectedNonce ... maxAttempt {
+            let candidateNonce = try makeNonce(candidate)
+            let sealedBox = try ChaChaPoly.SealedBox(
+                nonce: candidateNonce,
+                ciphertext: ct,
+                tag: tag
+            )
 
-        let plaintext: Data
-        do {
-            plaintext = try ChaChaPoly.open(sealedBox, using: key, authenticating: ad)
-        } catch {
-            throw NoiseCipherError.decryptionFailed
+            if let plaintext = try? ChaChaPoly.open(sealedBox, using: key, authenticating: ad) {
+                let skipped = candidate - expectedNonce
+                if skipped > 0 {
+                    nonceRecoveryCount += 1
+                }
+                nonce = candidate + 1
+                messageCount += 1
+                return plaintext
+            }
         }
 
-        // Only increment after successful decryption (monotonic guarantee)
-        nonce = expectedNonce + 1
-        messageCount += 1
-
-        return plaintext
+        throw NoiseCipherError.decryptionFailed
     }
+
+    /// Number of times nonce recovery has been used on this cipher.
+    public private(set) var nonceRecoveryCount: UInt64 = 0
 
     // MARK: - Rekey
 

@@ -108,6 +108,17 @@ final class MessageService: @unchecked Sendable {
     private var unverifiedPacketCounts: [Data: Int] = [:]
     private static let maxUnverifiedPackets = 5
 
+    /// Check if an encrypted packet carries a friend request or accept payload.
+    /// These are exempt from the unverified packet counter because they arrive
+    /// before the peer has announced (no signing key available yet).
+    private static func isHandshakeRelatedEncrypted(_ packet: Packet) -> Bool {
+        guard packet.type == .noiseEncrypted, let firstByte = packet.payload.first else {
+            return false
+        }
+        let subType = EncryptedSubType(rawValue: firstByte)
+        return subType == .friendRequest || subType == .friendAccept
+    }
+
     // MARK: - Constants
 
     /// Maximum text payload size in bytes (UTF-8).
@@ -677,16 +688,25 @@ final class MessageService: @unchecked Sendable {
                         DebugLogger.emit("RX", "SIG CHECK ERROR from \(senderHex): \(error) — accepting", isError: true)
                     }
                 } else {
-                    let count: Int = self.lock.withLock {
-                        let c = (self.unverifiedPacketCounts[senderData] ?? 0) + 1
-                        self.unverifiedPacketCounts[senderData] = c
-                        return c
+                    // Exempt handshake and friend request/accept packets from the
+                    // unverified limit — these arrive before the peer has announced
+                    // and must not consume the budget meant for data packets.
+                    let isExempt = packet.type == .noiseHandshake || Self.isHandshakeRelatedEncrypted(packet)
+
+                    if !isExempt {
+                        let count: Int = self.lock.withLock {
+                            let c = (self.unverifiedPacketCounts[senderData] ?? 0) + 1
+                            self.unverifiedPacketCounts[senderData] = c
+                            return c
+                        }
+                        if count > Self.maxUnverifiedPackets {
+                            DebugLogger.emit("RX", "UNVERIFIED LIMIT: \(senderHex) sent \(count) packets without announcing — DROPPED", isError: true)
+                            return
+                        }
+                        DebugLogger.emit("RX", "No signing key for \(senderHex) — accepting unverified (\(count)/\(Self.maxUnverifiedPackets))")
+                    } else {
+                        DebugLogger.emit("RX", "No signing key for \(senderHex) — exempt (handshake/friend)")
                     }
-                    if count > Self.maxUnverifiedPackets {
-                        DebugLogger.emit("RX", "UNVERIFIED LIMIT: \(senderHex) sent \(count) packets without announcing — DROPPED", isError: true)
-                        return
-                    }
-                    DebugLogger.emit("RX", "No signing key for \(senderHex) — accepting unverified (\(count)/\(Self.maxUnverifiedPackets))")
                 }
             }
 
@@ -1238,9 +1258,14 @@ final class MessageService: @unchecked Sendable {
         // Attempt Noise decryption if we have an active session with this peer
         if let session = noiseSessionManager?.getSession(for: peerID) {
             do {
+                let recoveryBefore = session.receiveCipher.nonceRecoveryCount
                 payload = try session.decrypt(ciphertext: payload)
                 let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
-                DebugLogger.shared.log("NOISE", "Decrypted \(payload.count)B from \(senderHex)")
+                if session.receiveCipher.nonceRecoveryCount > recoveryBefore {
+                    DebugLogger.shared.log("NOISE", "Decrypted \(payload.count)B from \(senderHex) (nonce recovery)")
+                } else {
+                    DebugLogger.shared.log("NOISE", "Decrypted \(payload.count)B from \(senderHex)")
+                }
             } catch {
                 // Decryption failed — fall through to try as plaintext (backward compat)
                 let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
