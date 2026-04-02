@@ -267,6 +267,7 @@ struct EditProfileView: View {
 
                 Spacer()
 
+                // TODO: BDEV-136 — implement email change flow with server verification
                 Button(action: { showEmailVerify = true }) {
                     Text("Change Email")
                         .font(theme.typography.caption)
@@ -279,7 +280,9 @@ struct EditProfileView: View {
                         )
                 }
                 .frame(minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Change email address")
+                .disabled(true)
+                .opacity(0.5)
+                .accessibilityLabel("Change email address — unavailable")
             }
         }
     }

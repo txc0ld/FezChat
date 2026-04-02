@@ -7,6 +7,9 @@ import SwiftUI
 /// The original version unlocked sample emergency data with a weak client-only
 /// code check. This build exposes the feature honestly until organizer auth,
 /// responder sync, and live alert routing are wired end to end.
+///
+/// TODO: BDEV-136 — requires server-backed responder auth, live SOS alert feed,
+/// accept/navigate/resolve state sync, and real-device validation with festival staff.
 struct MedicalDashboardView: View {
 
     @Environment(\.theme) private var theme

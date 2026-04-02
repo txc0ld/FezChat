@@ -157,6 +157,7 @@ struct MessagePackStore: View {
                         .foregroundStyle(theme.colors.mutedText)
                 }
 
+                // TODO: BDEV-136 — show warning when message balance is low (replace with real threshold)
                 if false {
                     HStack(spacing: BlipSpacing.xs) {
                         Image(systemName: "exclamationmark.triangle.fill")

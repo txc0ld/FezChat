@@ -10,6 +10,7 @@ struct SecuritySettings: View {
     var body: some View {
         SettingsComponents.settingsGroup(title: "Security", icon: "lock.fill", theme: theme) {
             VStack(spacing: BlipSpacing.md) {
+                // TODO: BDEV-136 — wire recovery kit export with password-protected file
                 Button(action: {}) {
                     HStack {
                         VStack(alignment: .leading, spacing: BlipSpacing.xs) {

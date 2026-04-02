@@ -173,7 +173,7 @@ struct VoiceNotePlayer: View {
     }
 
     private func simulatePlayback() {
-        // Simulated playback progress for preview/development
+        // TODO: BDEV-136 — replace with real AVAudioPlayer playback using audioData
         let adjustedDuration = duration / playbackSpeed.rawValue
         let steps = Int(adjustedDuration * 20) // 20 updates per second
         let stepDuration = adjustedDuration / Double(steps)

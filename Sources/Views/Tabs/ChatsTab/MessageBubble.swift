@@ -18,6 +18,15 @@ struct MessageBubble: View {
     /// Called when user taps an image thumbnail to view full-screen.
     var onImageTap: (() -> Void)? = nil
 
+    /// Called when user taps edit in context menu.
+    var onEdit: (() -> Void)? = nil
+
+    /// Called when user taps delete in context menu.
+    var onDelete: (() -> Void)? = nil
+
+    /// Called when user taps report in context menu.
+    var onReport: (() -> Void)? = nil
+
     @State private var isVisible = false
     @Environment(\.theme) private var theme
     @Environment(\.colorScheme) private var colorScheme
@@ -233,13 +242,13 @@ struct MessageBubble: View {
 
         if message.isFromMe {
             Button {
-                // Edit action handled by ViewModel
+                onEdit?()
             } label: {
                 Label("Edit", systemImage: "pencil")
             }
 
             Button(role: .destructive) {
-                // Delete action handled by ViewModel
+                onDelete?()
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -248,7 +257,7 @@ struct MessageBubble: View {
         Divider()
 
         Button(role: .destructive) {
-            // Report action handled by ViewModel
+            onReport?()
         } label: {
             Label("Report", systemImage: "exclamationmark.triangle")
         }

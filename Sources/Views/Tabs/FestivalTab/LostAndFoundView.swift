@@ -165,6 +165,7 @@ struct LostAndFoundView: View {
 
     // MARK: - Actions
 
+    // TODO: BDEV-136 — wire to live festival channel instead of local-only storage
     private func sendMessage() {
         guard isPostingAvailable else { return }
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)

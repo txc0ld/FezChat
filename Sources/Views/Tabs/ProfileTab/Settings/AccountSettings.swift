@@ -36,7 +36,7 @@ struct AccountSettings: View {
 
                 Divider().opacity(0.15)
 
-                // Export My Data
+                // TODO: BDEV-136 — wire account data export (JSON) and remote account deletion
                 Button(action: {}) {
                     HStack {
                         VStack(alignment: .leading, spacing: BlipSpacing.xs) {
