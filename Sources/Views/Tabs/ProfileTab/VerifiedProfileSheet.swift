@@ -136,6 +136,7 @@ struct VerifiedProfileSheet: View {
             } else {
                 GlassCard(thickness: .regular) {
                     VStack(spacing: BlipSpacing.sm) {
+                        // TODO: BDEV-136 — wire StoreKit 2 purchase for com.blip.verified product
                         Text("Verification purchases are unavailable in this build.")
                             .font(theme.typography.body)
                             .foregroundStyle(theme.colors.text)

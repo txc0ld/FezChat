@@ -93,7 +93,12 @@ struct ImageViewer: View {
 
     private var shareButton: some View {
         Button {
-            // Share action
+            guard let imageData, let uiImage = UIImage(data: imageData) else { return }
+            let activityVC = UIActivityViewController(activityItems: [uiImage], applicationActivities: nil)
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootVC = windowScene.windows.first?.rootViewController {
+                rootVC.present(activityVC, animated: true)
+            }
         } label: {
             Image(systemName: "square.and.arrow.up")
                 .font(.system(size: 16, weight: .semibold))

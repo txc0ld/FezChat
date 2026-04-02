@@ -34,6 +34,7 @@ struct AboutSettings: View {
                 SettingsComponents.settingsInfoRow(title: "Branch", value: BuildInfo.gitBranch, theme: theme)
                 SettingsComponents.settingsInfoRow(title: "Built", value: BuildInfo.buildDate, theme: theme)
 
+                // TODO: BDEV-136 — wire to hosted legal pages and acknowledgements screen
                 disabledLinkRow(title: "Privacy Policy", subtitle: "Unavailable until hosted legal pages are published")
                 disabledLinkRow(title: "Terms of Service", subtitle: "Unavailable until hosted legal pages are published")
                 disabledLinkRow(title: "Open Source Licenses", subtitle: "Unavailable until the in-app acknowledgements screen is wired")

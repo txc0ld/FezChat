@@ -163,6 +163,7 @@ struct FestivalView: View {
                     case .map:
                         mapSection
                     case .schedule:
+                        // TODO: BDEV-136 — wire onSaveAct, onToggleReminder, onShareGoing to FestivalViewModel
                         ScheduleView(stages: scheduleStages)
                     case .announcements:
                         AnnouncementFeed(announcements: announcements)
@@ -246,8 +247,12 @@ struct FestivalView: View {
                         meetingPoints: meetingPoints,
                         festivalCenter: festivalCenter,
                         festivalRadiusMeters: festivalRadius,
-                        onStageTap: { _ in },
-                        onMeetingPointTap: { _ in }
+                        onStageTap: { stage in
+                            selectedSection = .schedule
+                        },
+                        onMeetingPointTap: { _ in
+                            showMeetingPointSheet = true
+                        }
                     )
 
                     if showCrowdPulse {

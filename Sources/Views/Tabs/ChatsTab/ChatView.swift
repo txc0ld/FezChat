@@ -84,7 +84,7 @@ struct ChatView: View {
                     Task { await sendMessage(text: trimmedText) }
                 },
                 onAttachment: {
-                    // Attachment handling
+                    // TODO: BDEV-136 — wire attachment picker (camera, photo library, voice note)
                 },
                 onPTTStart: {
                     isPTTRecording = true
@@ -203,7 +203,7 @@ struct ChatView: View {
                                 message: message,
                                 index: messageIndex,
                                 onReply: {
-                                    // Reply handling
+                                    // TODO: BDEV-136 — populate reply quote in MessageInput
                                 },
                                 onImageTap: {
                                     selectedImageData = message.imageData

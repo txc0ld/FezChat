@@ -588,6 +588,13 @@ struct NearbyView: View {
                             Task {
                                 await resolvedLocationViewModel?.dropBeacon(label: "I'm here!")
                             }
+                        },
+                        onNavigateToFriend: { friend in
+                            let lat = friend.coordinate.latitude
+                            let lon = friend.coordinate.longitude
+                            if let url = URL(string: "maps://?daddr=\(lat),\(lon)&dirflg=w") {
+                                UIApplication.shared.open(url)
+                            }
                         }
                     )
                     .frame(height: 350)
