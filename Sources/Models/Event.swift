@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class Festival {
+final class Event {
     @Attribute(.unique)
     var id: UUID
 
@@ -18,13 +18,13 @@ final class Festival {
 
     // MARK: - Inverse Relationships
 
-    @Relationship(deleteRule: .cascade, inverse: \Stage.festival)
+    @Relationship(deleteRule: .cascade, inverse: \Stage.event)
     var stages: [Stage] = []
 
-    @Relationship(deleteRule: .cascade, inverse: \Channel.festival)
+    @Relationship(deleteRule: .cascade, inverse: \Channel.event)
     var channels: [Channel] = []
 
-    @Relationship(inverse: \MedicalResponder.festival)
+    @Relationship(inverse: \MedicalResponder.event)
     var medicalResponders: [MedicalResponder] = []
 
     // MARK: - Computed Properties

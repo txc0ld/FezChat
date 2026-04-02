@@ -122,8 +122,8 @@ final class PTTViewModel {
         switch crowdScale {
         case .gather:
             maxDuration = AudioService.maxVoiceNoteDuration // 30s
-        case .festival:
-            maxDuration = AudioService.maxVoiceNoteDurationFestival // 15s
+        case .event:
+            maxDuration = AudioService.maxVoiceNoteDurationEvent // 15s
         case .mega, .massive:
             maxDuration = 0 // PTT disabled in mega/massive (text-only)
         }

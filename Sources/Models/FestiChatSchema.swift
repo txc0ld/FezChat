@@ -12,7 +12,7 @@ enum BlipSchema {
         Attachment.self,
         Channel.self,
         GroupMembership.self,
-        Festival.self,
+        Event.self,
         Stage.self,
         SetTime.self,
         MeetingPoint.self,

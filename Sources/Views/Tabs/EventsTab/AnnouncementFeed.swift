@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - AnnouncementFeed
 
-/// Priority announcements from festival organizers.
+/// Priority announcements from event organizers.
 ///
 /// Displays glass cards with severity-based color coding.
 /// Emergency announcements are pinned at the top with red accent.
@@ -89,7 +89,7 @@ struct AnnouncementFeed: View {
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText)
 
-                Text("Festival updates will appear here")
+                Text("Event updates will appear here")
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText.opacity(0.7))
             }
@@ -238,9 +238,9 @@ enum AnnouncementSeverity {
 
 #Preview("Announcement Feed") {
     let announcements: [AnnouncementItem] = [
-        AnnouncementItem(id: UUID(), title: "WEATHER WARNING", message: "Heavy rain expected from 8pm. Seek shelter in covered areas. Waterproofs recommended.", severity: .emergency, timestamp: Date().addingTimeInterval(-300), source: "Festival Safety", isPinned: true),
+        AnnouncementItem(id: UUID(), title: "WEATHER WARNING", message: "Heavy rain expected from 8pm. Seek shelter in covered areas. Waterproofs recommended.", severity: .emergency, timestamp: Date().addingTimeInterval(-300), source: "Event Safety", isPinned: true),
         AnnouncementItem(id: UUID(), title: "Schedule Change", message: "Fred Again.. moved from 9pm to 10pm on Pyramid Stage due to technical setup.", severity: .warning, timestamp: Date().addingTimeInterval(-1800), source: "Programme Team", isPinned: false),
-        AnnouncementItem(id: UUID(), title: "Food Village Extended", message: "Food vendors in the Green Field area will remain open until 2am tonight.", severity: .info, timestamp: Date().addingTimeInterval(-3600), source: "Festival Info", isPinned: false),
+        AnnouncementItem(id: UUID(), title: "Food Village Extended", message: "Food vendors in the Green Field area will remain open until 2am tonight.", severity: .info, timestamp: Date().addingTimeInterval(-3600), source: "Event Info", isPinned: false),
     ]
 
     ZStack {

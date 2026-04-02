@@ -480,7 +480,7 @@ extension FriendsListView {
     static let sampleFriends: [FriendListItem] = [
         FriendListItem(id: UUID(), displayName: "Sarah Chen", username: "sarahc", bio: "Music and mountains", isOnline: true, isPhoneVerified: true, status: .accepted),
         FriendListItem(id: UUID(), displayName: "Jake Morrison", username: "jakem", bio: "Always at the front", isOnline: true, isPhoneVerified: false, status: .accepted),
-        FriendListItem(id: UUID(), displayName: "Priya Patel", username: "priyap", bio: "Festival photographer", isOnline: false, isPhoneVerified: true, status: .accepted),
+        FriendListItem(id: UUID(), displayName: "Priya Patel", username: "priyap", bio: "Event photographer", isOnline: false, isPhoneVerified: true, status: .accepted),
         FriendListItem(id: UUID(), displayName: "Tom Wilson", username: "tomw", bio: "", isOnline: false, isPhoneVerified: false, status: .pending),
         FriendListItem(id: UUID(), displayName: "Blocked User", username: "spam123", bio: "", isOnline: false, isPhoneVerified: false, status: .blocked),
     ]

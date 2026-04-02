@@ -32,7 +32,7 @@ final class Channel {
     @Relationship(deleteRule: .cascade, inverse: \GroupMembership.channel)
     var memberships: [GroupMembership] = []
 
-    var festival: Festival?
+    var event: Event?
     var geohash: String?
 
     @Relationship
@@ -91,7 +91,7 @@ final class Channel {
         id: UUID = UUID(),
         type: ChannelType = .dm,
         name: String? = nil,
-        festival: Festival? = nil,
+        event: Event? = nil,
         geohash: String? = nil,
         muteStatus: MuteStatus = .unmuted,
         maxRetention: TimeInterval = .infinity,
@@ -103,7 +103,7 @@ final class Channel {
         self.id = id
         self.typeRaw = type.rawValue
         self.name = name
-        self.festival = festival
+        self.event = event
         self.geohash = geohash
         self.muteStatusRaw = muteStatus.rawValue
         self.maxRetention = maxRetention

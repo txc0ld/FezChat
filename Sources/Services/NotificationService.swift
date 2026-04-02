@@ -324,13 +324,13 @@ final class NotificationService: NSObject, @unchecked Sendable {
     // MARK: - Organizer Announcement
 
     /// Show a notification for an organizer announcement.
-    func notifyOrgAnnouncement(festivalName: String, message: String) {
+    func notifyOrgAnnouncement(eventName: String, message: String) {
         let content = UNMutableNotificationContent()
-        content.title = festivalName
+        content.title = eventName
         content.body = message
         content.categoryIdentifier = BlipNotificationCategory.organizerAnnouncement.rawValue
         content.sound = .default
-        content.userInfo = ["type": "orgAnnouncement", "festival": festivalName]
+        content.userInfo = ["type": "orgAnnouncement", "event": eventName]
 
         scheduleNotification(content: content, id: "org_\(UUID().uuidString)")
     }

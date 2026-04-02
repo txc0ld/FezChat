@@ -32,8 +32,8 @@ enum LocationAccuracyLevel: Sendable {
 protocol LocationServiceDelegate: AnyObject, Sendable {
     func locationService(_ service: LocationService, didUpdateLocation location: CLLocation)
     func locationService(_ service: LocationService, didUpdateGeohash geohash: String)
-    func locationService(_ service: LocationService, didEnterFestivalRegion festivalID: UUID)
-    func locationService(_ service: LocationService, didExitFestivalRegion festivalID: UUID)
+    func locationService(_ service: LocationService, didEnterEventRegion eventID: UUID)
+    func locationService(_ service: LocationService, didExitEventRegion eventID: UUID)
     func locationService(_ service: LocationService, didChangeAuthorization status: CLAuthorizationStatus)
     func locationService(_ service: LocationService, didFailWithError error: Error)
 }
@@ -45,7 +45,7 @@ protocol LocationServiceDelegate: AnyObject, Sendable {
 /// Features:
 /// - Precise GPS for SOS alerts
 /// - Configurable-precision friend location sharing
-/// - Festival geofence monitoring (enter/exit regions)
+/// - Event geofence monitoring (enter/exit regions)
 /// - Geohash computation for location channel assignment
 /// - 15-minute periodic background location checks
 /// - Battery-aware accuracy adjustments
@@ -68,7 +68,7 @@ final class LocationService: NSObject, @unchecked Sendable {
     /// Whether location updates are actively running.
     private(set) var isUpdating = false
 
-    /// Currently monitored festival region identifiers.
+    /// Currently monitored event region identifiers.
     private var monitoredRegions: [String: UUID] = [:]
 
     /// Current accuracy mode.
@@ -219,8 +219,8 @@ final class LocationService: NSObject, @unchecked Sendable {
 
     // MARK: - Geofencing
 
-    /// Add a geofence for a festival location.
-    func monitorFestival(id: UUID, center: CLLocationCoordinate2D, radius: CLLocationDistance) throws {
+    /// Add a geofence for a event location.
+    func monitorEvent(id: UUID, center: CLLocationCoordinate2D, radius: CLLocationDistance) throws {
         guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else {
             throw LocationServiceError.monitoringFailed("Region monitoring not available")
         }
@@ -229,7 +229,7 @@ final class LocationService: NSObject, @unchecked Sendable {
             throw LocationServiceError.geofenceLimit
         }
 
-        let regionID = "festival_\(id.uuidString)"
+        let regionID = "event_\(id.uuidString)"
         let region = CLCircularRegion(
             center: center,
             radius: min(radius, locationManager.maximumRegionMonitoringDistance),
@@ -242,9 +242,9 @@ final class LocationService: NSObject, @unchecked Sendable {
         locationManager.startMonitoring(for: region)
     }
 
-    /// Remove festival geofence monitoring.
-    func stopMonitoringFestival(id: UUID) {
-        let regionID = "festival_\(id.uuidString)"
+    /// Remove event geofence monitoring.
+    func stopMonitoringEvent(id: UUID) {
+        let regionID = "event_\(id.uuidString)"
         monitoredRegions.removeValue(forKey: regionID)
 
         for region in locationManager.monitoredRegions {
@@ -255,10 +255,10 @@ final class LocationService: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Stop monitoring all festival geofences.
-    func stopMonitoringAllFestivals() {
+    /// Stop monitoring all event geofences.
+    func stopMonitoringAllEvents() {
         for region in locationManager.monitoredRegions {
-            if region.identifier.hasPrefix("festival_") {
+            if region.identifier.hasPrefix("event_") {
                 locationManager.stopMonitoring(for: region)
             }
         }
@@ -363,14 +363,14 @@ extension LocationService: CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
-        if let festivalID = monitoredRegions[region.identifier] {
-            delegate?.locationService(self, didEnterFestivalRegion: festivalID)
+        if let eventID = monitoredRegions[region.identifier] {
+            delegate?.locationService(self, didEnterEventRegion: eventID)
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
-        if let festivalID = monitoredRegions[region.identifier] {
-            delegate?.locationService(self, didExitFestivalRegion: festivalID)
+        if let eventID = monitoredRegions[region.identifier] {
+            delegate?.locationService(self, didExitEventRegion: eventID)
         }
     }
 

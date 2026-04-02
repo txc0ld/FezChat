@@ -7,7 +7,7 @@ final class MedicalResponder {
     var id: UUID
 
     var user: User?
-    var festival: Festival?
+    var event: Event?
     var accessCodeHash: String
     var callsign: String
     var isOnDuty: Bool
@@ -29,7 +29,7 @@ final class MedicalResponder {
     init(
         id: UUID = UUID(),
         user: User? = nil,
-        festival: Festival? = nil,
+        event: Event? = nil,
         accessCodeHash: String,
         callsign: String,
         isOnDuty: Bool = false,
@@ -39,7 +39,7 @@ final class MedicalResponder {
     ) {
         self.id = id
         self.user = user
-        self.festival = festival
+        self.event = event
         self.accessCodeHash = accessCodeHash
         self.callsign = callsign
         self.isOnDuty = isOnDuty

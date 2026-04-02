@@ -9,14 +9,14 @@ import BlipCrypto
 
 enum CrowdScaleDisplay: String, Sendable {
     case gather = "Gather"
-    case festival = "Festival"
+    case event = "Event"
     case mega = "Mega"
     case massive = "Massive"
 
     var peerRange: String {
         switch self {
         case .gather: return "< 500"
-        case .festival: return "500 - 5K"
+        case .event: return "500 - 5K"
         case .mega: return "5K - 25K"
         case .massive: return "25K+"
         }
@@ -25,7 +25,7 @@ enum CrowdScaleDisplay: String, Sendable {
     var description: String {
         switch self {
         case .gather: return "Full features, all media types"
-        case .festival: return "Moderate throttle, text + voice"
+        case .event: return "Moderate throttle, text + voice"
         case .mega: return "Text-first, tight relay"
         case .massive: return "Text-only, aggressive clustering"
         }
@@ -153,7 +153,7 @@ final class MeshViewModel {
 
     /// Peer count thresholds for crowd scale detection.
     private static let gatherThreshold = 500
-    private static let festivalThreshold = 5_000
+    private static let eventThreshold = 5_000
     private static let megaThreshold = 25_000
 
     /// Maximum events to keep in the log.
@@ -247,10 +247,10 @@ final class MeshViewModel {
         let newScale: CrowdScaleDisplay
         if peerEstimate >= Self.megaThreshold {
             newScale = .massive
-        } else if peerEstimate >= Self.festivalThreshold {
+        } else if peerEstimate >= Self.eventThreshold {
             newScale = .mega
         } else if peerEstimate >= Self.gatherThreshold {
-            newScale = .festival
+            newScale = .event
         } else {
             newScale = .gather
         }

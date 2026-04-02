@@ -20,8 +20,8 @@ struct ResponderMapView: View {
     let alerts: [SOSAlertItem]
     let medicalTents: [MedicalTentPin]
     let responderLocations: [ResponderPin]
-    let festivalCenter: CLLocationCoordinate2D
-    let festivalRadiusMeters: Double
+    let eventCenter: CLLocationCoordinate2D
+    let eventRadiusMeters: Double
 
     var onAlertTap: ((SOSAlertItem) -> Void)?
     var onNavigateToAlert: ((SOSAlertItem) -> Void)?
@@ -52,8 +52,8 @@ struct ResponderMapView: View {
 
     private var mapContent: some View {
         Map(position: $cameraPosition) {
-            // Festival boundary
-            MapCircle(center: festivalCenter, radius: festivalRadiusMeters)
+            // Event boundary
+            MapCircle(center: eventCenter, radius: eventRadiusMeters)
                 .foregroundStyle(.blipAccentPurple.opacity(0.03))
                 .stroke(.blipAccentPurple.opacity(0.15), lineWidth: 1)
 
@@ -202,9 +202,9 @@ struct ResponderMapView: View {
         withAnimation {
             cameraPosition = .region(
                 MKCoordinateRegion(
-                    center: festivalCenter,
-                    latitudinalMeters: festivalRadiusMeters * 2.5,
-                    longitudinalMeters: festivalRadiusMeters * 2.5
+                    center: eventCenter,
+                    latitudinalMeters: eventRadiusMeters * 2.5,
+                    longitudinalMeters: eventRadiusMeters * 2.5
                 )
             )
         }
@@ -386,8 +386,8 @@ extension SOSAlertItem {
         responderLocations: [
             ResponderPin(id: UUID(), callsign: "Medic-1", coordinate: CLLocationCoordinate2D(latitude: 51.0045, longitude: -2.5858), isOnDuty: true),
         ],
-        festivalCenter: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
-        festivalRadiusMeters: 3000
+        eventCenter: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
+        eventRadiusMeters: 3000
     )
     .frame(height: 400)
     .padding()

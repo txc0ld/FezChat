@@ -354,7 +354,7 @@ extension ChatMessage {
         ChatMessage(
             id: UUID(), senderName: "Alice", senderAvatarData: nil,
             isFromMe: false, showSenderName: false,
-            text: "Hey! Are you at the festival yet?",
+            text: "Hey! Are you at the event yet?",
             contentType: .text, deliveryStatus: .read,
             timestamp: Date().addingTimeInterval(-3600),
             isEdited: false, replyPreview: nil, imageData: nil,

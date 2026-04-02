@@ -137,7 +137,7 @@ final class SOSViewModel {
     /// Confirmation delay for users with many false alarms (seconds).
     private static let falseAlarmDelay = 10
 
-    /// SOS alert expiration (24 hours + festival duration).
+    /// SOS alert expiration (24 hours + event duration).
     private static let alertExpiration: TimeInterval = 86_400
 
     // MARK: - Init

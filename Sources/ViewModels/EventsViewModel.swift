@@ -3,42 +3,42 @@ import SwiftData
 import CoreLocation
 import os.log
 
-// MARK: - Festival Discovery State
+// MARK: - Event Discovery State
 
-enum FestivalDiscoveryState: Sendable, Equatable {
+enum EventDiscoveryState: Sendable, Equatable {
     case idle
     case fetching
     case loaded
     case failed(String)
 }
 
-// MARK: - Festival View Model
+// MARK: - Event View Model
 
-/// Manages festival discovery, manifest fetch/verify, geofencing, stage map, schedule, and crowd pulse.
+/// Manages event discovery, manifest fetch/verify, geofencing, stage map, schedule, and crowd pulse.
 ///
 /// Features:
-/// - Discover festivals from manifest CDN
+/// - Discover events from manifest CDN
 /// - Verify manifest signatures with organizer keys
-/// - Geofence monitoring for automatic festival detection
+/// - Geofence monitoring for automatic event detection
 /// - Stage map display with crowd density overlay
 /// - Set time schedule with save/reminder functionality
 /// - Crowd pulse aggregation from nearby peers
 @MainActor
 @Observable
-final class FestivalViewModel {
+final class EventsViewModel {
 
     // MARK: - Published State
 
-    /// Available festivals (from manifest).
-    var availableFestivals: [FestivalInfo] = []
+    /// Available events (from manifest).
+    var availableEvents: [EventInfo] = []
 
-    /// The currently active festival (user is inside geofence).
-    var activeFestival: Festival?
+    /// The currently active event (user is inside geofence).
+    var activeEvent: Event?
 
-    /// Stages at the active festival.
+    /// Stages at the active event.
     var stages: [StageInfo] = []
 
-    /// Full schedule for the active festival, grouped by stage.
+    /// Full schedule for the active event, grouped by stage.
     var schedule: [StageSchedule] = []
 
     /// Set times saved by the user.
@@ -48,10 +48,10 @@ final class FestivalViewModel {
     var crowdPulseData: [CrowdPulseInfo] = []
 
     /// Discovery state.
-    var discoveryState: FestivalDiscoveryState = .idle
+    var discoveryState: EventDiscoveryState = .idle
 
-    /// Whether the user is currently inside a festival geofence.
-    var isInsideFestival = false
+    /// Whether the user is currently inside a event geofence.
+    var isInsideEvent = false
 
     /// Error message, if any.
     var errorMessage: String?
@@ -61,7 +61,7 @@ final class FestivalViewModel {
 
     // MARK: - Supporting Types
 
-    struct FestivalInfo: Identifiable, Sendable {
+    struct EventInfo: Identifiable, Sendable {
         let id: UUID
         let name: String
         let latitude: Double
@@ -112,7 +112,7 @@ final class FestivalViewModel {
 
     // MARK: - Dependencies
 
-    private let logger = Logger(subsystem: "com.blip", category: "FestivalViewModel")
+    private let logger = Logger(subsystem: "com.blip", category: "EventsViewModel")
     private let modelContainer: ModelContainer
     private let locationService: LocationService
     private let notificationService: NotificationService
@@ -144,10 +144,10 @@ final class FestivalViewModel {
         if let obs = geofenceObservation { NotificationCenter.default.removeObserver(obs) }
     }
 
-    // MARK: - Festival Discovery
+    // MARK: - Event Discovery
 
-    /// Fetch the festival manifest from the CDN.
-    func fetchFestivals() async {
+    /// Fetch the event manifest from the CDN.
+    func fetchEvents() async {
         discoveryState = .fetching
 
         guard let url = URL(string: Self.manifestURL) else {
@@ -172,10 +172,10 @@ final class FestivalViewModel {
             }
 
             // Store events in SwiftData
-            await storeFestivals(manifest.events)
+            await storeEvents(manifest.events)
 
             // Reload from SwiftData
-            await loadFestivals()
+            await loadEvents()
 
             discoveryState = .loaded
 
@@ -184,101 +184,101 @@ final class FestivalViewModel {
         }
     }
 
-    /// Load festivals from local SwiftData store.
-    func loadFestivals() async {
+    /// Load events from local SwiftData store.
+    func loadEvents() async {
         let context = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<Festival>(
+        let descriptor = FetchDescriptor<Event>(
             sortBy: [SortDescriptor(\.startDate, order: .forward)]
         )
 
         do {
-            let festivals = try context.fetch(descriptor)
+            let events = try context.fetch(descriptor)
 
-            availableFestivals = festivals.map { festival in
-                FestivalInfo(
-                    id: festival.id,
-                    name: festival.name,
-                    latitude: festival.coordinatesLatitude,
-                    longitude: festival.coordinatesLongitude,
-                    radius: festival.radiusMeters,
-                    startDate: festival.startDate,
-                    endDate: festival.endDate,
-                    stageCount: festival.stages.count,
-                    isActive: festival.isActive,
-                    isUpcoming: festival.isUpcoming
+            availableEvents = events.map { event in
+                EventInfo(
+                    id: event.id,
+                    name: event.name,
+                    latitude: event.coordinatesLatitude,
+                    longitude: event.coordinatesLongitude,
+                    radius: event.radiusMeters,
+                    startDate: event.startDate,
+                    endDate: event.endDate,
+                    stageCount: event.stages.count,
+                    isActive: event.isActive,
+                    isUpcoming: event.isUpcoming
                 )
             }
 
-            // Set active festival if user is inside one
-            activeFestival = festivals.first { $0.isActive }
+            // Set active event if user is inside one
+            activeEvent = events.first { $0.isActive }
 
-            if let active = activeFestival {
+            if let active = activeEvent {
                 await loadStages(for: active)
                 await loadSchedule(for: active)
                 await loadCrowdPulse()
             }
 
         } catch {
-            errorMessage = "Failed to load festivals: \(error.localizedDescription)"
+            errorMessage = "Failed to load events: \(error.localizedDescription)"
         }
     }
 
     // MARK: - Geofencing
 
-    /// Start monitoring geofences for all upcoming and active festivals.
+    /// Start monitoring geofences for all upcoming and active events.
     func startGeofencing() async {
         let context = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<Festival>()
+        let descriptor = FetchDescriptor<Event>()
 
-        let festivals: [Festival]
+        let events: [Event]
         do {
-            festivals = try context.fetch(descriptor)
+            events = try context.fetch(descriptor)
         } catch {
-            logger.error("Failed to fetch festivals for geofencing: \(error.localizedDescription)")
-            errorMessage = "Failed to fetch festivals for geofencing: \(error.localizedDescription)"
+            logger.error("Failed to fetch events for geofencing: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch events for geofencing: \(error.localizedDescription)"
             return
         }
 
-        for festival in festivals where festival.isActive || festival.isUpcoming {
+        for event in events where event.isActive || event.isUpcoming {
             do {
-                try locationService.monitorFestival(
-                    id: festival.id,
+                try locationService.monitorEvent(
+                    id: event.id,
                     center: CLLocationCoordinate2D(
-                        latitude: festival.coordinatesLatitude,
-                        longitude: festival.coordinatesLongitude
+                        latitude: event.coordinatesLatitude,
+                        longitude: event.coordinatesLongitude
                     ),
-                    radius: festival.radiusMeters
+                    radius: event.radiusMeters
                 )
             } catch {
-                errorMessage = "Failed to set geofence for \(festival.name)"
+                errorMessage = "Failed to set geofence for \(event.name)"
             }
         }
     }
 
-    /// Handle entering a festival geofence.
-    func handleFestivalEntry(festivalID: UUID) async {
+    /// Handle entering a event geofence.
+    func handleEventEntry(eventID: UUID) async {
         let context = ModelContext(modelContainer)
-        let targetID = festivalID
-        let descriptor = FetchDescriptor<Festival>(predicate: #Predicate { $0.id == targetID })
+        let targetID = eventID
+        let descriptor = FetchDescriptor<Event>(predicate: #Predicate { $0.id == targetID })
 
-        let festival: Festival
+        let event: Event
         do {
             guard let fetched = try context.fetch(descriptor).first else { return }
-            festival = fetched
+            event = fetched
         } catch {
-            logger.error("Failed to fetch festival for entry: \(error.localizedDescription)")
-            errorMessage = "Failed to fetch festival for entry: \(error.localizedDescription)"
+            logger.error("Failed to fetch event for entry: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch event for entry: \(error.localizedDescription)"
             return
         }
 
-        activeFestival = festival
-        isInsideFestival = true
+        activeEvent = event
+        isInsideEvent = true
 
         // Update preferences
         let prefsDescriptor = FetchDescriptor<UserPreferences>()
         do {
             if let prefs = try context.fetch(prefsDescriptor).first {
-                prefs.lastFestivalID = festivalID
+                prefs.lastEventID = eventID
                 do {
                     try context.save()
                 } catch {
@@ -291,24 +291,24 @@ final class FestivalViewModel {
             errorMessage = "Failed to fetch user preferences: \(error.localizedDescription)"
         }
 
-        await loadStages(for: festival)
-        await loadSchedule(for: festival)
+        await loadStages(for: event)
+        await loadSchedule(for: event)
         await loadCrowdPulse()
 
-        successMessage = "Welcome to \(festival.name)!"
+        successMessage = "Welcome to \(event.name)!"
     }
 
-    /// Handle exiting a festival geofence.
-    func handleFestivalExit(festivalID: UUID) {
-        if activeFestival?.id == festivalID {
-            isInsideFestival = false
+    /// Handle exiting a event geofence.
+    func handleEventExit(eventID: UUID) {
+        if activeEvent?.id == eventID {
+            isInsideEvent = false
         }
     }
 
     // MARK: - Stages
 
-    private func loadStages(for festival: Festival) async {
-        stages = festival.stages.map { stage in
+    private func loadStages(for event: Event) async {
+        stages = event.stages.map { stage in
             let currentSet = stage.schedule.first { $0.isLive }
             let nextSet = stage.schedule
                 .filter { $0.isUpcoming }
@@ -329,8 +329,8 @@ final class FestivalViewModel {
 
     // MARK: - Schedule
 
-    private func loadSchedule(for festival: Festival) async {
-        schedule = festival.stages.map { stage in
+    private func loadSchedule(for event: Event) async {
+        schedule = event.stages.map { stage in
             let sets = stage.schedule
                 .sorted { $0.startTime < $1.startTime }
                 .map { setTime in
@@ -396,7 +396,7 @@ final class FestivalViewModel {
             errorMessage = "Failed to save set time toggle: \(error.localizedDescription)"
         }
 
-        if let active = activeFestival {
+        if let active = activeEvent {
             await loadSchedule(for: active)
         }
     }
@@ -441,7 +441,7 @@ final class FestivalViewModel {
             successMessage = "Reminder removed"
         }
 
-        if let active = activeFestival {
+        if let active = activeEvent {
             await loadSchedule(for: active)
         }
     }
@@ -528,7 +528,7 @@ final class FestivalViewModel {
         return true
     }
 
-    private func storeFestivals(_ manifestEvents: [ManifestEvent]) async {
+    private func storeEvents(_ manifestEvents: [ManifestEvent]) async {
         let context = ModelContext(modelContainer)
         let dateFormatter = ISO8601DateFormatter()
 
@@ -539,14 +539,14 @@ final class FestivalViewModel {
 
             let signingKey = Data(base64Encoded: mf.organizerSigningKey) ?? Data()
 
-            // Check if festival already exists
+            // Check if event already exists
             let targetID = uuid
-            let descriptor = FetchDescriptor<Festival>(predicate: #Predicate { $0.id == targetID })
-            let existing: Festival?
+            let descriptor = FetchDescriptor<Event>(predicate: #Predicate { $0.id == targetID })
+            let existing: Event?
             do {
                 existing = try context.fetch(descriptor).first
             } catch {
-                logger.error("Failed to fetch existing festival during store: \(error.localizedDescription)")
+                logger.error("Failed to fetch existing event during store: \(error.localizedDescription)")
                 continue
             }
 
@@ -561,7 +561,7 @@ final class FestivalViewModel {
                 existing.organizerSigningKey = signingKey
             } else {
                 // Insert new
-                let festival = Festival(
+                let event = Event(
                     id: uuid,
                     name: mf.name,
                     coordinates: GeoPoint(latitude: mf.latitude, longitude: mf.longitude),
@@ -570,7 +570,7 @@ final class FestivalViewModel {
                     endDate: endDate,
                     organizerSigningKey: signingKey
                 )
-                context.insert(festival)
+                context.insert(event)
 
                 // Insert stages
                 if let manifestStages = mf.stages {
@@ -580,7 +580,7 @@ final class FestivalViewModel {
                         let stage = Stage(
                             id: stageUUID,
                             name: ms.name,
-                            festival: festival,
+                            event: event,
                             coordinates: GeoPoint(latitude: ms.latitude, longitude: ms.longitude)
                         )
                         context.insert(stage)
@@ -610,8 +610,8 @@ final class FestivalViewModel {
         do {
             try context.save()
         } catch {
-            logger.error("Failed to save stored festivals: \(error.localizedDescription)")
-            errorMessage = "Failed to save stored festivals: \(error.localizedDescription)"
+            logger.error("Failed to save stored events: \(error.localizedDescription)")
+            errorMessage = "Failed to save stored events: \(error.localizedDescription)"
         }
     }
 
@@ -619,7 +619,7 @@ final class FestivalViewModel {
 
     private func setupGeofenceObserver() {
         // The LocationService notifies via its delegate; here we observe via the location service
-        // This is connected during app startup when the FestivalViewModel is set as the location delegate
+        // This is connected during app startup when the EventsViewModel is set as the location delegate
     }
 
     // MARK: - Utility

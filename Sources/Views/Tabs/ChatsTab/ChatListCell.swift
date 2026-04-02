@@ -254,7 +254,7 @@ extension ConversationPreview {
         ),
         ConversationPreview(
             id: UUID(),
-            displayName: "Festival Squad",
+            displayName: "Event Squad",
             avatarData: nil,
             lastMessagePreview: "Voice note",
             timestamp: Date().addingTimeInterval(-3600),
