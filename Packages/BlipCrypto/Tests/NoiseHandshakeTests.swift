@@ -281,6 +281,62 @@ struct NoiseHandshakeTests {
         #expect(ct1 != ct2)
     }
 
+    // MARK: - Nonce Recovery
+
+    @Test("Nonce recovery succeeds after 1-packet gap")
+    func testNonceRecoveryOnePacketGap() throws {
+        let (initiatorResult, responderResult) = try performHandshake()
+
+        let msg1 = Data("message 1".utf8)
+        let msg2 = Data("message 2".utf8)
+
+        // Encrypt both messages (nonce 0 and 1)
+        _ = try initiatorResult.sendCipher.encrypt(plaintext: msg1)
+        let ct2 = try initiatorResult.sendCipher.encrypt(plaintext: msg2)
+
+        // Receiver never got msg1 (nonce 0) — still expects nonce 0.
+        // Decrypt msg2 (nonce 1) — should recover by trying nonce+1.
+        let decrypted = try responderResult.receiveCipher.decrypt(ciphertext: ct2)
+        #expect(decrypted == msg2)
+        #expect(responderResult.receiveCipher.nonceRecoveryCount == 1)
+        #expect(responderResult.receiveCipher.currentNonce == 2)
+    }
+
+    @Test("Nonce recovery succeeds after 3-packet gap")
+    func testNonceRecoveryThreePacketGap() throws {
+        let (initiatorResult, responderResult) = try performHandshake()
+
+        // Encrypt 4 messages (nonces 0, 1, 2, 3)
+        for i in 0 ..< 3 {
+            _ = try initiatorResult.sendCipher.encrypt(plaintext: Data("skip \(i)".utf8))
+        }
+        let ct4 = try initiatorResult.sendCipher.encrypt(plaintext: Data("kept".utf8))
+
+        // Receiver missed nonces 0-2, decrypt nonce 3
+        let decrypted = try responderResult.receiveCipher.decrypt(ciphertext: ct4)
+        #expect(decrypted == Data("kept".utf8))
+        #expect(responderResult.receiveCipher.nonceRecoveryCount == 1)
+        #expect(responderResult.receiveCipher.currentNonce == 4)
+    }
+
+    @Test("Nonce recovery fails when gap exceeds window size")
+    func testNonceRecoveryExceedsWindow() throws {
+        let (initiatorResult, responderResult) = try performHandshake()
+
+        // Encrypt 7 messages (nonces 0-6), skip all but last
+        for i in 0 ..< 6 {
+            _ = try initiatorResult.sendCipher.encrypt(plaintext: Data("skip \(i)".utf8))
+        }
+        let ct7 = try initiatorResult.sendCipher.encrypt(plaintext: Data("too far".utf8))
+
+        // Gap is 6, window is 5 — should fail
+        #expect(throws: NoiseCipherError.decryptionFailed) {
+            _ = try responderResult.receiveCipher.decrypt(ciphertext: ct7)
+        }
+        // Nonce should not have advanced
+        #expect(responderResult.receiveCipher.currentNonce == 0)
+    }
+
     // MARK: - Helpers
 
     /// Perform a full handshake and return both results.
