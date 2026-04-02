@@ -107,6 +107,15 @@ export default {
         return json({ error: "Not found" }, 404, env);
     }
   },
+
+  // Cron warmup: runs every 5 minutes to keep the Worker and Neon DB connection
+  // warm, preventing cold-start timeouts (-1001) on real user requests.
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    const sql = await getDb(env);
+    if (sql) {
+      ctx.waitUntil(sql`SELECT 1`.catch(() => {}));
+    }
+  },
 };
 
 // ─── Send Code ───────────────────────────────────────────────

@@ -12,6 +12,11 @@ DEV_BYPASS = "true"
 # Set RESEND_API_KEY via `wrangler secret put RESEND_API_KEY`
 # Set DATABASE_URL via `wrangler secret put DATABASE_URL`
 
+# Cron trigger: ping every 5 minutes to keep Worker + Neon DB warm,
+# avoiding cold-start timeouts on the first real user request.
+[triggers]
+crons = ["*/5 * * * *"]
+
 [[kv_namespaces]]
 binding = "CODES"
 id = "46bc2e8e8a2e4c5badea76ac27658a5e"
