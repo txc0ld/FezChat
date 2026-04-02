@@ -42,15 +42,66 @@ final class UserSyncService: Sendable {
         }
     }
 
+    // MARK: - Registration Gate
+
+    /// Shared gate to prevent concurrent registration requests.
+    /// Multiple callers (onboarding, AppCoordinator key re-sync, self-check) may
+    /// attempt registration simultaneously after onboarding completes. This
+    /// serializes them so only one network request fires at a time.
+    private static let registrationGate = RegistrationGate()
+
+    private actor RegistrationGate {
+        private var inProgress = false
+
+        /// Returns true if this caller should proceed; false if another registration is in flight.
+        func tryAcquire() -> Bool {
+            if inProgress { return false }
+            inProgress = true
+            return true
+        }
+
+        func release() {
+            inProgress = false
+        }
+    }
+
     // MARK: - Register User
 
     /// Register a new user after onboarding completes.
     /// Fire-and-forget — failures are logged but don't block the user.
+    /// Gated by a shared lock so concurrent callers (onboarding retry, AppCoordinator
+    /// key re-sync, self-check) don't fire duplicate requests.
     func registerUser(
         emailHash: String,
         username: String,
         noisePublicKey: Data? = nil,
         signingPublicKey: Data? = nil
+    ) async throws {
+        guard await Self.registrationGate.tryAcquire() else {
+            DebugLogger.emit("AUTH", "Registration skipped for \(username) — already in progress")
+            return
+        }
+
+        do {
+            try await performRegistration(
+                emailHash: emailHash,
+                username: username,
+                noisePublicKey: noisePublicKey,
+                signingPublicKey: signingPublicKey
+            )
+            await Self.registrationGate.release()
+        } catch {
+            await Self.registrationGate.release()
+            throw error
+        }
+    }
+
+    /// The actual registration network call, separated from the gate logic.
+    private func performRegistration(
+        emailHash: String,
+        username: String,
+        noisePublicKey: Data?,
+        signingPublicKey: Data?
     ) async throws {
         var body: [String: Any] = [
             "emailHash": emailHash,
