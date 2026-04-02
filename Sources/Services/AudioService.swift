@@ -54,8 +54,8 @@ final class AudioService: NSObject, @unchecked Sendable {
     /// Maximum voice note duration in seconds.
     static let maxVoiceNoteDuration: TimeInterval = 30
 
-    /// Maximum voice note duration in Festival crowd mode.
-    static let maxVoiceNoteDurationFestival: TimeInterval = 15
+    /// Maximum voice note duration in Event crowd mode.
+    static let maxVoiceNoteDurationEvent: TimeInterval = 15
 
     /// Haptic warning threshold before auto-stop (seconds before end).
     static let hapticWarningThreshold: TimeInterval = 5

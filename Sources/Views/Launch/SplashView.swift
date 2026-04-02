@@ -34,7 +34,7 @@ struct SplashView: View {
                     .opacity(logoOpacity)
 
                 // Tagline
-                Text("Chat at festivals, even without signal.")
+                Text("Chat at events, even without signal.")
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
                     .opacity(taglineOpacity)

@@ -91,7 +91,7 @@ final class StoreViewModel {
     private static let productIDs: [(String, Int)] = [
         ("au.heyblip.Blip.starter10", 10),
         ("au.heyblip.Blip.social25", 25),
-        ("au.heyblip.Blip.festival50", 50),
+        ("au.heyblip.Blip.event50", 50),
         ("au.heyblip.Blip.squad100", 100),
         ("au.heyblip.Blip.season1000", 1000),
         ("au.heyblip.Blip.unlimited", Int.max)

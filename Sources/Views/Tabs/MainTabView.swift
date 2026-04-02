@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - MainTabView
 
 /// Root tab navigation with a custom floating glass tab bar.
-/// Tabs: Chats, Nearby, Festival, Profile.
+/// Tabs: Chats, Nearby, Event, Profile.
 /// Keeps each tab mounted so navigation state and injected feature models are preserved.
 struct MainTabView: View {
 
@@ -44,8 +44,8 @@ struct MainTabView: View {
                     locationViewModel: coordinator.locationViewModel
                 )
             }
-            tabLayer(.festival) {
-                FestivalView(festivalViewModel: coordinator.festivalViewModel)
+            tabLayer(.event) {
+                EventsView(eventsViewModel: coordinator.eventsViewModel)
             }
             tabLayer(.profile) {
                 ProfileView(
@@ -156,7 +156,7 @@ struct MainTabView: View {
     // MARK: - Tab Configuration
 
     private var visibleTabs: [Tab] {
-        [.chats, .nearby, .festival, .profile]
+        [.chats, .nearby, .event, .profile]
     }
 
     private let tabBarHeight: CGFloat = 70
@@ -178,12 +178,12 @@ struct MainTabView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var festivalPlaceholder: some View {
+    private var eventPlaceholder: some View {
         VStack(spacing: BlipSpacing.lg) {
             Image(systemName: "music.note.house.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText)
-            Text("Festival")
+            Text("Event")
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
             Text("Stage map, schedule, and announcements.")
@@ -216,14 +216,14 @@ extension MainTabView {
     enum Tab: String, CaseIterable, Hashable {
         case chats
         case nearby
-        case festival
+        case event
         case profile
 
         var title: String {
             switch self {
             case .chats: return "Chats"
             case .nearby: return "Nearby"
-            case .festival: return "Festival"
+            case .event: return "Event"
             case .profile: return "Profile"
             }
         }
@@ -232,7 +232,7 @@ extension MainTabView {
             switch self {
             case .chats: return "bubble.left.and.bubble.right.fill"
             case .nearby: return "antenna.radiowaves.left.and.right"
-            case .festival: return "music.note.house.fill"
+            case .event: return "music.note.house.fill"
             case .profile: return "person.circle.fill"
             }
         }
@@ -246,7 +246,7 @@ extension MainTabView {
         .environment(\.theme, Theme.shared)
 }
 
-#Preview("Main Tab View - With Festival") {
+#Preview("Main Tab View - With Event") {
     MainTabView(coordinator: AppCoordinator())
         .environment(\.theme, Theme.shared)
 }

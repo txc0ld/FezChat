@@ -9,7 +9,7 @@ import SwiftUI
 /// responder sync, and live alert routing are wired end to end.
 ///
 /// TODO: BDEV-136 — requires server-backed responder auth, live SOS alert feed,
-/// accept/navigate/resolve state sync, and real-device validation with festival staff.
+/// accept/navigate/resolve state sync, and real-device validation with event staff.
 struct MedicalDashboardView: View {
 
     @Environment(\.theme) private var theme
@@ -110,7 +110,7 @@ struct MedicalDashboardView: View {
                 checklistRow("Server-backed responder authentication")
                 checklistRow("Live SOS alert feed for authorized responders")
                 checklistRow("Accepted / navigating / resolved state sync")
-                checklistRow("Real-device validation with festival staff workflows")
+                checklistRow("Real-device validation with event staff workflows")
             }
         }
     }

@@ -371,7 +371,7 @@ struct EditProfileView: View {
         isPresented: .constant(true),
         displayName: "Alex Rivers",
         username: "alexrivers",
-        bio: "Festival lover."
+        bio: "Event lover."
     )
     .preferredColorScheme(.dark)
     .blipTheme()

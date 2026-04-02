@@ -36,7 +36,7 @@ struct BlipWordmark: View {
             }
 
             if showTagline {
-                Text("Chat at festivals, even without signal")
+                Text("Chat at events, even without signal")
                     .font(.custom(BlipFontName.regular, size: fontSize * 0.4))
                     .foregroundStyle(theme.colors.mutedText)
                     .lineLimit(2)

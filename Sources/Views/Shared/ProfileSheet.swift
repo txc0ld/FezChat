@@ -75,7 +75,7 @@ struct ProfileSheet: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Report this user for inappropriate behavior. This will be reviewed by the festival safety team.")
+            Text("Report this user for inappropriate behavior. This will be reviewed by the event safety team.")
         }
     }
 
@@ -289,7 +289,7 @@ struct ProfileSheet: View {
         isPresented: .constant(true),
         displayName: "Jake Morrison",
         username: "jakem",
-        bio: "Festival photographer",
+        bio: "Event photographer",
         isFriend: false,
         isOnline: false,
         mutualFriendsCount: 2

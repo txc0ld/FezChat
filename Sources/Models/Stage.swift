@@ -7,7 +7,7 @@ final class Stage {
     var id: UUID
 
     var name: String
-    var festival: Festival?
+    var event: Event?
     var coordinatesLatitude: Double
     var coordinatesLongitude: Double
 
@@ -32,13 +32,13 @@ final class Stage {
     init(
         id: UUID = UUID(),
         name: String,
-        festival: Festival? = nil,
+        event: Event? = nil,
         coordinates: GeoPoint,
         channel: Channel? = nil
     ) {
         self.id = id
         self.name = name
-        self.festival = festival
+        self.event = event
         self.coordinatesLatitude = coordinates.latitude
         self.coordinatesLongitude = coordinates.longitude
         self.channel = channel

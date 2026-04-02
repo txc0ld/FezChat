@@ -65,7 +65,7 @@ enum TransportMode: String, Codable, CaseIterable {
 
     var caption: String {
         switch self {
-        case .bleOnly: return "Mesh only, zero internet. Best for festivals."
+        case .bleOnly: return "Mesh only, zero internet. Best for events."
         case .bleAndWifi: return "Mesh + WiFi relay for better range."
         case .allRadios: return "BLE + WiFi + Cellular. Maximum connectivity."
         }
@@ -95,7 +95,7 @@ final class UserPreferences {
     var crowdPulseVisible: Bool
     var nearbyVisibilityEnabled: Bool
     var friendFinderMapStyleRaw: String
-    var lastFestivalID: UUID?
+    var lastEventID: UUID?
 
     // MARK: - Computed Properties
 
@@ -133,7 +133,7 @@ final class UserPreferences {
         crowdPulseVisible: Bool = true,
         nearbyVisibilityEnabled: Bool = false,
         friendFinderMapStyle: MapStyle = .standard,
-        lastFestivalID: UUID? = nil
+        lastEventID: UUID? = nil
     ) {
         self.id = id
         self.themeRaw = theme.rawValue
@@ -146,6 +146,6 @@ final class UserPreferences {
         self.crowdPulseVisible = crowdPulseVisible
         self.nearbyVisibilityEnabled = nearbyVisibilityEnabled
         self.friendFinderMapStyleRaw = friendFinderMapStyle.rawValue
-        self.lastFestivalID = lastFestivalID
+        self.lastEventID = lastEventID
     }
 }

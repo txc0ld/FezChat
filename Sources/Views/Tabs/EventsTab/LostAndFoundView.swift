@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - LostAndFoundView
 
-/// Simple chat view for the festival's lost & found public channel.
+/// Simple chat view for the event's lost & found public channel.
 ///
 /// Displays messages in a scrollable list with a text input at the bottom.
 /// Messages are public and not encrypted.
@@ -58,7 +58,7 @@ struct LostAndFoundView: View {
             }
 
             if !isPostingAvailable {
-                Text("Lost & Found is not synced to a live festival channel in this build yet, so posting is disabled instead of storing fake local messages.")
+                Text("Lost & Found is not synced to a live event channel in this build yet, so posting is disabled instead of storing fake local messages.")
                     .font(theme.typography.caption)
                     .foregroundStyle(theme.colors.mutedText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -151,7 +151,7 @@ struct LostAndFoundView: View {
 
                 Text(
                     isPostingAvailable
-                        ? "Posts from festival staff and attendees will appear here."
+                        ? "Posts from event staff and attendees will appear here."
                         : "This screen stays visible so the feature is discoverable, but it is not connected to a shared public channel yet."
                 )
                 .font(theme.typography.secondary)
@@ -165,7 +165,7 @@ struct LostAndFoundView: View {
 
     // MARK: - Actions
 
-    // TODO: BDEV-136 — wire to live festival channel instead of local-only storage
+    // TODO: BDEV-136 — wire to live event channel instead of local-only storage
     private func sendMessage() {
         guard isPostingAvailable else { return }
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)

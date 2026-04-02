@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - WelcomeStep
 
-/// Onboarding step 1: "Chat at festivals, even without signal."
+/// Onboarding step 1: "Chat at events, even without signal."
 /// Animated gradient hero with a continue button.
 /// Long-press the hero illustration to enter the dev bypass code (000000).
 struct WelcomeStep: View {
@@ -37,7 +37,7 @@ struct WelcomeStep: View {
 
             // Text content
             VStack(spacing: BlipSpacing.md) {
-                Text("Chat at festivals,\neven without signal.")
+                Text("Chat at events,\neven without signal.")
                     .font(theme.typography.largeTitle)
                     .foregroundStyle(theme.colors.text)
                     .multilineTextAlignment(.center)

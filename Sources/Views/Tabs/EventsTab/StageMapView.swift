@@ -3,7 +3,7 @@ import MapKit
 
 // MARK: - StageMapView
 
-/// Interactive MapKit view rendering festival grounds with stage hotspots,
+/// Interactive MapKit view rendering event grounds with stage hotspots,
 /// friend dots overlay, and meeting point pins.
 ///
 /// Stage hotspots are tappable and navigate to the corresponding stage channel.
@@ -13,8 +13,8 @@ struct StageMapView: View {
     let stages: [StageMapItem]
     let friends: [FriendMapPin]
     let meetingPoints: [MeetingPointMapItem]
-    let festivalCenter: CLLocationCoordinate2D
-    let festivalRadiusMeters: Double
+    let eventCenter: CLLocationCoordinate2D
+    let eventRadiusMeters: Double
 
     var onStageTap: ((StageMapItem) -> Void)?
     var onMeetingPointTap: ((MeetingPointMapItem) -> Void)?
@@ -47,7 +47,7 @@ struct StageMapView: View {
                     )
             }
             .padding(BlipSpacing.md)
-            .accessibilityLabel("Recenter map on festival")
+            .accessibilityLabel("Recenter map on event")
         }
         .onAppear { recenter() }
     }
@@ -56,8 +56,8 @@ struct StageMapView: View {
 
     private var mapView: some View {
         Map(position: $cameraPosition) {
-            // Festival boundary circle
-            MapCircle(center: festivalCenter, radius: festivalRadiusMeters)
+            // Event boundary circle
+            MapCircle(center: eventCenter, radius: eventRadiusMeters)
                 .foregroundStyle(.blipAccentPurple.opacity(0.05))
                 .stroke(.blipAccentPurple.opacity(0.2), lineWidth: 1)
 
@@ -134,9 +134,9 @@ struct StageMapView: View {
         withAnimation {
             cameraPosition = .region(
                 MKCoordinateRegion(
-                    center: festivalCenter,
-                    latitudinalMeters: festivalRadiusMeters * 2.5,
-                    longitudinalMeters: festivalRadiusMeters * 2.5
+                    center: eventCenter,
+                    latitudinalMeters: eventRadiusMeters * 2.5,
+                    longitudinalMeters: eventRadiusMeters * 2.5
                 )
             )
         }
@@ -213,8 +213,8 @@ struct MeetingPointMapItem: Identifiable {
         meetingPoints: [
             MeetingPointMapItem(id: UUID(), label: "Meet at tent", coordinate: CLLocationCoordinate2D(latitude: 51.0042, longitude: -2.5855), createdBy: "Sarah", expiresAt: Date().addingTimeInterval(1800)),
         ],
-        festivalCenter: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
-        festivalRadiusMeters: 3000
+        eventCenter: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
+        eventRadiusMeters: 3000
     )
     .frame(height: 400)
     .padding()

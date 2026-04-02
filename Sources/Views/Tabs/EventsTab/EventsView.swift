@@ -1,20 +1,20 @@
 import SwiftUI
 import MapKit
 
-// MARK: - FestivalView
+// MARK: - EventsView
 
-/// Main view for the Festival tab combining all festival subviews.
+/// Main view for the Event tab combining all event subviews.
 ///
-/// Conditionally shown when the user has joined or is at a festival.
+/// Conditionally shown when the user has joined or is at a event.
 /// Greyed out/locked when out of geofence range.
-struct FestivalView: View {
+struct EventsView: View {
 
-    /// Festival view model — provides real data when available, falls back to sample data.
-    var festivalViewModel: FestivalViewModel? = nil
+    /// Event view model — provides real data when available, falls back to sample data.
+    var eventsViewModel: EventsViewModel? = nil
 
-    @State private var hasJoinedFestival: Bool = false
+    @State private var hasJoinedEvent: Bool = false
     @State private var isInRange: Bool = false
-    @State private var selectedSection: FestivalSection = .map
+    @State private var selectedSection: EventSection = .map
     @State private var showMeetingPointSheet: Bool = false
     @State private var showCrowdPulse: Bool = true
 
@@ -32,19 +32,19 @@ struct FestivalView: View {
             ZStack {
                 GradientBackground()
 
-                if hasJoinedFestival {
-                    festivalContent
+                if hasJoinedEvent {
+                    eventContent
                 } else {
-                    noFestivalState
+                    noEventState
                 }
             }
-            .navigationTitle(festivalTitle)
+            .navigationTitle(eventTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.hidden, for: .navigationBar)
             .sheet(isPresented: $showMeetingPointSheet) {
                 MeetingPointSheet(
                     isPresented: $showMeetingPointSheet,
-                    initialCoordinate: festivalCenter,
+                    initialCoordinate: eventCenter,
                     onConfirm: { data in
                         let point = MeetingPointMapItem(
                             id: UUID(),
@@ -59,9 +59,9 @@ struct FestivalView: View {
                 .presentationDetents([.large])
             }
             .task {
-                await loadFestivalData()
+                await loadEventData()
             }
-            .onChange(of: festivalViewModel?.isInsideFestival) { _, inside in
+            .onChange(of: eventsViewModel?.isInsideEvent) { _, inside in
                 isInRange = inside ?? true
             }
         }
@@ -69,17 +69,17 @@ struct FestivalView: View {
 
     // MARK: - ViewModel Data Loading
 
-    private func loadFestivalData() async {
-        guard let vm = festivalViewModel else { return }
+    private func loadEventData() async {
+        guard let vm = eventsViewModel else { return }
 
-        await vm.loadFestivals()
-        if vm.availableFestivals.isEmpty {
-            await vm.fetchFestivals()
+        await vm.loadEvents()
+        if vm.availableEvents.isEmpty {
+            await vm.fetchEvents()
         }
         await vm.startGeofencing()
 
-        hasJoinedFestival = vm.activeFestival != nil
-        isInRange = vm.isInsideFestival
+        hasJoinedEvent = vm.activeEvent != nil
+        isInRange = vm.isInsideEvent
         stages = vm.stages.map { stage in
             StageMapItem(
                 id: stage.id,
@@ -123,12 +123,12 @@ struct FestivalView: View {
         }
     }
 
-    // MARK: - Festival Content
+    // MARK: - Event Content
 
-    private var festivalContent: some View {
+    private var eventContent: some View {
         VStack(spacing: 0) {
-            if let error = festivalViewModel?.errorMessage {
-                festivalStatusBanner(
+            if let error = eventsViewModel?.errorMessage {
+                eventStatusBanner(
                     icon: "exclamationmark.triangle.fill",
                     title: error,
                     tint: BlipColors.darkColors.statusAmber
@@ -140,12 +140,12 @@ struct FestivalView: View {
                 outOfRangeBanner
             }
 
-            // Loading indicator when festival data is being fetched
-            if festivalViewModel?.discoveryState == .fetching {
+            // Loading indicator when event data is being fetched
+            if eventsViewModel?.discoveryState == .fetching {
                 VStack(spacing: BlipSpacing.md) {
                     ProgressView()
                         .tint(.blipAccentPurple)
-                    Text("Loading festival data...")
+                    Text("Loading event data...")
                         .font(theme.typography.secondary)
                         .foregroundStyle(theme.colors.mutedText)
                 }
@@ -163,7 +163,7 @@ struct FestivalView: View {
                     case .map:
                         mapSection
                     case .schedule:
-                        // TODO: BDEV-136 — wire onSaveAct, onToggleReminder, onShareGoing to FestivalViewModel
+                        // TODO: BDEV-136 — wire onSaveAct, onToggleReminder, onShareGoing to EventsViewModel
                         ScheduleView(stages: scheduleStages)
                     case .announcements:
                         AnnouncementFeed(announcements: announcements)
@@ -188,7 +188,7 @@ struct FestivalView: View {
     private var sectionPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: BlipSpacing.sm) {
-                ForEach(FestivalSection.allCases, id: \.self) { section in
+                ForEach(EventSection.allCases, id: \.self) { section in
                     sectionTab(section)
                 }
             }
@@ -197,7 +197,7 @@ struct FestivalView: View {
         }
     }
 
-    private func sectionTab(_ section: FestivalSection) -> some View {
+    private func sectionTab(_ section: EventSection) -> some View {
         Button(action: {
             withAnimation(SpringConstants.accessiblePageEntrance) {
                 selectedSection = section
@@ -234,8 +234,8 @@ struct FestivalView: View {
             if stages.isEmpty {
                 EmptyStateView(
                     icon: "map",
-                    title: "Festival map unavailable",
-                    subtitle: "Stage and crowd data appear here after a local festival manifest is loaded for the venue you are currently in."
+                    title: "Event map unavailable",
+                    subtitle: "Stage and crowd data appear here after a local event manifest is loaded for the venue you are currently in."
                 )
                 .padding(.horizontal, BlipSpacing.md)
             } else {
@@ -245,8 +245,8 @@ struct FestivalView: View {
                         stages: stages,
                         friends: friendPins,
                         meetingPoints: meetingPoints,
-                        festivalCenter: festivalCenter,
-                        festivalRadiusMeters: festivalRadius,
+                        eventCenter: eventCenter,
+                        eventRadiusMeters: eventRadius,
                         onStageTap: { stage in
                             selectedSection = .schedule
                         },
@@ -257,9 +257,9 @@ struct FestivalView: View {
 
                     if showCrowdPulse {
                         let region = MKCoordinateRegion(
-                            center: festivalCenter,
-                            latitudinalMeters: festivalRadius * 2.5,
-                            longitudinalMeters: festivalRadius * 2.5
+                            center: eventCenter,
+                            latitudinalMeters: eventRadius * 2.5,
+                            longitudinalMeters: eventRadius * 2.5
                         )
                         CrowdPulseOverlay(
                             pulseData: crowdPulseData,
@@ -326,9 +326,9 @@ struct FestivalView: View {
             }
 
             if announcements.isEmpty && scheduleStages.isEmpty && stages.isEmpty {
-                festivalStatusBanner(
+                eventStatusBanner(
                     icon: "tray.fill",
-                    title: "Festival data is still syncing to this device.",
+                    title: "Event data is still syncing to this device.",
                     tint: theme.colors.mutedText
                 )
                 .padding(.horizontal, BlipSpacing.md)
@@ -339,17 +339,17 @@ struct FestivalView: View {
     // MARK: - Out of Range Banner
 
     private var outOfRangeBanner: some View {
-        festivalStatusBanner(
+        eventStatusBanner(
             icon: "location.slash.fill",
-            title: "Out of festival range",
+            title: "Out of event range",
             trailingText: "Limited access",
             tint: BlipColors.darkColors.statusAmber
         )
     }
 
-    // MARK: - No Festival State
+    // MARK: - No Event State
 
-    private var noFestivalState: some View {
+    private var noEventState: some View {
         VStack(spacing: BlipSpacing.lg) {
             Spacer()
 
@@ -357,30 +357,30 @@ struct FestivalView: View {
                 .font(.system(size: 60))
                 .foregroundStyle(theme.colors.mutedText)
 
-            Text("No Festival Joined")
+            Text("No Event Joined")
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
-            Text(noFestivalDescription)
+            Text(noEventDescription)
                 .font(theme.typography.body)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, BlipSpacing.xl)
 
-            if !availableFestivalNames.isEmpty {
+            if !availableEventNames.isEmpty {
                 VStack(spacing: BlipSpacing.sm) {
-                    ForEach(availableFestivalNames, id: \.self) { festivalName in
-                        Text(festivalName)
+                    ForEach(availableEventNames, id: \.self) { eventName in
+                        Text(eventName)
                             .font(theme.typography.secondary)
                             .foregroundStyle(theme.colors.text)
                     }
                 }
             }
 
-            GlassButton("Refresh Festival Directory", icon: "arrow.clockwise") {
+            GlassButton("Refresh Event Directory", icon: "arrow.clockwise") {
                 Task {
-                    await festivalViewModel?.fetchFestivals()
-                    await loadFestivalData()
+                    await eventsViewModel?.fetchEvents()
+                    await loadEventData()
                 }
             }
 
@@ -388,7 +388,7 @@ struct FestivalView: View {
         }
     }
 
-    private func festivalStatusBanner(
+    private func eventStatusBanner(
         icon: String,
         title: String,
         trailingText: String? = nil,
@@ -416,61 +416,61 @@ struct FestivalView: View {
         .background(tint.opacity(0.1))
     }
 
-    private var festivalTitle: String {
-        festivalViewModel?.activeFestival?.name ?? "Festival Mode"
+    private var eventTitle: String {
+        eventsViewModel?.activeEvent?.name ?? "Event Mode"
     }
 
-    private var festivalCenter: CLLocationCoordinate2D {
-        if let activeFestival = festivalViewModel?.activeFestival {
+    private var eventCenter: CLLocationCoordinate2D {
+        if let activeEvent = eventsViewModel?.activeEvent {
             return CLLocationCoordinate2D(
-                latitude: activeFestival.coordinatesLatitude,
-                longitude: activeFestival.coordinatesLongitude
+                latitude: activeEvent.coordinatesLatitude,
+                longitude: activeEvent.coordinatesLongitude
             )
         }
 
-        if let availableFestival = festivalViewModel?.availableFestivals.first {
+        if let availableEvent = eventsViewModel?.availableEvents.first {
             return CLLocationCoordinate2D(
-                latitude: availableFestival.latitude,
-                longitude: availableFestival.longitude
+                latitude: availableEvent.latitude,
+                longitude: availableEvent.longitude
             )
         }
 
         return CLLocationCoordinate2D(latitude: 0, longitude: 0)
     }
 
-    private var festivalRadius: Double {
-        if let activeFestival = festivalViewModel?.activeFestival {
-            return activeFestival.radiusMeters
+    private var eventRadius: Double {
+        if let activeEvent = eventsViewModel?.activeEvent {
+            return activeEvent.radiusMeters
         }
 
-        return festivalViewModel?.availableFestivals.first?.radius ?? 3_000
+        return eventsViewModel?.availableEvents.first?.radius ?? 3_000
     }
 
-    private var availableFestivalNames: [String] {
-        Array((festivalViewModel?.availableFestivals ?? []).map(\.name).prefix(3))
+    private var availableEventNames: [String] {
+        Array((eventsViewModel?.availableEvents ?? []).map(\.name).prefix(3))
     }
 
-    private var noFestivalDescription: String {
-        if festivalViewModel?.discoveryState == .fetching {
-            return "Looking for nearby festival manifests and any locally cached events."
+    private var noEventDescription: String {
+        if eventsViewModel?.discoveryState == .fetching {
+            return "Looking for nearby event manifests and any locally cached events."
         }
 
-        if let failed = festivalViewModel?.discoveryState,
+        if let failed = eventsViewModel?.discoveryState,
            case let .failed(message) = failed {
             return message
         }
 
-        if availableFestivalNames.isEmpty {
-            return "Festival mode stays visible now, but this device does not have a festival manifest cached yet."
+        if availableEventNames.isEmpty {
+            return "Event mode stays visible now, but this device does not have a event manifest cached yet."
         }
 
-        return "Pick up a festival manifest or enter a geofenced site to unlock the live map, schedule, and announcements."
+        return "Pick up a event manifest or enter a geofenced site to unlock the live map, schedule, and announcements."
     }
 }
 
-// MARK: - Festival Section
+// MARK: - Event Section
 
-enum FestivalSection: CaseIterable {
+enum EventSection: CaseIterable {
     case map
     case schedule
     case announcements
@@ -497,7 +497,7 @@ enum FestivalSection: CaseIterable {
 
 // MARK: - Sample Data
 
-extension FestivalView {
+extension EventsView {
 
     static let sampleStages: [StageMapItem] = [
         StageMapItem(id: UUID(), name: "Pyramid", coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), isLive: true, currentArtist: "Bicep"),
@@ -532,14 +532,14 @@ extension FestivalView {
 
 // MARK: - Preview
 
-#Preview("Festival Tab - Joined") {
-    FestivalView()
+#Preview("Event Tab - Joined") {
+    EventsView()
         .preferredColorScheme(.dark)
         .blipTheme()
 }
 
-#Preview("Festival Tab - Light") {
-    FestivalView()
+#Preview("Event Tab - Light") {
+    EventsView()
         .preferredColorScheme(.light)
         .blipTheme()
 }

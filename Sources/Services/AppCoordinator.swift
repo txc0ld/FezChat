@@ -46,7 +46,7 @@ final class AppCoordinator {
     private(set) var meshViewModel: MeshViewModel?
     private(set) var locationViewModel: LocationViewModel?
     private(set) var friendFinderViewModel: FriendFinderViewModel?
-    private(set) var festivalViewModel: FestivalViewModel?
+    private(set) var eventsViewModel: EventsViewModel?
     private(set) var profileViewModel: ProfileViewModel?
     private(set) var storeViewModel: StoreViewModel?
     private(set) var sosViewModel: SOSViewModel?
@@ -182,7 +182,7 @@ final class AppCoordinator {
             locationService: locationService
         )
         self.friendFinderViewModel = FriendFinderViewModel(locationService: locationService)
-        self.festivalViewModel = FestivalViewModel(
+        self.eventsViewModel = EventsViewModel(
             modelContainer: modelContainer,
             locationService: locationService,
             notificationService: notificationService
@@ -464,8 +464,8 @@ final class AppCoordinator {
             await chatViewModel?.loadChannels()
             meshViewModel?.startMonitoring()
             locationViewModel?.startMonitoring()
-            await festivalViewModel?.loadFestivals()
-            await festivalViewModel?.startGeofencing()
+            await eventsViewModel?.loadEvents()
+            await eventsViewModel?.startGeofencing()
             await storeViewModel?.start()
             DebugLogger.shared.log("LIFECYCLE", "StoreViewModel started (products + transaction listener)")
             await sosViewModel?.loadResponderStatus()
@@ -550,12 +550,12 @@ final class AppCoordinator {
         meshViewModel = nil
         locationViewModel = nil
         friendFinderViewModel = nil
-        festivalViewModel = nil
+        eventsViewModel = nil
         profileViewModel = nil
         storeViewModel = nil
         sosViewModel = nil
         locationService.stopUpdating()
-        locationService.stopMonitoringAllFestivals()
+        locationService.stopMonitoringAllEvents()
         locationService.delegate = nil
     }
 
@@ -613,7 +613,7 @@ final class AppCoordinator {
             try deleteAll(CrowdPulse.self, in: context)
             try deleteAll(SetTime.self, in: context)
             try deleteAll(Stage.self, in: context)
-            try deleteAll(Festival.self, in: context)
+            try deleteAll(Event.self, in: context)
             try deleteAll(BreadcrumbPoint.self, in: context)
             try deleteAll(UserPreferences.self, in: context)
             try deleteAll(User.self, in: context)
@@ -636,16 +636,16 @@ extension AppCoordinator: LocationServiceDelegate {
 
     nonisolated func locationService(_ service: LocationService, didUpdateGeohash geohash: String) {}
 
-    nonisolated func locationService(_ service: LocationService, didEnterFestivalRegion festivalID: UUID) {
+    nonisolated func locationService(_ service: LocationService, didEnterEventRegion eventID: UUID) {
         Task { @MainActor [weak self] in
-            guard let festivalViewModel = self?.festivalViewModel else { return }
-            await festivalViewModel.handleFestivalEntry(festivalID: festivalID)
+            guard let eventsViewModel = self?.eventsViewModel else { return }
+            await eventsViewModel.handleEventEntry(eventID: eventID)
         }
     }
 
-    nonisolated func locationService(_ service: LocationService, didExitFestivalRegion festivalID: UUID) {
+    nonisolated func locationService(_ service: LocationService, didExitEventRegion eventID: UUID) {
         Task { @MainActor [weak self] in
-            self?.festivalViewModel?.handleFestivalExit(festivalID: festivalID)
+            self?.eventsViewModel?.handleEventExit(eventID: eventID)
         }
     }
 
@@ -655,8 +655,8 @@ extension AppCoordinator: LocationServiceDelegate {
         service.startUpdating(accuracy: .geohash)
 
         Task { @MainActor [weak self] in
-            guard let festivalViewModel = self?.festivalViewModel else { return }
-            await festivalViewModel.startGeofencing()
+            guard let eventsViewModel = self?.eventsViewModel else { return }
+            await eventsViewModel.startGeofencing()
         }
     }
 

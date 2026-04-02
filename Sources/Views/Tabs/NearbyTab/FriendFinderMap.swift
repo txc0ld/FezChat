@@ -3,7 +3,7 @@ import MapKit
 
 // MARK: - FriendFinderMap
 
-/// MapKit view showing friend locations on the festival map.
+/// MapKit view showing friend locations on the event map.
 ///
 /// Features:
 /// - Colored pins per friend with precision indicators (solid pin vs fuzzy circle)
