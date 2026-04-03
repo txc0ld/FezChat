@@ -97,6 +97,7 @@ struct ChatView: View {
                     pttAudioLevels = []
                 }
             )
+            .accessibilityValue(isRecordingVoiceNote ? "Recording voice note" : "")
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -336,7 +337,10 @@ struct ChatView: View {
             do {
                 let (data, duration) = try audioService.stopRecording()
                 isRecordingVoiceNote = false
-                guard let channel = chatViewModel?.activeChannel else { return }
+                guard let channel = chatViewModel?.activeChannel else {
+                    DebugLogger.shared.log("AUDIO", "Cannot send voice note: no active channel", isError: true)
+                    return
+                }
                 do {
                     try await coordinator.messageService?.sendVoiceNote(
                         audioData: data,

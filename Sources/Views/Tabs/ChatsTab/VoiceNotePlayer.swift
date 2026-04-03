@@ -65,6 +65,11 @@ struct VoiceNotePlayer: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Voice note, \(formattedDuration(duration))")
         .accessibilityHint(isPlaying ? "Double tap to pause" : "Double tap to play")
+        .onDisappear {
+            playbackTimer?.invalidate()
+            playbackTimer = nil
+            playerService.stopPlayback()
+        }
     }
 
     // MARK: - Play/Pause Button
@@ -203,29 +208,16 @@ struct VoiceNotePlayer: View {
     }
 
     private func startProgressTimer() {
-        let adjustedDuration = duration / playbackSpeed.rawValue
-        guard adjustedDuration > 0 else { return }
-        let interval = 0.05 // 20 updates per second
-        playbackTimer?.invalidate()
-        playbackTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            Task { @MainActor in
-                let newProgress = playbackProgress + CGFloat(interval / adjustedDuration)
-                if newProgress >= 1.0 {
-                    playbackProgress = 0
-                    isPlaying = false
-                    playbackTimer?.invalidate()
-                    playbackTimer = nil
-                } else {
-                    playbackProgress = newProgress
-                }
-            }
-        }
+        startTimerAnimation(adjustedDuration: duration / playbackSpeed.rawValue)
     }
 
     /// Fallback animation when no audioData is available (previews).
     private func simulateFallback() {
         isPlaying = true
-        let adjustedDuration = duration / playbackSpeed.rawValue
+        startTimerAnimation(adjustedDuration: duration / playbackSpeed.rawValue)
+    }
+
+    private func startTimerAnimation(adjustedDuration: TimeInterval) {
         guard adjustedDuration > 0 else { return }
         let interval = 0.05
         playbackTimer?.invalidate()
