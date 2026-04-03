@@ -4,9 +4,15 @@ import SwiftUI
 
 /// Glass card displaying a nearby mesh peer or friend.
 ///
-/// Shows avatar (initials fallback), display name, hop distance, and an
-/// RSSI signal-strength indicator. Tappable with a 44pt minimum target.
+/// Shows avatar (initials fallback), display name, hop distance, distance
+/// estimate, RSSI bars, and a friend action button reflecting current state.
 struct NearbyPeerCard: View {
+
+    enum FriendState: Sendable {
+        case notFriend
+        case pending
+        case friends
+    }
 
     let displayName: String
     let username: String?
@@ -14,7 +20,7 @@ struct NearbyPeerCard: View {
     let hopCount: Int
     let rssi: Int
     let isOnline: Bool
-    let isFriend: Bool
+    let friendState: FriendState
 
     var onTap: (() -> Void)?
     var onAddFriend: (() -> Void)?
@@ -29,30 +35,15 @@ struct NearbyPeerCard: View {
                 peerInfo
                 Spacer(minLength: 0)
                 rssiIndicator
-                if !isFriend, let onAddFriend {
-                    Button(action: onAddFriend) {
-                        Text("Add")
-                            .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, BlipSpacing.sm + 2)
-                            .padding(.vertical, BlipSpacing.xs + 1)
-                            .background(
-                                Capsule()
-                                    .fill(LinearGradient.blipAccent)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-                    .accessibilityLabel("Add \(displayName) as friend")
-                }
+                friendActionView
             }
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
         .glassCard(
             thickness: .regular,
-            cornerRadius: BlipCornerRadius.xl,
-            borderOpacity: 0.15
+            cornerRadius: BlipCornerRadius.lg,
+            borderOpacity: 0.20
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
@@ -94,7 +85,7 @@ struct NearbyPeerCard: View {
             }
 
             // Friend badge — accent gradient
-            if isFriend {
+            if friendState == .friends {
                 Circle()
                     .fill(LinearGradient.blipAccent)
                     .frame(width: 12, height: 12)
@@ -190,21 +181,60 @@ struct NearbyPeerCard: View {
         }
     }
 
+    // MARK: - Friend Action
+
+    @ViewBuilder
+    private var friendActionView: some View {
+        switch friendState {
+        case .notFriend:
+            if let onAddFriend {
+                Button(action: onAddFriend) {
+                    Text("Add")
+                        .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, BlipSpacing.sm + 2)
+                        .padding(.vertical, BlipSpacing.xs + 1)
+                        .background(Capsule().fill(LinearGradient.blipAccent))
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
+                .accessibilityLabel("Add \(displayName) as friend")
+            }
+        case .pending:
+            Text("Pending")
+                .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
+                .foregroundStyle(theme.colors.statusAmber)
+                .padding(.horizontal, BlipSpacing.sm + 2)
+                .padding(.vertical, BlipSpacing.xs + 1)
+                .background(Capsule().fill(theme.colors.statusAmber.opacity(0.12)))
+                .accessibilityLabel("Friend request pending")
+        case .friends:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(Color.blipMint)
+                .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
+                .accessibilityLabel("Already friends")
+        }
+    }
+
     // MARK: - Helpers
 
     /// Estimated distance from RSSI using log-distance path loss model.
     /// Very approximate — BLE RSSI is noisy, especially in crowds.
     private var estimatedDistance: String {
-        // Reference: -59 dBm at 1 meter (typical BLE)
         let txPower: Double = -59
-        let n: Double = 2.5 // Path loss exponent (2-4, higher in crowds)
+        let n: Double = 2.5
         let distance = pow(10.0, (txPower - Double(rssi)) / (10.0 * n))
 
-        if distance < 2 { return "~1m" }
-        if distance < 5 { return "~\(Int(distance))m" }
-        if distance < 15 { return "~\(Int(round(distance / 5) * 5))m" }
-        if distance < 50 { return "~\(Int(round(distance / 10) * 10))m" }
-        return "50m+"
+        let label: String
+        if distance < 2 { label = "~1m" }
+        else if distance < 5 { label = "~\(Int(distance))m" }
+        else if distance < 15 { label = "~\(Int(round(distance / 5) * 5))m" }
+        else if distance < 50 { label = "~\(Int(round(distance / 10) * 10))m" }
+        else { label = "50m+" }
+
+        DebugLogger.shared.log("BLE", "Peer \(displayName) RSSI: \(rssi) → \(label)")
+        return label
     }
 
     private var initials: String {
@@ -235,7 +265,8 @@ struct NearbyPeerCard: View {
 
     private var accessibilityDescription: String {
         var desc = "\(displayName)"
-        if isFriend { desc += ", friend" }
+        if friendState == .friends { desc += ", friend" }
+        if friendState == .pending { desc += ", friend request pending" }
         desc += ", \(hopDescription) away"
         desc += ", approximately \(estimatedDistance)"
         desc += ", signal \(signalDescription)"
@@ -254,83 +285,22 @@ struct NearbyPeerCard: View {
 
 // MARK: - Preview
 
-#Preview("Peer Card - Friend Online") {
+#Preview("Peer Cards — All States") {
     ZStack {
         GradientBackground()
-        VStack(spacing: BlipSpacing.md) {
-            NearbyPeerCard(
-                displayName: "Sarah Chen",
-                username: "sarahc",
-                avatarData: nil,
-                hopCount: 0,
-                rssi: -45,
-                isOnline: true,
-                isFriend: true
-            )
-
-            NearbyPeerCard(
-                displayName: "Jake M",
-                username: "jakem",
-                avatarData: nil,
-                hopCount: 2,
-                rssi: -72,
-                isOnline: true,
-                isFriend: false
-            )
-
-            NearbyPeerCard(
-                displayName: "Anonymous",
-                username: nil,
-                avatarData: nil,
-                hopCount: 5,
-                rssi: -90,
-                isOnline: false,
-                isFriend: false
-            )
+        ScrollView {
+            VStack(spacing: BlipSpacing.sm) {
+                NearbyPeerCard(displayName: "Sarah", username: "sarahc", avatarData: nil,
+                    hopCount: 0, rssi: -45, isOnline: true, friendState: .friends)
+                NearbyPeerCard(displayName: "Alex", username: "alexr", avatarData: nil,
+                    hopCount: 1, rssi: -58, isOnline: true, friendState: .notFriend, onAddFriend: {})
+                NearbyPeerCard(displayName: "Pending", username: "pendp", avatarData: nil,
+                    hopCount: 2, rssi: -75, isOnline: true, friendState: .pending)
+                NearbyPeerCard(displayName: "Far Away", username: nil, avatarData: nil,
+                    hopCount: 5, rssi: -90, isOnline: false, friendState: .notFriend)
+            }
+            .padding()
         }
-        .padding()
     }
-    .preferredColorScheme(.dark)
-}
-
-#Preview("Peer Card - Add Friend Button") {
-    ZStack {
-        GradientBackground()
-        VStack(spacing: BlipSpacing.md) {
-            NearbyPeerCard(
-                displayName: "Alex Rivera",
-                username: "alexr",
-                avatarData: nil,
-                hopCount: 1,
-                rssi: -58,
-                isOnline: true,
-                isFriend: false,
-                onAddFriend: { }
-            )
-
-            NearbyPeerCard(
-                displayName: "Morgan Lee",
-                username: "morganl",
-                avatarData: nil,
-                hopCount: 0,
-                rssi: -42,
-                isOnline: true,
-                isFriend: false,
-                onAddFriend: { }
-            )
-
-            // No onAddFriend — simulates pending state (no button shown)
-            NearbyPeerCard(
-                displayName: "Pending Pal",
-                username: "pendingp",
-                avatarData: nil,
-                hopCount: 2,
-                rssi: -75,
-                isOnline: true,
-                isFriend: false
-            )
-        }
-        .padding()
-    }
-    .preferredColorScheme(.dark)
+    .blipTheme()
 }
