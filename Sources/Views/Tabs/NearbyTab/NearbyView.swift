@@ -296,6 +296,7 @@ struct NearbyView: View {
                 .padding(.horizontal, BlipSpacing.md)
 
                 ForEach(Array(nonFriendPeers.enumerated()), id: \.element.id) { index, peer in
+                    let isPending = peer.friendStatus == .pending || friendRequestSent.contains(peer.id)
                     NearbyPeerCard(
                         displayName: peer.displayName ?? peer.username ?? "Unknown",
                         username: peer.username,
@@ -303,26 +304,12 @@ struct NearbyView: View {
                         hopCount: peer.isDirectPeer ? 0 : 1,
                         rssi: peer.rssi,
                         isOnline: true,
-                        isFriend: false,
+                        friendState: isPending ? .pending : .notFriend,
                         onTap: { selectedPeer = peer },
-                        onAddFriend: peer.friendStatus == .pending || friendRequestSent.contains(peer.id)
-                            ? nil  // No button if already pending
-                            : { sendFriendRequest(to: peer) }
+                        onAddFriend: isPending ? nil : { sendFriendRequest(to: peer) }
                     )
-                    .overlay(alignment: .trailing) {
-                        if peer.friendStatus == .pending || friendRequestSent.contains(peer.id) {
-                            Text("Pending")
-                                .font(theme.typography.caption)
-                                .foregroundStyle(BlipColors.darkColors.statusAmber)
-                                .padding(.horizontal, BlipSpacing.sm)
-                                .padding(.vertical, BlipSpacing.xs)
-                                .background(Capsule().fill(BlipColors.darkColors.statusAmber.opacity(0.12)))
-                                .padding(.trailing, BlipSpacing.md + BlipSpacing.sm)
-                        }
-                    }
                     .padding(.horizontal, BlipSpacing.md)
                     .staggeredReveal(index: index)
-                    .accessibilityLabel(peerAccessibilityLabel(peer))
                 }
             }
         }
@@ -416,7 +403,7 @@ struct NearbyView: View {
                         hopCount: friend.hopCount,
                         rssi: friend.rssi,
                         isOnline: friend.isOnline,
-                        isFriend: true
+                        friendState: .friends
                     )
                     .padding(.horizontal, BlipSpacing.md)
                     .staggeredReveal(index: index)
