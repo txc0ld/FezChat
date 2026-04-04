@@ -235,26 +235,31 @@ export class RelayRoom implements DurableObject {
 
   /** Queue a packet for offline delivery. Bounded by MAX_QUEUED_PER_PEER. */
   private async queuePacket(recipientHex: PeerIDHex, data: Uint8Array): Promise<void> {
-    const key = `${QUEUE_PREFIX}${recipientHex}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-    await this.state.storage.put(key, {
-      data: Array.from(data), // Serialize as number[] for DO storage.
-      storedAt: Date.now(),
+    const storedAt = Date.now();
+    const queuePrefix = `${QUEUE_PREFIX}${recipientHex}:`;
+    const key = `${queuePrefix}${storedAt}:${Math.random().toString(36).slice(2, 8)}`;
+
+    // Keep queue insertion and cap enforcement atomic so bursts do not exceed the cap.
+    await this.state.storage.transaction(async (txn) => {
+      await txn.put(key, {
+        data: Array.from(data), // Serialize as number[] for DO storage.
+        storedAt,
+      });
+
+      const allKeys = await txn.list({ prefix: queuePrefix });
+      if (allKeys.size > MAX_QUEUED_PER_PEER) {
+        const sorted = [...allKeys.keys()].sort();
+        const toDelete = sorted.slice(0, allKeys.size - MAX_QUEUED_PER_PEER);
+        for (const staleKey of toDelete) {
+          await txn.delete(staleKey);
+        }
+      }
     });
 
-    // Schedule cleanup alarm if not already set.
+    // Alarm scheduling stays outside the transaction because alarms are managed on storage.
     const existingAlarm = await this.state.storage.getAlarm();
     if (!existingAlarm) {
-      this.state.storage.setAlarm(Date.now() + QUEUE_TTL_MS);
-    }
-
-    // Enforce per-peer cap by listing and pruning oldest.
-    const allKeys = await this.state.storage.list({ prefix: `${QUEUE_PREFIX}${recipientHex}:` });
-    if (allKeys.size > MAX_QUEUED_PER_PEER) {
-      const sorted = [...allKeys.keys()].sort();
-      const toDelete = sorted.slice(0, allKeys.size - MAX_QUEUED_PER_PEER);
-      for (const k of toDelete) {
-        await this.state.storage.delete(k);
-      }
+      this.state.storage.setAlarm(storedAt + QUEUE_TTL_MS);
     }
   }
 
@@ -268,14 +273,17 @@ export class RelayRoom implements DurableObject {
 
     for (const [key, value] of entries) {
       const entry = value as { data: number[]; storedAt: number };
-      keysToDelete.push(key);
 
       // Skip expired packets.
-      if (now - entry.storedAt > QUEUE_TTL_MS) continue;
+      if (now - entry.storedAt > QUEUE_TTL_MS) {
+        keysToDelete.push(key);
+        continue;
+      }
 
       try {
         const packet = new Uint8Array(entry.data);
         ws.send(packet.buffer);
+        keysToDelete.push(key);
       } catch {
         // WebSocket failed during drain — stop, remaining stay queued.
         break;

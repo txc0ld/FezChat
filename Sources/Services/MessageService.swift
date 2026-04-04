@@ -1263,12 +1263,12 @@ final class MessageService: @unchecked Sendable {
             }
         }
 
-        // Handshake retry loop: retry msg1 up to 5 times with increasing delays.
+        // Handshake retry loop: retry msg1 at 60-second intervals for roughly 4 minutes.
         // This handles relay paths where the recipient may connect after the first attempt.
         let peerBytes = recipientPeerID.bytes
         let retryPeerID = recipientPeerID
         Task { @MainActor in
-            let retryDelays: [Duration] = [.seconds(30), .seconds(60), .seconds(60), .seconds(60), .seconds(60)]
+            let retryDelays: [Duration] = [.seconds(60), .seconds(60), .seconds(60), .seconds(60)]
             for (attempt, delay) in retryDelays.enumerated() {
                 do {
                     try await Task.sleep(for: delay)
