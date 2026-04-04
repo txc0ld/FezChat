@@ -24,15 +24,13 @@ struct WelcomeStep: View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Hero illustration
+            // Hero illustration — long-press for dev bypass
             heroSection
                 .opacity(heroVisible ? 1.0 : 0.0)
                 .offset(y: heroVisible ? 0 : 20)
-                #if DEBUG
                 .onLongPressGesture(minimumDuration: 1.0) {
                     showBypass = true
                 }
-                #endif
 
             Spacer()
                 .frame(height: BlipSpacing.xxl)
@@ -70,7 +68,6 @@ struct WelcomeStep: View {
         .onAppear {
             animateEntrance()
         }
-        #if DEBUG
         .alert("Dev Bypass", isPresented: $showBypass) {
             TextField("Code", text: $bypassCode)
                 .keyboardType(.numberPad)
@@ -85,7 +82,6 @@ struct WelcomeStep: View {
         } message: {
             Text("Enter bypass code to skip onboarding")
         }
-        #endif
     }
 
     // MARK: - Hero

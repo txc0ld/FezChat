@@ -31,7 +31,7 @@ struct OnboardingFlow: View {
                 TabView(selection: $currentStep) {
                     WelcomeStep(
                         onContinue: { advanceToStep(1) },
-                        onBypass: bypassHandler
+                        onBypass: { handleBypass() }
                     )
                     .tag(0)
 
@@ -90,18 +90,7 @@ struct OnboardingFlow: View {
         onComplete()
     }
 
-    /// Returns the bypass closure in DEBUG, no-op in release.
-    private var bypassHandler: () -> Void {
-        #if DEBUG
-        return { handleBypass() }
-        #else
-        return {}
-        #endif
-    }
-
     /// Bypass handler: generates identity, creates local User, registers on backend.
-    /// Only available in DEBUG builds.
-    #if DEBUG
     private func handleBypass() {
         do {
             // Generate cryptographic identity if not already present
@@ -165,7 +154,6 @@ struct OnboardingFlow: View {
             completeOnboarding()
         }
     }
-    #endif
 }
 
 // MARK: - Preview
