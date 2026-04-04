@@ -446,7 +446,16 @@ async function handleLookupByUsername(url: URL, env: Env): Promise<Response> {
     `;
 
     if (result.length === 0) {
-      return json({ id: null, username, noise_public_key: null, signing_public_key: null, is_verified: false }, 200, env);
+      return json({
+        user: {
+          id: null,
+          username,
+          isVerified: false,
+          noisePublicKey: null,
+          signingPublicKey: null,
+          lastActiveAt: null,
+        },
+      }, 200, env);
     }
 
     const row = result[0];
