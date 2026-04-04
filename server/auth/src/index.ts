@@ -62,9 +62,11 @@ interface ReceiptVerifyBody {
 
 function corsHeaders(env: Env): Record<string, string> {
   return {
-    "Access-Control-Allow-Origin": env.CORS_ORIGIN ?? "*",
+    "Access-Control-Allow-Origin": env.CORS_ORIGIN ?? "https://blip.app",
     "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
   };
 }
 
@@ -444,7 +446,7 @@ async function handleLookupByUsername(url: URL, env: Env): Promise<Response> {
     `;
 
     if (result.length === 0) {
-      return json({ error: "User not found" }, 404, env);
+      return json({ id: null, username, noise_public_key: null, signing_public_key: null, is_verified: false }, 200, env);
     }
 
     const row = result[0];
