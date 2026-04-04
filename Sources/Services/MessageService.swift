@@ -902,17 +902,12 @@ final class MessageService: @unchecked Sendable {
                 }
                 return // Don't enqueue for retry — the handshake callback will handle it
             } else {
-                // Fallback: send unencrypted (session manager not available)
-                // TODO(BDEV-86): Use a distinct packet type for unencrypted fallback
-                DebugLogger.emit("DM", "encryptAndSend: no Noise session, sending plaintext to \(recipientHex)")
-                let packet = buildPacket(
-                    type: .noiseEncrypted,
-                    payload: compressed.data,
-                    flags: flags,
-                    senderID: identity.peerID,
-                    recipientID: recipientPeerID
-                )
-                try await sendPacket(packet)
+                // No session and handshake could not be initiated — refuse to send plaintext.
+                // Messages will be retried by MessageRetryService when a session is established.
+                DebugLogger.emit("DM", "encryptAndSend: no Noise session and handshake failed for \(recipientHex) — message queued for retry", isError: true)
+                if let messageID {
+                    updateMessageStatus(messageID: messageID, to: .queued)
+                }
             }
         } else {
             // Group/channel: broadcast (no Noise encryption for groups yet)
@@ -1235,7 +1230,12 @@ final class MessageService: @unchecked Sendable {
             if needsTimeout {
                 let peerBytes = recipientPeerID.bytes
                 Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(30))
+                    do {
+                        try await Task.sleep(for: .seconds(30))
+                    } catch {
+                        DebugLogger.shared.log("NOISE", "Handshake timeout sleep cancelled: \(error)")
+                        return
+                    }
                     self.handleHandshakeTimeout(peerIDBytes: peerBytes)
                 }
             }
@@ -1266,7 +1266,12 @@ final class MessageService: @unchecked Sendable {
         // Schedule 30-second timeout
         let peerBytes = recipientPeerID.bytes
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(30))
+            do {
+                try await Task.sleep(for: .seconds(30))
+            } catch {
+                DebugLogger.shared.log("NOISE", "Handshake timeout sleep cancelled: \(error)")
+                return
+            }
             self.handleHandshakeTimeout(peerIDBytes: peerBytes)
         }
 
@@ -1883,7 +1888,11 @@ final class MessageService: @unchecked Sendable {
         var friendUser: User?
 
         if let acceptPeer = peerStore.findPeer(byPeerIDBytes: peerData) {
-            friendUser = try? resolveOrCreateUser(for: acceptPeer, context: context)
+            do {
+                friendUser = try resolveOrCreateUser(for: acceptPeer, context: context)
+            } catch {
+                DebugLogger.shared.log("DM", "FRIEND_ACCEPT: failed to resolve user from PeerStore: \(error)", isError: true)
+            }
             DebugLogger.shared.log("DM", "FRIEND_ACCEPT: resolved user=\(friendUser?.username ?? "nil") via PeerStore")
         }
 
@@ -2352,7 +2361,6 @@ final class MessageService: @unchecked Sendable {
         // Get local identity to filter out self from memberships
         guard let identity = getIdentity() else {
             DebugLogger.emit("DM", "resolveRecipient FAILED: no local identity", isError: true)
-            DebugLogger.emit("DM", "resolveRecipient FAILED: no local identity", isError: true)
             return nil
         }
         let localNoiseKey = identity.noisePublicKey.rawRepresentation
@@ -2362,8 +2370,14 @@ final class MessageService: @unchecked Sendable {
         let freshContext = ModelContext(modelContainer)
         let channelID = channel.id
         let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
-        guard let freshChannel = try? freshContext.fetch(channelDesc).first else {
-            DebugLogger.emit("DM", "resolveRecipient FAILED: channel not found in fresh context", isError: true)
+        let freshChannel: Channel?
+        do {
+            freshChannel = try freshContext.fetch(channelDesc).first
+        } catch {
+            DebugLogger.emit("DM", "resolveRecipient FAILED: fetch error for channel \(channelID): \(error)", isError: true)
+            return nil
+        }
+        guard let freshChannel else {
             DebugLogger.emit("DM", "resolveRecipient FAILED: channel \(channelID) not found in fresh context", isError: true)
             return nil
         }
@@ -2470,7 +2484,11 @@ extension MessageService: TransportDelegate {
         let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in
             DebugLogger.shared.log("PEER", "CONNECTED: \(shortID)")
-            try? await self.broadcastPresence()
+            do {
+                try await self.broadcastPresence()
+            } catch {
+                DebugLogger.shared.log("PRESENCE", "Broadcast on connect failed: \(error)", isError: true)
+            }
         }
     }
 
