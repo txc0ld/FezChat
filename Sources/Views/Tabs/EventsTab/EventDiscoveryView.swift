@@ -9,7 +9,7 @@ struct EventDiscoveryView: View {
 
     @State private var searchText = ""
     @State private var selectedCategory: EventsViewModel.EventCategory = .all
-    @State private var selectedEvent: EventsViewModel.DiscoverableEvent?
+    @State private var selectedEventID: String?
 
     @Environment(\.theme) private var theme
 
@@ -22,11 +22,12 @@ struct EventDiscoveryView: View {
         .navigationTitle("Events")
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .navigationDestination(item: $selectedEvent) { event in
-            EventDetailView(
-                event: event,
-                onJoinToggle: { toggleJoin(event) }
-            )
+        .navigationDestination(item: $selectedEventID) { eventID in
+            if let eventsViewModel {
+                EventDetailView(eventsViewModel: eventsViewModel, eventID: eventID)
+            } else {
+                ContentUnavailableView("Event not found", systemImage: "calendar.badge.exclamationmark")
+            }
         }
         .task {
             await eventsViewModel?.fetchDiscoveryEvents()
@@ -123,7 +124,7 @@ struct EventDiscoveryView: View {
                     EventCard(
                         event: event,
                         onJoinToggle: { toggleJoin(event) },
-                        onTap: { selectedEvent = event }
+                        onTap: { selectedEventID = event.id }
                     )
                     .staggeredReveal(index: index)
                 }
@@ -171,16 +172,11 @@ struct EventDiscoveryView: View {
         if event.isJoined {
             eventsViewModel?.leaveEvent(event.id)
         } else {
-            eventsViewModel?.joinEvent(event.id)
+            Task {
+                await eventsViewModel?.joinEvent(event.id)
+            }
         }
     }
-}
-
-// MARK: - Identifiable for navigation
-
-extension EventsViewModel.DiscoverableEvent: Hashable {
-    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 // MARK: - Preview
