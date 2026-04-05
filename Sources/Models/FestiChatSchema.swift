@@ -38,7 +38,7 @@ enum BlipSchema {
         ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
-            groupContainer: .automatic
+            groupContainer: .none
         )
     }
 

@@ -19,7 +19,15 @@ struct BlipApp: App {
                 configurations: [BlipSchema.defaultConfiguration]
             )
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            DebugLogger.shared.log("APP", "ModelContainer failed: \(error) — falling back to in-memory store")
+            do {
+                return try ModelContainer(
+                    for: BlipSchema.schema,
+                    configurations: [BlipSchema.previewConfiguration]
+                )
+            } catch {
+                fatalError("Could not create even in-memory ModelContainer: \(error)")
+            }
         }
     }()
 
