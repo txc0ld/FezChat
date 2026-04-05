@@ -1012,7 +1012,7 @@ final class MessageService: @unchecked Sendable {
         for subType: EncryptedSubType,
         senderPeerID: PeerID,
         context: ModelContext
-    ) throws -> Channel {
+    ) throws -> (Channel, User?) {
         switch subType {
         case .privateMessage:
             // Resolve the User who sent this DM. Three fallback strategies:
@@ -1079,16 +1079,21 @@ final class MessageService: @unchecked Sendable {
             }
 
             if let user = senderUser {
-                return try findOrCreateDMChannel(with: user, context: context)
+                return (try findOrCreateDMChannel(with: user, context: context), user)
             }
 
-            // All resolution paths failed — create anonymous DM channel (will be repaired
-            // once the sender's identity is resolved via announce/friend-request).
-            DebugLogger.emit("DM", "resolveChannel: all sender resolution failed for \(senderPeerID) — creating anonymous channel", isError: true)
+            // All resolution paths failed — reuse an existing orphan DM channel if one exists,
+            // otherwise create one (will be repaired once the sender's identity is resolved).
+            DebugLogger.emit("DM", "resolveChannel: all sender resolution failed for \(senderPeerID) — using anonymous channel", isError: true)
+            let orphanDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "dm" })
+            let dmChannels = try context.fetch(orphanDesc)
+            if let orphan = dmChannels.first(where: { $0.memberships.isEmpty && $0.name == nil }) {
+                return (orphan, nil)
+            }
             let channel = Channel(type: .dm, name: nil)
             context.insert(channel)
             try context.save()
-            return channel
+            return (channel, nil)
 
         case .groupMessage:
             // Group messages include a channel reference in the payload; fallback to first group
@@ -1096,11 +1101,11 @@ final class MessageService: @unchecked Sendable {
                 $0.typeRaw == "group"
             })
             if let existing = try context.fetch(descriptor).first {
-                return existing
+                return (existing, nil)
             }
             let channel = Channel(type: .group, name: "Group")
             context.insert(channel)
-            return channel
+            return (channel, nil)
 
         default:
             // Default to location channel
@@ -1108,11 +1113,11 @@ final class MessageService: @unchecked Sendable {
                 $0.typeRaw == "locationChannel"
             })
             if let existing = try context.fetch(descriptor).first {
-                return existing
+                return (existing, nil)
             }
             let channel = Channel(type: .locationChannel, name: "Nearby", isAutoJoined: true)
             context.insert(channel)
-            return channel
+            return (channel, nil)
         }
     }
 
