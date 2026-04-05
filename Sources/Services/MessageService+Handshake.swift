@@ -399,29 +399,15 @@ extension MessageService {
             return
         }
 
-        // Resolve sender (try transport PeerID, then fallback to noisePublicKey)
-        let senderPeerData = senderPeerID.bytes
-        let peerInfo = peerStore.findPeer(byPeerIDBytes: senderPeerData)
-        DebugLogger.shared.log("DM", "Sender lookup: PeerStore=\(peerInfo != nil ? "found (\(peerInfo?.username ?? "no name"))" : "NOT FOUND")")
-        let senderUser: User? = peerInfo.flatMap { peer in
-            guard let username = peer.username else { return nil }
-            let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
-            do {
-                return try context.fetch(userDesc).first
-            } catch {
-                logger.error("Failed to fetch user for peer username \(username): \(error.localizedDescription)")
-                return nil
-            }
-        }
-        DebugLogger.shared.log("DM", "Sender resolution: User=\(senderUser?.username ?? "NOT FOUND")")
-
-        // Resolve channel
-        let channel = try resolveChannel(
+        // Resolve channel and sender together — resolveChannel has a 3-fallback chain
+        // (PeerStore → Noise session → derived PeerID scan) that is more robust than
+        // the old PeerStore-only lookup that failed for relay-first DMs.
+        let (channel, senderUser) = try resolveChannel(
             for: subType,
             senderPeerID: senderPeerID,
             context: context
         )
-        DebugLogger.shared.log("DM", "Channel resolved: \(channel.id) type=\(channel.type)")
+        DebugLogger.shared.log("DM", "Channel resolved: \(channel.id) type=\(channel.type) sender=\(senderUser?.username ?? "nil")")
 
         // Create and store message
         let message = Message(
@@ -491,7 +477,7 @@ extension MessageService {
         let messageID = UUID(uuidString: uuidBytes.map { String(format: "%02x", $0) }.joined()) ?? UUID()
         let mediaData = data.dropFirst(16)
 
-        let channel = try resolveChannel(
+        let (channel, senderUser) = try resolveChannel(
             for: type == .voiceNote ? .voiceNote : .imageMessage,
             senderPeerID: senderPeerID,
             context: context
@@ -502,6 +488,7 @@ extension MessageService {
 
         let message = Message(
             id: messageID,
+            sender: senderUser,
             channel: channel,
             type: type == .voiceNote ? .voiceNote : .image,
             encryptedPayload: Data(),
