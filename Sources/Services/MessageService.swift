@@ -997,29 +997,14 @@ final class MessageService: @unchecked Sendable {
                 senderUser = nil
             }
 
-            // Look for existing DM channel with this peer via memberships
-            let descriptor = FetchDescriptor<Channel>(predicate: #Predicate {
-                $0.typeRaw == "dm"
-            })
-            let channels = try context.fetch(descriptor)
-
             if let user = senderUser {
-                for ch in channels {
-                    for membership in ch.memberships {
-                        if membership.user?.id == user.id {
-                            return ch
-                        }
-                    }
-                }
+                return try findOrCreateDMChannel(with: user, context: context)
             }
 
-            // Create new DM channel with proper membership for the remote user
-            let channel = Channel(type: .dm, name: senderUser?.resolvedDisplayName)
+            // No user record — create an anonymous DM channel (will be repaired
+            // once the sender's identity is resolved via announce/friend-request).
+            let channel = Channel(type: .dm, name: nil)
             context.insert(channel)
-            if let user = senderUser {
-                let membership = GroupMembership(user: user, channel: channel)
-                context.insert(membership)
-            }
             try context.save()
             return channel
 
