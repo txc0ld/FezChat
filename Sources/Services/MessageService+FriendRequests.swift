@@ -611,10 +611,11 @@ extension MessageService {
             }
         }
 
-        // 3. Repair orphan channel (name matches, no memberships)
+        // 3. Repair orphan channel (name matches OR anonymous, no memberships)
         let displayName = user.resolvedDisplayName
         for channel in channels {
-            if channel.memberships.isEmpty && channel.name == displayName {
+            if channel.memberships.isEmpty && (channel.name == displayName || channel.name == nil) {
+                channel.name = displayName
                 let membership = GroupMembership(user: user, channel: channel, role: .member)
                 context.insert(membership)
                 try context.save()

@@ -985,24 +985,76 @@ final class MessageService: @unchecked Sendable {
     ) throws -> Channel {
         switch subType {
         case .privateMessage:
-            // Find the User for this sender via PeerStore (try peerID then noisePublicKey)
+            // Resolve the User who sent this DM. Three fallback strategies:
+            // 1. PeerStore lookup (fast path — works when announce arrived first)
+            // 2. Noise session remote static key (works for relay-first DMs)
+            // 3. Derived PeerID scan across all known Users (last resort)
             let peerData = senderPeerID.bytes
-            let senderUser: User?
+            var senderUser: User?
+
+            // 1. PeerStore lookup
             if let channelPeer = peerStore.findPeer(byPeerIDBytes: peerData),
                !channelPeer.noisePublicKey.isEmpty {
                 let noiseKey = channelPeer.noisePublicKey
                 let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.noisePublicKey == noiseKey })
                 senderUser = try context.fetch(userDesc).first
-            } else {
-                senderUser = nil
+                if senderUser != nil {
+                    DebugLogger.emit("DM", "resolveChannel: found sender via PeerStore")
+                }
+            }
+
+            // 2. Noise session fallback — the handshake completed so we have the remote static key
+            if senderUser == nil, let session = noiseSessionManager?.getSession(for: senderPeerID) {
+                let noiseKeyData = session.remoteStaticKey.rawRepresentation
+                let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.noisePublicKey == noiseKeyData })
+                do {
+                    senderUser = try context.fetch(userDesc).first
+                    if senderUser != nil {
+                        DebugLogger.emit("DM", "resolveChannel: found sender via Noise session remote key")
+                    }
+                } catch {
+                    DebugLogger.emit("DM", "resolveChannel: Noise session user lookup failed: \(error.localizedDescription)", isError: true)
+                }
+            }
+
+            // 3. Derived PeerID scan — compute PeerID from each User's noisePublicKey and compare
+            if senderUser == nil {
+                let allUsersDesc = FetchDescriptor<User>()
+                do {
+                    let allUsers = try context.fetch(allUsersDesc)
+                    for candidate in allUsers where !candidate.noisePublicKey.isEmpty {
+                        let derivedID = PeerID(noisePublicKey: candidate.noisePublicKey)
+                        if derivedID == senderPeerID {
+                            senderUser = candidate
+                            DebugLogger.emit("DM", "resolveChannel: found sender via derived PeerID scan (\(candidate.username))")
+
+                            // Back-fill PeerStore so future lookups use the fast path
+                            let peerInfo = PeerInfo(
+                                peerID: senderPeerID.bytes,
+                                noisePublicKey: candidate.noisePublicKey,
+                                signingPublicKey: candidate.signingPublicKey,
+                                username: candidate.username,
+                                rssi: -100,
+                                isConnected: false,
+                                lastSeenAt: Date(),
+                                hopCount: 0
+                            )
+                            peerStore.upsert(peer: peerInfo)
+                            break
+                        }
+                    }
+                } catch {
+                    DebugLogger.emit("DM", "resolveChannel: derived PeerID scan failed: \(error.localizedDescription)", isError: true)
+                }
             }
 
             if let user = senderUser {
                 return try findOrCreateDMChannel(with: user, context: context)
             }
 
-            // No user record — create an anonymous DM channel (will be repaired
+            // All resolution paths failed — create anonymous DM channel (will be repaired
             // once the sender's identity is resolved via announce/friend-request).
+            DebugLogger.emit("DM", "resolveChannel: all sender resolution failed for \(senderPeerID) — creating anonymous channel", isError: true)
             let channel = Channel(type: .dm, name: nil)
             context.insert(channel)
             try context.save()
