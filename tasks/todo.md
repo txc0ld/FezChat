@@ -53,8 +53,8 @@
 
 ## BDEV-205 Drain Retry Follow-up
 
-- [ ] Inspect the current relay drain path and existing relay tests.
-- [ ] Replace break-on-send-error with skip-and-retry behavior in `relay-room.ts`.
-- [ ] Add or extend relay tests for partial drain failure, retry scheduling, and retry cleanup.
-- [ ] Run `cd server/relay && npm test` and `cd server/relay && npx wrangler deploy --dry-run`.
-- [ ] Push `fix/BDEV-205-drain-break-bug`, update PR `#148`, and post the follow-up in `#blip-dev`.
+- [x] Inspect the current relay drain path and existing relay tests.
+- [x] Replace break-on-send-error with skip-and-retry behavior in `relay-room.ts`.
+- [x] Add or extend relay tests for partial drain failure, retry scheduling, and retry cleanup.
+- [x] Run `cd server/relay && npm test` and `cd server/relay && npx wrangler deploy --dry-run`.
+- [x] Push `fix/BDEV-205-drain-break-bug`, update PR `#148`, and post the follow-up in `#blip-dev`.
