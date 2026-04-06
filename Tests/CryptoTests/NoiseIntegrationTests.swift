@@ -293,7 +293,7 @@ final class NoiseIntegrationTests: XCTestCase {
         let (_, msg1) = try aliceManager.initiateHandshake(with: bobPeerID)
 
         // Bob receives message 1.
-        let (_, _) = try bobManager.receiveHandshakeInit(from: alicePeerID, message: msg1)
+        _ = try bobManager.receiveHandshakeInit(from: alicePeerID, message: msg1)
 
         // Bob sends message 2.
         let msg2 = try bobManager.respondToHandshake(for: alicePeerID)

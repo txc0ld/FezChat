@@ -12,7 +12,7 @@ struct SwiftDataSchemaValidationTests {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
             for: User.self, Friend.self, Message.self, Attachment.self, Channel.self,
-            GroupMembership.self, Festival.self, Stage.self, SetTime.self, MeetingPoint.self,
+            GroupMembership.self, Event.self, Stage.self, SetTime.self, MeetingPoint.self,
             MessageQueue.self, SOSAlert.self, MedicalResponder.self,
             FriendLocation.self, BreadcrumbPoint.self, CrowdPulse.self, UserPreferences.self,
             GroupSenderKey.self, NoiseSessionModel.self,
@@ -39,15 +39,15 @@ struct SwiftDataSchemaValidationTests {
     private func makeChannel(
         type: ChannelType = .dm,
         context: ModelContext,
-        festival: Festival? = nil
+        event: Event? = nil
     ) -> Channel {
-        let channel = Channel(type: type, name: "Test \(type)", festival: festival)
+        let channel = Channel(type: type, name: "Test \(type)", event: event)
         context.insert(channel)
         return channel
     }
 
-    private func makeFestival(context: ModelContext) -> Festival {
-        let festival = Festival(
+    private func makeEvent(context: ModelContext) -> Event {
+        let event = Event(
             name: "Glastonbury",
             coordinates: GeoPoint(latitude: 51.15, longitude: -2.58),
             radiusMeters: 5000,
@@ -55,8 +55,8 @@ struct SwiftDataSchemaValidationTests {
             endDate: Date().addingTimeInterval(86_400 * 3),
             organizerSigningKey: Data(repeating: 3, count: 32)
         )
-        context.insert(festival)
-        return festival
+        context.insert(event)
+        return event
     }
 
     // MARK: - Schema Registration Tests
@@ -68,7 +68,7 @@ struct SwiftDataSchemaValidationTests {
 
         let expectedModels = [
             "User", "Friend", "Message", "Attachment", "Channel",
-            "GroupMembership", "Festival", "Stage", "SetTime", "MeetingPoint",
+            "GroupMembership", "Event", "Stage", "SetTime", "MeetingPoint",
             "MessageQueue", "SOSAlert", "MedicalResponder", "FriendLocation",
             "BreadcrumbPoint", "CrowdPulse", "UserPreferences", "GroupSenderKey",
             "NoiseSessionModel"
@@ -84,7 +84,7 @@ struct SwiftDataSchemaValidationTests {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
             for: User.self, Friend.self, Message.self, Attachment.self, Channel.self,
-            GroupMembership.self, Festival.self, Stage.self, SetTime.self, MeetingPoint.self,
+            GroupMembership.self, Event.self, Stage.self, SetTime.self, MeetingPoint.self,
             MessageQueue.self, SOSAlert.self, MedicalResponder.self,
             FriendLocation.self, BreadcrumbPoint.self, CrowdPulse.self, UserPreferences.self,
             GroupSenderKey.self, NoiseSessionModel.self,
@@ -633,22 +633,22 @@ struct SwiftDataSchemaValidationTests {
         #expect(membershipsAfter.isEmpty)
     }
 
-    // MARK: - Festival and Stage Tests
+    // MARK: - Event and Stage Tests
 
-    @Test("Festival creation and stage hierarchy")
-    func festivalStageHierarchy() throws {
+    @Test("Event creation and stage hierarchy")
+    func eventStageHierarchy() throws {
         let context = try makeContext()
-        let festival = makeFestival(context: context)
+        let event = makeEvent(context: context)
         try context.save()
 
         let stage1 = Stage(
             name: "Pyramid",
-            festival: festival,
+            event: event,
             coordinates: GeoPoint(latitude: 51.15, longitude: -2.58)
         )
         let stage2 = Stage(
             name: "Silver Hayes",
-            festival: festival,
+            event: event,
             coordinates: GeoPoint(latitude: 51.16, longitude: -2.59)
         )
         context.insert(stage1)
@@ -657,19 +657,19 @@ struct SwiftDataSchemaValidationTests {
 
         let fetched = try context.fetch(FetchDescriptor<Stage>())
         #expect(fetched.count == 2)
-        #expect(fetched[0].festival?.name == "Glastonbury")
+        #expect(fetched[0].event?.name == "Glastonbury")
     }
 
-    @Test("Festival cascade delete with stages")
-    func festivalCascadeDelete() throws {
+    @Test("Event cascade delete with stages")
+    func eventCascadeDelete() throws {
         let context = try makeContext()
-        let festival = makeFestival(context: context)
+        let event = makeEvent(context: context)
         try context.save()
 
         for i in 0 ..< 3 {
             let stage = Stage(
                 name: "Stage \(i)",
-                festival: festival,
+                event: event,
                 coordinates: GeoPoint(latitude: 51.15 + Double(i) * 0.01, longitude: -2.58)
             )
             context.insert(stage)
@@ -679,19 +679,19 @@ struct SwiftDataSchemaValidationTests {
         let stagesBefore = try context.fetch(FetchDescriptor<Stage>())
         #expect(stagesBefore.count == 3)
 
-        context.delete(festival)
+        context.delete(event)
         try context.save()
 
         let stagesAfter = try context.fetch(FetchDescriptor<Stage>())
         #expect(stagesAfter.isEmpty)
     }
 
-    @Test("Festival computed properties")
-    func festivalComputedProperties() throws {
+    @Test("Event computed properties")
+    func eventComputedProperties() throws {
         let context = try makeContext()
 
         let now = Date()
-        let upcoming = Festival(
+        let upcoming = Event(
             name: "Future Fest",
             coordinates: GeoPoint(latitude: 0, longitude: 0),
             radiusMeters: 1000,
@@ -699,7 +699,7 @@ struct SwiftDataSchemaValidationTests {
             endDate: now.addingTimeInterval(86_400 * 3),
             organizerSigningKey: Data(repeating: 3, count: 32)
         )
-        let active = Festival(
+        let active = Event(
             name: "Current Fest",
             coordinates: GeoPoint(latitude: 0, longitude: 0),
             radiusMeters: 1000,
@@ -712,7 +712,7 @@ struct SwiftDataSchemaValidationTests {
         context.insert(active)
         try context.save()
 
-        let fetched = try context.fetch(FetchDescriptor<Festival>())
+        let fetched = try context.fetch(FetchDescriptor<Event>())
         #expect(fetched.first { $0.name == "Future Fest" }?.isUpcoming == true)
         #expect(fetched.first { $0.name == "Current Fest" }?.isActive == true)
     }
@@ -722,12 +722,12 @@ struct SwiftDataSchemaValidationTests {
     @Test("SetTime creation with stage relationship")
     func setTimeCreation() throws {
         let context = try makeContext()
-        let festival = makeFestival(context: context)
+        let event = makeEvent(context: context)
         try context.save()
 
         let stage = Stage(
             name: "Main Stage",
-            festival: festival,
+            event: event,
             coordinates: GeoPoint(latitude: 51.15, longitude: -2.58)
         )
         context.insert(stage)
@@ -752,12 +752,12 @@ struct SwiftDataSchemaValidationTests {
     @Test("SetTime cascade delete with stage")
     func setTimeCascadeDelete() throws {
         let context = try makeContext()
-        let festival = makeFestival(context: context)
+        let event = makeEvent(context: context)
         try context.save()
 
         let stage = Stage(
             name: "Stage",
-            festival: festival,
+            event: event,
             coordinates: GeoPoint(latitude: 51.15, longitude: -2.58)
         )
         context.insert(stage)
@@ -1368,12 +1368,12 @@ struct SwiftDataSchemaValidationTests {
     func medicalResponderCreation() throws {
         let context = try makeContext()
         let user = makeUser(context: context)
-        let festival = makeFestival(context: context)
+        let event = makeEvent(context: context)
         try context.save()
 
         let responder = MedicalResponder(
             user: user,
-            festival: festival,
+            event: event,
             accessCodeHash: "hash_responder",
             callsign: "MED-01",
             isOnDuty: true
