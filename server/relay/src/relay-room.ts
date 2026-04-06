@@ -54,6 +54,9 @@ export class RelayRoom implements DurableObject {
   /** Generation counter per peer to detect superseded drains on reconnect. */
   private drainGeneration: Map<PeerIDHex, number> = new Map();
 
+  /** Per-peer retry counter to cap drain retries at 3. */
+  private drainRetryCount: Map<PeerIDHex, number> = new Map();
+
   /** Per-peer state blobs for GCS sync (opaque binary, no decryption). */
   private peerState: Map<PeerIDHex, { data: ArrayBuffer; updatedAt: number }> = new Map();
 
@@ -297,6 +300,7 @@ export class RelayRoom implements DurableObject {
 
     const now = Date.now();
     const keysToDelete: string[] = [];
+    const failedKeys: string[] = [];
 
     for (const [key, value] of entries) {
       // Bail if superseded by a newer drain (peer reconnected).
@@ -314,9 +318,10 @@ export class RelayRoom implements DurableObject {
         const packet = new Uint8Array(entry.data);
         ws.send(packet.buffer);
         keysToDelete.push(key);
-      } catch {
-        // WebSocket failed during drain — stop, remaining stay queued.
-        break;
+      } catch (err) {
+        console.warn(`[relay] drainQueue: send failed for ${peerHex}, key=${key} — skipping`);
+        failedKeys.push(key);
+        continue;
       }
     }
 
@@ -326,6 +331,30 @@ export class RelayRoom implements DurableObject {
     // Clean up delivered/expired entries.
     for (const key of keysToDelete) {
       await this.state.storage.delete(key);
+    }
+
+    if (failedKeys.length === 0) {
+      this.drainRetryCount.delete(peerHex);
+      return;
+    }
+
+    const attempt = (this.drainRetryCount.get(peerHex) ?? 0) + 1;
+    if (attempt <= 3) {
+      this.drainRetryCount.set(peerHex, attempt);
+      console.warn(
+        `[relay] drainQueue: ${failedKeys.length} packets failed for ${peerHex}, scheduling retry ${attempt}/3`
+      );
+      setTimeout(() => {
+        const currentWs = this.peers.get(peerHex);
+        if (currentWs) {
+          void this.drainQueue(peerHex, currentWs);
+        }
+      }, 5000 * attempt);
+    } else {
+      console.warn(
+        `[relay] drainQueue: max retries reached for ${peerHex}, ${failedKeys.length} packets remain queued for TTL expiry`
+      );
+      this.drainRetryCount.delete(peerHex);
     }
   }
 
@@ -358,6 +387,7 @@ export class RelayRoom implements DurableObject {
       }
       this.wsToPeer.delete(ws);
       this.messageTimestamps.delete(peerIdHex);
+      this.drainRetryCount.delete(peerIdHex);
     }
   }
 }
