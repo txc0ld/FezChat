@@ -91,6 +91,20 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     private var scanTimer: DispatchSourceTimer?
     private var rssiPollTimer: DispatchSourceTimer?
 
+    // MARK: - Power-aware radio control
+
+    /// Current power tier controlling scan cadence and RSSI poll frequency.
+    public private(set) var powerTier: PowerTier = .performance
+
+    /// Whether RSSI polling is enabled (should be true only when NearbyView is visible).
+    public private(set) var rssiPollingEnabled: Bool = false
+
+    /// Tracks when each peripheral last sent or received data, for stale-peripheral filtering.
+    private var lastDataExchange: [UUID: Date] = [:]
+
+    /// Peripherals that haven't exchanged data in this window are skipped during RSSI polls.
+    private static let rssiStaleThreshold: TimeInterval = 60.0
+
     // MARK: - Transport Event Callback
 
     /// Optional callback for surfacing BLE transport events to the app layer (e.g. DebugLogger).
@@ -242,6 +256,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
            let char = peripheralCharacteristics[peripheral.identifier] {
             lock.unlock()
             peripheral.writeValue(data, for: char, type: .withResponse)
+            lock.withLock { lastDataExchange[peripheral.identifier] = Date() }
             sent = true
         } else {
             lock.unlock()
@@ -256,6 +271,9 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
 
             if let central = central, let char = characteristic {
                 _ = peripheralManager?.bleUpdateValue(data, for: char, onSubscribedCentrals: [central])
+                if let uuid = matchingCentral {
+                    lock.withLock { lastDataExchange[uuid] = Date() }
+                }
                 sent = true
             }
         }
@@ -308,7 +326,9 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         transportEventHandler?("BLE", "Scan STARTED")
 
         scheduleScanCycle()
-        startRSSIPolling()
+        if rssiPollingEnabled {
+            startRSSIPolling()
+        }
     }
 
     /// Returns the last known RSSI for a peer, or nil if unavailable.
@@ -327,18 +347,61 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
         lock.withLock { peerIDToPeripheral[peerID] != nil }
     }
 
-    /// Poll RSSI for all connected peripherals every 10 seconds.
+    /// Update the power tier and restart the scan cycle with new durations.
+    public func updatePowerTier(_ tier: PowerTier) {
+        guard tier != powerTier else { return }
+        powerTier = tier
+        logger.info("Power tier updated to \(tier.rawValue)")
+        transportEventHandler?("BLE", "Power tier → \(tier.rawValue)")
+
+        // Restart scan cycle with new durations if currently scanning
+        if isScanning {
+            scheduleScanCycle()
+        }
+
+        // Restart RSSI polling with new interval if enabled
+        if rssiPollingEnabled {
+            startRSSIPolling()
+        }
+    }
+
+    /// Enable RSSI polling (call when NearbyView appears).
+    public func enableRSSIPolling() {
+        rssiPollingEnabled = true
+        if isScanning {
+            startRSSIPolling()
+        }
+    }
+
+    /// Disable RSSI polling (call when NearbyView disappears).
+    public func disableRSSIPolling() {
+        rssiPollingEnabled = false
+        rssiPollTimer?.cancel()
+        rssiPollTimer = nil
+    }
+
+    /// Poll RSSI for connected peripherals that recently exchanged data.
     private func startRSSIPolling() {
         rssiPollTimer?.cancel()
+        rssiPollTimer = nil
+
+        guard rssiPollingEnabled,
+              let interval = powerTier.rssiPollInterval else { return }
+
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 10.0, repeating: 10.0)
+        timer.schedule(deadline: .now() + interval, repeating: interval)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            let peripherals: [any BLEPeripheralProxy] = self.lock.withLock {
-                Array(self.connectedPeripheralRefs.values)
+            let now = Date()
+            let (peripherals, exchanges): ([any BLEPeripheralProxy], [UUID: Date]) = self.lock.withLock {
+                (Array(self.connectedPeripheralRefs.values), self.lastDataExchange)
             }
             for peripheral in peripherals {
-                (peripheral as? CBPeripheral)?.readRSSI()
+                // Skip peripherals that haven't exchanged data recently
+                if let lastExchange = exchanges[peripheral.identifier],
+                   now.timeIntervalSince(lastExchange) <= Self.rssiStaleThreshold {
+                    (peripheral as? CBPeripheral)?.readRSSI()
+                }
             }
         }
         timer.resume()
@@ -353,12 +416,16 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     }
 
     /// Alternate between scanning and pausing to conserve power.
+    /// Durations are driven by the current `powerTier`.
     private func scheduleScanCycle() {
         scanTimer?.cancel()
 
+        let scanOn = powerTier.scanOnDuration
+        let scanOff = powerTier.scanOffDuration
+
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
-            deadline: .now() + BLEConstants.foregroundScanDuration,
+            deadline: .now() + scanOn,
             repeating: .never
         )
         timer.setEventHandler { [weak self] in
@@ -368,7 +435,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
                 // Pause, then resume
                 let resumeTimer = DispatchSource.makeTimerSource(queue: self.queue)
                 resumeTimer.schedule(
-                    deadline: .now() + BLEConstants.foregroundScanPause,
+                    deadline: .now() + scanOff,
                     repeating: .never
                 )
                 resumeTimer.setEventHandler { [weak self] in
@@ -653,6 +720,7 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             peripheralCharacteristics.removeValue(forKey: uuid)
             connectedPeripheralRefs.removeValue(forKey: uuid)
             peripheralRSSI.removeValue(forKey: uuid)
+            lastDataExchange.removeValue(forKey: uuid)
             connectingPeripherals.remove(uuid)
 
             // Clear dedup entry so a genuine reconnect fires a new CONNECTED event
@@ -689,7 +757,8 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     /// Handle received data from a connected peripheral.
     func handleDidReceiveValue(data: Data, fromPeripheralUUID uuid: UUID) {
         let peerID: PeerID = lock.withLock {
-            peripheralToPeerID[uuid] ?? temporaryPeerID(from: uuid)
+            lastDataExchange[uuid] = Date()
+            return peripheralToPeerID[uuid] ?? temporaryPeerID(from: uuid)
         }
         delegate?.transport(self, didReceiveData: data, from: peerID)
     }
@@ -1061,9 +1130,11 @@ extension BLEService: CBPeripheralManagerDelegate {
     ) {
         for request in requests {
             if let data = request.value, !data.isEmpty {
+                let centralUUID = request.central.identifier
                 let peerID: PeerID = lock.withLock {
-                    centralToPeerID[request.central.identifier]
-                        ?? temporaryPeerID(from: request.central.identifier)
+                    lastDataExchange[centralUUID] = Date()
+                    return centralToPeerID[centralUUID]
+                        ?? temporaryPeerID(from: centralUUID)
                 }
                 delegate?.transport(self, didReceiveData: data, from: peerID)
             }
