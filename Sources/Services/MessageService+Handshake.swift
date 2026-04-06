@@ -336,6 +336,7 @@ extension MessageService {
     @MainActor
     func handleEncryptedPacket(_ packet: Packet, from peerID: PeerID) async throws {
         let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        let peerBytes = peerID.bytes
 
         guard let session = noiseSessionManager?.getSession(for: peerID) else {
             DebugLogger.shared.log("NOISE", "Dropped .noiseEncrypted packet from \(senderHex): no active Noise session", isError: true)
@@ -352,8 +353,10 @@ extension MessageService {
             } else {
                 DebugLogger.shared.log("CRYPTO", "Decrypted \(decryptedPayload.count)B from \(senderHex) nonce=\(nonceBefore)→\(session.receiveCipher.currentNonce)")
             }
+            resetDecryptFailureTracking(for: peerBytes)
         } catch {
             DebugLogger.shared.log("NOISE", "Dropped .noiseEncrypted packet from \(senderHex): Noise decryption failed: \(error)", isError: true)
+            try await handleDecryptFailure(for: peerID, peerHex: senderHex)
             return
         }
 
@@ -411,6 +414,64 @@ extension MessageService {
             try await handleGroupManagement(subType: subType, data: Data(contentData), from: packet.senderID)
         case .profileRequest, .profileResponse, .blockVote:
             break // Handled elsewhere
+        }
+    }
+
+    private func resetDecryptFailureTracking(for peerBytes: Data) {
+        lock.withLock {
+            decryptFailureCounts[peerBytes] = 0
+        }
+    }
+
+    @MainActor
+    private func handleDecryptFailure(for peerID: PeerID, peerHex: String) async throws {
+        let peerBytes = peerID.bytes
+        let now = Date()
+        let failureCount: Int = lock.withLock {
+            let updatedCount = (decryptFailureCounts[peerBytes] ?? 0) + 1
+            decryptFailureCounts[peerBytes] = updatedCount
+            return updatedCount
+        }
+
+        guard failureCount >= Self.decryptFailureRecoveryThreshold else {
+            return
+        }
+
+        let shouldAttemptRecovery: Bool = lock.withLock {
+            if let lastAttempt = lastRecoveryAttempt[peerBytes],
+               now.timeIntervalSince(lastAttempt) < Self.decryptFailureRecoveryCooldown {
+                return false
+            }
+
+            lastRecoveryAttempt[peerBytes] = now
+            decryptFailureCounts[peerBytes] = 0
+            return true
+        }
+
+        guard shouldAttemptRecovery else {
+            DebugLogger.shared.log(
+                "NOISE",
+                "Suppressing session recovery for \(peerHex): last recovery attempt was less than \(Int(Self.decryptFailureRecoveryCooldown))s ago",
+                isError: true
+            )
+            return
+        }
+
+        DebugLogger.shared.log(
+            "NOISE",
+            "Initiating session recovery for \(peerHex) after \(failureCount) consecutive decrypt failures",
+            isError: true
+        )
+        noiseSessionManager?.destroySession(for: peerID)
+
+        do {
+            let initiated = try await initiateHandshakeIfNeeded(with: peerID)
+            if !initiated {
+                DebugLogger.shared.log("NOISE", "Session recovery for \(peerHex) did not initiate a new handshake", isError: true)
+            }
+        } catch {
+            DebugLogger.shared.log("NOISE", "Session recovery handshake initiation failed for \(peerHex): \(error)", isError: true)
+            throw error
         }
     }
 

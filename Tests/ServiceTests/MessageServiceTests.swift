@@ -675,6 +675,117 @@ final class MessageServiceTests: XCTestCase {
         XCTAssertTrue(channels.isEmpty)
     }
 
+    func testHandleEncryptedPacket_decryptFailureInitiatesRecoveryAfterThreshold() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let (remotePeerID, _) = try establishNoiseSession(with: remoteIdentity)
+        mockTransport.reset()
+
+        let invalidPacket = MessagePayloadBuilder.buildPacket(
+            type: .noiseEncrypted,
+            payload: Data("not-ciphertext".utf8),
+            flags: [.hasRecipient, .hasSignature],
+            senderID: remotePeerID,
+            recipientID: identity.peerID
+        )
+
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+
+        XCTAssertTrue(messageService.noiseSessionManager?.hasSession(for: remotePeerID) == true)
+        XCTAssertTrue(mockTransport.sentPackets.isEmpty)
+
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+
+        XCTAssertFalse(messageService.noiseSessionManager?.hasSession(for: remotePeerID) ?? true)
+        XCTAssertEqual(mockTransport.sentPackets.count, 1)
+
+        let handshakePacket = try XCTUnwrap(mockTransport.sentPackets.first)
+        let decoded = try PacketSerializer.decode(handshakePacket.data)
+        XCTAssertEqual(decoded.type, .noiseHandshake)
+        XCTAssertEqual(handshakePacket.peerID, remotePeerID)
+    }
+
+    func testHandleEncryptedPacket_successfulDecryptResetsFailureCounter() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let (remotePeerID, remoteSessionManager) = try establishNoiseSession(with: remoteIdentity)
+        mockTransport.reset()
+
+        let invalidPacket = MessagePayloadBuilder.buildPacket(
+            type: .noiseEncrypted,
+            payload: Data("not-ciphertext".utf8),
+            flags: [.hasRecipient, .hasSignature],
+            senderID: remotePeerID,
+            recipientID: identity.peerID
+        )
+
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+
+        guard let remoteSession = remoteSessionManager.getSession(for: identity.peerID) else {
+            XCTFail("Missing remote session")
+            return
+        }
+
+        let validPayload = MessagePayloadBuilder.prependSubType(
+            .typingIndicator,
+            to: Data(UUID().uuidString.utf8)
+        )
+        let validCiphertext = try remoteSession.encrypt(plaintext: validPayload)
+        let validPacket = MessagePayloadBuilder.buildPacket(
+            type: .noiseEncrypted,
+            payload: validCiphertext,
+            flags: [.hasRecipient, .hasSignature],
+            senderID: remotePeerID,
+            recipientID: identity.peerID
+        )
+
+        try await messageService.handleEncryptedPacket(validPacket, from: remotePeerID)
+
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+
+        XCTAssertTrue(mockTransport.sentPackets.isEmpty)
+        XCTAssertTrue(messageService.noiseSessionManager?.hasSession(for: remotePeerID) == true)
+
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+
+        XCTAssertEqual(mockTransport.sentPackets.count, 1)
+        let decoded = try PacketSerializer.decode(try XCTUnwrap(mockTransport.sentPackets.first).data)
+        XCTAssertEqual(decoded.type, .noiseHandshake)
+    }
+
+    func testHandleEncryptedPacket_recoveryIsRateLimitedPerPeer() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let (remotePeerID, _) = try establishNoiseSession(with: remoteIdentity)
+
+        let invalidPacket = MessagePayloadBuilder.buildPacket(
+            type: .noiseEncrypted,
+            payload: Data("not-ciphertext".utf8),
+            flags: [.hasRecipient, .hasSignature],
+            senderID: remotePeerID,
+            recipientID: identity.peerID
+        )
+
+        mockTransport.reset()
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        XCTAssertEqual(mockTransport.sentPackets.count, 1)
+
+        mockTransport.reset()
+        _ = try establishNoiseSession(with: remoteIdentity)
+
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+        try await messageService.handleEncryptedPacket(invalidPacket, from: remotePeerID)
+
+        XCTAssertTrue(mockTransport.sentPackets.isEmpty)
+        XCTAssertTrue(messageService.noiseSessionManager?.hasSession(for: remotePeerID) == true)
+    }
+
     func testHandleIncomingGroupMessage_usesPayloadChannelID() async throws {
         let _ = makeLocalUser()
         let remoteIdentity = try makeRemoteIdentity()
