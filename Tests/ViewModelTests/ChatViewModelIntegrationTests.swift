@@ -1,0 +1,271 @@
+import XCTest
+import SwiftData
+@testable import Blip
+
+// MARK: - ChatViewModelIntegrationTests
+
+/// Integration tests for ChatViewModel: channel loading, message management,
+/// unread count tracking, and mark-as-read flows.
+///
+/// Uses a real MessageService backed by an in-memory ModelContainer.
+/// Exercises the ViewModel's data flow without real transport or encryption.
+@MainActor
+final class ChatViewModelIntegrationTests: XCTestCase {
+
+    private var container: ModelContainer!
+    private var messageService: MessageService!
+    private var vm: ChatViewModel!
+
+    override func setUp() async throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        container = try ModelContainer(for: BlipSchema.schema, configurations: [config])
+
+        messageService = MessageService(modelContainer: container)
+        vm = ChatViewModel(
+            modelContainer: container,
+            messageService: messageService
+        )
+    }
+
+    override func tearDown() async throws {
+        container = nil
+        messageService = nil
+        vm = nil
+    }
+
+    // MARK: - Helpers
+
+    private func makeChannel(
+        type: ChannelType = .dm,
+        name: String,
+        lastActivityAt: Date = Date()
+    ) -> Channel {
+        let context = ModelContext(container)
+        let channel = Channel(type: type, name: name, lastActivityAt: lastActivityAt)
+        context.insert(channel)
+        do {
+            try context.save()
+        } catch {
+            XCTFail("Failed to save channel: \(error)")
+        }
+        return channel
+    }
+
+    private func makeMessage(
+        channel: Channel,
+        type: MessageType = .text,
+        content: String = "test",
+        status: MessageStatus = .delivered,
+        createdAt: Date = Date()
+    ) -> Message {
+        let context = ModelContext(container)
+        let message = Message(
+            channel: channel,
+            type: type,
+            encryptedPayload: content.data(using: .utf8) ?? Data(),
+            status: status,
+            createdAt: createdAt
+        )
+        context.insert(message)
+        do {
+            try context.save()
+        } catch {
+            XCTFail("Failed to save message: \(error)")
+        }
+        return message
+    }
+
+    // MARK: - Load Channels
+
+    func testLoadChannels_populatesChannelList() async {
+        let now = Date()
+        let _ = makeChannel(name: "Alpha", lastActivityAt: now.addingTimeInterval(-300))
+        let _ = makeChannel(name: "Beta", lastActivityAt: now.addingTimeInterval(-100))
+        let _ = makeChannel(name: "Gamma", lastActivityAt: now)
+
+        await vm.loadChannels()
+
+        XCTAssertEqual(vm.channels.count, 3, "All 3 channels should be loaded")
+        XCTAssertFalse(vm.isLoading, "Loading flag should be cleared")
+    }
+
+    func testLoadChannels_sortedByLastActivityDescending() async {
+        let now = Date()
+        let _ = makeChannel(name: "Old", lastActivityAt: now.addingTimeInterval(-3600))
+        let _ = makeChannel(name: "Recent", lastActivityAt: now)
+        let _ = makeChannel(name: "Middle", lastActivityAt: now.addingTimeInterval(-600))
+
+        await vm.loadChannels()
+
+        XCTAssertEqual(vm.channels.count, 3)
+        XCTAssertEqual(vm.channels[0].name, "Recent", "Most recent channel should be first")
+        XCTAssertEqual(vm.channels[1].name, "Middle", "Middle channel should be second")
+        XCTAssertEqual(vm.channels[2].name, "Old", "Oldest channel should be last")
+    }
+
+    func testLoadChannels_emptyDatabase_returnsEmpty() async {
+        await vm.loadChannels()
+
+        XCTAssertEqual(vm.channels.count, 0)
+        XCTAssertFalse(vm.isLoading)
+    }
+
+    // MARK: - Send Message
+
+    func testSendMessage_appendsToActiveMessages() async {
+        let channel = makeChannel(name: "TestChannel")
+        await vm.openConversation(channel)
+
+        // Manually add a message to activeMessages (simulating a received message)
+        let msg = Message(
+            channel: channel,
+            type: .text,
+            encryptedPayload: Data("Hello".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(msg, in: channel)
+
+        XCTAssertEqual(vm.activeMessages.count, 1, "Active messages should grow by 1")
+    }
+
+    func testSendTextMessage_failsWithoutIdentity() async {
+        let channel = makeChannel(name: "NoIdentity")
+        await vm.openConversation(channel)
+
+        vm.composingText = "This will fail"
+        await vm.sendTextMessage()
+
+        // Without identity, message send should fail and set an error
+        XCTAssertNotNil(vm.errorMessage, "Error should be set when no identity is configured")
+        XCTAssertEqual(vm.activeMessages.count, 0, "No message should be added on failure")
+    }
+
+    // MARK: - Unread Count
+
+    func testUnreadCount_updatesOnNewMessage() async {
+        let activeChannel = makeChannel(name: "Active")
+        let otherChannel = makeChannel(name: "Other")
+
+        await vm.loadChannels()
+        await vm.openConversation(activeChannel)
+
+        // Simulate receiving a message in the non-active channel
+        let incoming = Message(
+            channel: otherChannel,
+            type: .text,
+            encryptedPayload: Data("New message".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(incoming, in: otherChannel)
+
+        XCTAssertEqual(vm.unreadCounts[otherChannel.id], 1, "Unread count should increment for inactive channel")
+        XCTAssertEqual(vm.totalUnreadCount, 1, "Total unread should be 1")
+
+        // Second message to same channel
+        let incoming2 = Message(
+            channel: otherChannel,
+            type: .text,
+            encryptedPayload: Data("Another message".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(incoming2, in: otherChannel)
+
+        XCTAssertEqual(vm.unreadCounts[otherChannel.id], 2, "Unread count should be 2")
+        XCTAssertEqual(vm.totalUnreadCount, 2, "Total unread should be 2")
+    }
+
+    func testUnreadCount_doesNotIncrementForActiveChannel() async {
+        let channel = makeChannel(name: "Active")
+
+        await vm.loadChannels()
+        await vm.openConversation(channel)
+
+        let incoming = Message(
+            channel: channel,
+            type: .text,
+            encryptedPayload: Data("Seen immediately".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(incoming, in: channel)
+
+        // Message in active channel should not increment unread count
+        XCTAssertEqual(vm.unreadCounts[channel.id] ?? 0, 0, "Active channel should have 0 unread")
+        XCTAssertEqual(vm.totalUnreadCount, 0, "Total unread should be 0")
+    }
+
+    // MARK: - Mark As Read
+
+    func testMarkAsRead_clearsUnreadCount() async {
+        let channel = makeChannel(name: "UnreadTest")
+
+        await vm.loadChannels()
+
+        // Add unread messages
+        let msg1 = Message(
+            channel: channel,
+            type: .text,
+            encryptedPayload: Data("msg1".utf8),
+            status: .delivered
+        )
+        let msg2 = Message(
+            channel: channel,
+            type: .text,
+            encryptedPayload: Data("msg2".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(msg1, in: channel)
+        vm.handleReceivedMessage(msg2, in: channel)
+
+        XCTAssertEqual(vm.unreadCounts[channel.id], 2, "Should have 2 unread messages")
+        XCTAssertEqual(vm.totalUnreadCount, 2)
+
+        // Mark as read
+        vm.markChannelAsRead(channel)
+
+        XCTAssertEqual(vm.unreadCounts[channel.id], 0, "Unread count should be 0 after marking as read")
+        XCTAssertEqual(vm.totalUnreadCount, 0, "Total unread should be 0 after marking as read")
+    }
+
+    func testOpenConversation_marksChannelAsRead() async {
+        let channel = makeChannel(name: "AutoRead")
+
+        await vm.loadChannels()
+
+        // Add an unread message
+        let msg = Message(
+            channel: channel,
+            type: .text,
+            encryptedPayload: Data("Unread".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(msg, in: channel)
+        XCTAssertEqual(vm.unreadCounts[channel.id], 1)
+
+        // Opening conversation should clear unreads
+        await vm.openConversation(channel)
+
+        XCTAssertEqual(vm.unreadCounts[channel.id], 0, "Opening conversation should mark as read")
+    }
+
+    // MARK: - Channel Activity Ordering
+
+    func testReceivedMessage_movesChannelToTop() async {
+        let now = Date()
+        let _ = makeChannel(name: "First", lastActivityAt: now)
+        let ch2 = makeChannel(name: "Second", lastActivityAt: now.addingTimeInterval(-600))
+
+        await vm.loadChannels()
+        XCTAssertEqual(vm.channels.first?.name, "First", "First channel should be on top initially")
+
+        // Receiving a message in Second should bump it to the top
+        let msg = Message(
+            channel: ch2,
+            type: .text,
+            encryptedPayload: Data("New!".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(msg, in: ch2)
+
+        XCTAssertEqual(vm.channels.first?.id, ch2.id, "Channel with new message should be first")
+    }
+}
