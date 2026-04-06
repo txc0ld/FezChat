@@ -49,4 +49,4 @@
 - [x] Replace the PCM stub encoder/decoder with real Opus encode/decode and keep backward compatibility for stored voice notes.
 - [x] Update the PTT chunk path to emit real Opus frames instead of raw PCM slices.
 - [x] Run package tests, regenerate the project, and run the simulator build.
-- [ ] Push `feat/BDEV-181-opus-codec`, open a PR linked to `BDEV-181`, and post the update in `#blip-dev`.
+- [x] Push `feat/BDEV-181-opus-codec`, open a PR linked to `BDEV-181`, and post the update in `#blip-dev`.
