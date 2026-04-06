@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>BLIP_AUTH_BASE_URL</key>
+    <string>$(BLIP_AUTH_BASE_URL)</string>
+    <key>BLIP_CDN_BASE_URL</key>
+    <string>$(BLIP_CDN_BASE_URL)</string>
+    <key>BLIP_RELAY_BASE_URL</key>
+    <string>$(BLIP_RELAY_BASE_URL)</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
