@@ -60,7 +60,7 @@ jobs:
       - name: Build app
         run: >
           xcodebuild -scheme Blip
-          -destination 'generic/platform=iOS Simulator'
+          -destination 'generic/platform=iOS'
           -skipPackagePluginValidation
           CODE_SIGN_IDENTITY=""
           CODE_SIGNING_ALLOWED=NO
