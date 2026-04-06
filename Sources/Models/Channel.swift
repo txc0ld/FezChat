@@ -116,3 +116,20 @@ final class Channel {
         self.lastActivityAt = lastActivityAt
     }
 }
+
+extension Channel {
+    var dmConversationKey: String? {
+        guard type == .dm else { return nil }
+        guard let member = memberships.compactMap(\.user).first else { return nil }
+
+        if !member.noisePublicKey.isEmpty {
+            return "noise:\(member.noisePublicKey.base64EncodedString())"
+        }
+
+        let normalizedUsername = member.username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalizedUsername.isEmpty else { return nil }
+        return "username:\(normalizedUsername)"
+    }
+}

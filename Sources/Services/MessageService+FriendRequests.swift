@@ -618,36 +618,51 @@ extension MessageService {
             $0.typeRaw == "dm"
         })
         let channels = try context.fetch(dmDescriptor)
-
-        // 1. Match by user ID
-        for channel in channels {
-            if channel.memberships.contains(where: { $0.user?.id == localUser.id }) {
-                return channel
-            }
-        }
-
-        // 2. Match by username
         let username = localUser.username
-        for channel in channels {
-            if channel.memberships.contains(where: { $0.user?.username == username }) {
-                return channel
-            }
-        }
-
-        // 3. Repair orphan channel (name matches OR anonymous, no memberships)
         let displayName = localUser.resolvedDisplayName
-        for channel in channels {
-            if channel.memberships.isEmpty && (channel.name == displayName || channel.name == nil) {
-                channel.name = displayName
-                let membership = GroupMembership(user: localUser, channel: channel, role: .member)
-                context.insert(membership)
-                try context.save()
-                DebugLogger.shared.log("DM", "Repaired orphan DM channel for \(username)")
-                return channel
+
+        var matchingChannels = channels.filter { channel in
+            channel.memberships.contains(where: { $0.user?.id == localUser.id })
+        }
+
+        if matchingChannels.isEmpty {
+            matchingChannels = channels.filter { channel in
+                channel.memberships.contains(where: { $0.user?.username == username })
             }
         }
 
-        // 4. Create new channel
+        if !matchingChannels.isEmpty {
+            let preferredChannel = preferredDMChannel(from: matchingChannels)
+            if let matchingMembership = preferredChannel.memberships.first(where: { membership in
+                membership.user?.username == username
+            }) {
+                matchingMembership.user = localUser
+            } else if preferredChannel.memberships.isEmpty {
+                let membership = GroupMembership(user: localUser, channel: preferredChannel, role: .member)
+                context.insert(membership)
+            }
+
+            if preferredChannel.name?.isEmpty != false {
+                preferredChannel.name = displayName
+            }
+
+            try context.save()
+            return preferredChannel
+        }
+
+        let orphanChannels = channels.filter { channel in
+            channel.memberships.isEmpty && (channel.name == displayName || channel.name == nil)
+        }
+        if !orphanChannels.isEmpty {
+            let preferredChannel = preferredDMChannel(from: orphanChannels)
+            preferredChannel.name = displayName
+            let membership = GroupMembership(user: localUser, channel: preferredChannel, role: .member)
+            context.insert(membership)
+            try context.save()
+            DebugLogger.shared.log("DM", "Repaired orphan DM channel for \(username)")
+            return preferredChannel
+        }
+
         let channel = Channel(type: .dm, name: displayName)
         context.insert(channel)
         let membership = GroupMembership(user: localUser, channel: channel, role: .member)
@@ -663,5 +678,36 @@ extension MessageService {
         try findOrCreateDMChannel(with: remoteUser, context: context)
     }
 
+    private func preferredDMChannel(from channels: [Channel]) -> Channel {
+        var preferredChannel = channels[0]
 
+        for candidate in channels.dropFirst() {
+            if candidate.lastActivityAt > preferredChannel.lastActivityAt {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.lastActivityAt < preferredChannel.lastActivityAt {
+                continue
+            }
+            if candidate.messages.count > preferredChannel.messages.count {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.messages.count < preferredChannel.messages.count {
+                continue
+            }
+            if candidate.createdAt > preferredChannel.createdAt {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.createdAt < preferredChannel.createdAt {
+                continue
+            }
+            if candidate.id.uuidString < preferredChannel.id.uuidString {
+                preferredChannel = candidate
+            }
+        }
+
+        return preferredChannel
+    }
 }

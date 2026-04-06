@@ -404,30 +404,53 @@ struct ChatListView: View {
     /// Map ViewModel channels to ConversationPreview for display.
     private var conversations: [ConversationPreview] {
         guard let vm = chatViewModel else { return [] }
-        return vm.channels.map { channel in
-            let lastMessage = channel.messages
-                .sorted(by: { $0.createdAt < $1.createdAt })
-                .last
-            let unread = vm.unreadCounts[channel.id] ?? 0
-
-            return ConversationPreview(
-                id: channel.id,
-                displayName: Self.resolveDisplayName(for: channel),
-                avatarData: nil,
-                lastMessagePreview: lastMessage.flatMap {
-                    String(data: $0.encryptedPayload, encoding: .utf8)
-                } ?? "",
-                timestamp: channel.lastActivityAt,
-                unreadCount: unread,
-                isOnline: false,
-                isPinned: channel.isPinned,
-                isMuted: channel.isMuted,
-                isFromMe: lastMessage?.sender == nil,
-                deliveryStatus: lastMessage.map { Self.mapDeliveryStatus($0.status) } ?? .sent,
-                ringStyle: channel.isGroup ? .none : .friend,
-                messageType: lastMessage.map { $0.type } ?? .text
-            )
+        let groupedChannels = Dictionary(grouping: vm.channels) { channel in
+            Self.conversationGroupingKey(for: channel)
         }
+
+        return groupedChannels.values.map { channels in
+            makeConversationPreview(for: channels)
+        }
+    }
+
+    private static func conversationGroupingKey(for channel: Channel) -> String {
+        if let dmConversationKey = channel.dmConversationKey {
+            return dmConversationKey
+        }
+        return "channel:\(channel.id.uuidString)"
+    }
+
+    private static func preferredConversationChannel(from channels: [Channel]) -> Channel {
+        var preferredChannel = channels[0]
+
+        for candidate in channels.dropFirst() {
+            if candidate.lastActivityAt > preferredChannel.lastActivityAt {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.lastActivityAt < preferredChannel.lastActivityAt {
+                continue
+            }
+            if candidate.messages.count > preferredChannel.messages.count {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.messages.count < preferredChannel.messages.count {
+                continue
+            }
+            if candidate.createdAt > preferredChannel.createdAt {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.createdAt < preferredChannel.createdAt {
+                continue
+            }
+            if candidate.id.uuidString < preferredChannel.id.uuidString {
+                preferredChannel = candidate
+            }
+        }
+
+        return preferredChannel
     }
 
     /// Resolve a display name for the channel, falling back to the first member's name for DMs.
@@ -507,11 +530,15 @@ struct ChatListView: View {
     }
 
     private func toggleMute(for conversation: ConversationPreview) {
-        guard let channel = chatViewModel?.channels.first(where: { $0.id == conversation.id }) else {
+        guard let channels = representedChannels(for: conversation), !channels.isEmpty else {
             return
         }
 
-        chatViewModel?.toggleMute(for: channel)
+        for channel in channels {
+            if channel.isMuted == conversation.isMuted {
+                chatViewModel?.toggleMute(for: channel)
+            }
+        }
 
         Task {
             await chatViewModel?.loadChannels()
@@ -519,11 +546,15 @@ struct ChatListView: View {
     }
 
     private func togglePin(for conversation: ConversationPreview) {
-        guard let channel = chatViewModel?.channels.first(where: { $0.id == conversation.id }) else {
+        guard let channels = representedChannels(for: conversation), !channels.isEmpty else {
             return
         }
 
-        chatViewModel?.togglePin(for: channel)
+        for channel in channels {
+            if channel.isPinned == conversation.isPinned {
+                chatViewModel?.togglePin(for: channel)
+            }
+        }
 
         Task {
             await chatViewModel?.loadChannels()
@@ -531,37 +562,57 @@ struct ChatListView: View {
     }
 
     private func archiveConversation(_ conversation: ConversationPreview) {
-        guard let channel = chatViewModel?.channels.first(where: { $0.id == conversation.id }) else {
+        guard let channels = representedChannels(for: conversation), !channels.isEmpty else {
             return
         }
 
         Task {
-            await chatViewModel?.deleteChannel(channel)
+            for channel in channels {
+                await chatViewModel?.deleteChannel(channel)
+            }
             await chatViewModel?.loadChannels()
         }
     }
 
     private func makeConversationPreview(for channel: Channel) -> ConversationPreview {
-        let lastMessage = channel.messages.sorted(by: { $0.createdAt < $1.createdAt }).last
-        let unread = chatViewModel?.unreadCounts[channel.id] ?? 0
+        makeConversationPreview(for: [channel])
+    }
+
+    private func makeConversationPreview(for channels: [Channel]) -> ConversationPreview {
+        let channel = Self.preferredConversationChannel(from: channels)
+        let lastMessage = channels
+            .flatMap(\.messages)
+            .max(by: { $0.createdAt < $1.createdAt })
+        let unread = channels.reduce(0) { partialResult, conversationChannel in
+            partialResult + (chatViewModel?.unreadCounts[conversationChannel.id] ?? conversationChannel.unreadCount)
+        }
+        let isPinned = channels.contains(where: \.isPinned)
+        let isMuted = channels.contains(where: \.isMuted)
+        let timestamp = channels.map(\.lastActivityAt).max() ?? channel.lastActivityAt
 
         return ConversationPreview(
             id: channel.id,
+            relatedChannelIDs: channels.map(\.id),
             displayName: Self.resolveDisplayName(for: channel),
             avatarData: nil,
             lastMessagePreview: lastMessage.flatMap {
                 String(data: $0.encryptedPayload, encoding: .utf8)
             } ?? "",
-            timestamp: channel.lastActivityAt,
+            timestamp: timestamp,
             unreadCount: unread,
             isOnline: false,
-            isPinned: channel.isPinned,
-            isMuted: channel.isMuted,
+            isPinned: isPinned,
+            isMuted: isMuted,
             isFromMe: lastMessage?.sender == nil,
             deliveryStatus: lastMessage.map { Self.mapDeliveryStatus($0.status) } ?? .sent,
             ringStyle: channel.isGroup ? .none : .friend,
             messageType: lastMessage.map { $0.type } ?? .text
         )
+    }
+
+    private func representedChannels(for conversation: ConversationPreview) -> [Channel]? {
+        guard let channels = chatViewModel?.channels else { return nil }
+        return channels.filter { conversation.relatedChannelIDs.contains($0.id) }
     }
 }
 
