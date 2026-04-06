@@ -223,15 +223,33 @@ extension MessageService {
         let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         lock.lock()
         let pending = pendingHandshakeMessages.removeValue(forKey: peerID.bytes) ?? []
+        let pendingControls = pendingHandshakeControlMessages.removeValue(forKey: peerID.bytes) ?? []
         lock.unlock()
 
-        guard !pending.isEmpty else {
-            DebugLogger.shared.log("NOISE", "Session with \(peerHex) ready (no queued messages)")
+        guard !pending.isEmpty || !pendingControls.isEmpty else {
+            DebugLogger.shared.log("NOISE", "Session with \(peerHex) ready (no queued payloads)")
             return
         }
 
-        DebugLogger.shared.log("NOISE", "Flushing \(pending.count) queued message(s) to \(peerHex)")
+        DebugLogger.shared.log(
+            "NOISE",
+            "Flushing \(pendingControls.count) queued control packet(s) and \(pending.count) queued message(s) to \(peerHex)"
+        )
         Task { @MainActor in
+            for pendingControl in pendingControls {
+                do {
+                    try await self.sendEncryptedControl(
+                        payload: pendingControl.payload,
+                        subType: pendingControl.subType,
+                        to: peerID,
+                        identity: pendingControl.identity,
+                        shouldQueueIfHandshakeMissing: false
+                    )
+                } catch {
+                    DebugLogger.shared.log("NOISE", "Failed to send queued control packet: \(error)", isError: true)
+                }
+            }
+
             for msg in pending {
                 do {
                     let outcome = try await self.encryptAndSend(
@@ -265,11 +283,25 @@ extension MessageService {
     func handleHandshakeTimeout(peerIDBytes: Data) {
         lock.lock()
         let pending = pendingHandshakeMessages.removeValue(forKey: peerIDBytes)
+        let pendingControls = pendingHandshakeControlMessages.removeValue(forKey: peerIDBytes)
         lock.unlock()
 
-        guard let pending, !pending.isEmpty else { return }
-
         let peerHex = peerIDBytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        if let pendingControls, !pendingControls.isEmpty {
+            DebugLogger.shared.log(
+                "NOISE",
+                "Handshake timeout for \(peerHex) — dropped \(pendingControls.count) queued control packet(s)",
+                isError: true
+            )
+        }
+
+        guard let pending, !pending.isEmpty else {
+            if let peerID = PeerID(bytes: peerIDBytes) {
+                noiseSessionManager?.destroySession(for: peerID)
+            }
+            return
+        }
+
         DebugLogger.shared.log("NOISE", "Handshake timeout for \(peerHex) — \(pending.count) message(s) reverted to queued", isError: true)
 
         // Revert messages to queued so retry service picks them up

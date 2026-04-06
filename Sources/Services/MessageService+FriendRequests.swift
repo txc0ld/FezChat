@@ -122,15 +122,12 @@ extension MessageService {
         payload.append(0x00)
         payload.append(localUser.resolvedDisplayName.data(using: .utf8) ?? Data())
 
-        let packet = MessagePayloadBuilder.buildPacket(
-            type: .noiseEncrypted,
-            payload: MessagePayloadBuilder.prependSubType(.friendRequest, to: payload),
-            flags: [.hasRecipient, .hasSignature, .isReliable],
-            senderID: identity.peerID,
-            recipientID: peerID
+        try await sendEncryptedControl(
+            payload: payload,
+            subType: .friendRequest,
+            to: peerID,
+            identity: identity
         )
-
-        try await sendPacket(packet)
 
         // Create or update local Friend record for the remote peer
         let peerData = peerID.bytes
@@ -208,15 +205,12 @@ extension MessageService {
         var payload = Data()
         payload.append(localUser.username.data(using: .utf8) ?? Data())
 
-        let packet = MessagePayloadBuilder.buildPacket(
-            type: .noiseEncrypted,
-            payload: MessagePayloadBuilder.prependSubType(.friendAccept, to: payload),
-            flags: [.hasRecipient, .hasSignature, .isReliable],
-            senderID: identity.peerID,
-            recipientID: recipientPeerID
+        try await sendEncryptedControl(
+            payload: payload,
+            subType: .friendAccept,
+            to: recipientPeerID,
+            identity: identity
         )
-
-        try await sendPacket(packet)
 
         logger.info("Accepted friend request from \(friendUser.username)")
 
@@ -676,6 +670,53 @@ extension MessageService {
     @MainActor
     func createDMChannel(with remoteUser: User, context: ModelContext) throws {
         try findOrCreateDMChannel(with: remoteUser, context: context)
+    }
+
+    @MainActor
+    func sendEncryptedControl(
+        payload: Data,
+        subType: EncryptedSubType,
+        to peerID: PeerID,
+        identity: Identity,
+        shouldQueueIfHandshakeMissing: Bool = true
+    ) async throws {
+        let taggedPayload = MessagePayloadBuilder.prependSubType(subType, to: payload)
+        let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+
+        if let session = noiseSessionManager?.getSession(for: peerID) {
+            let ciphertext = try session.encrypt(plaintext: taggedPayload)
+            DebugLogger.shared.log("CRYPTO", "\(subType) encrypted for \(peerHex) nonce=\(session.sendCipher.currentNonce)")
+
+            let packet = MessagePayloadBuilder.buildPacket(
+                type: .noiseEncrypted,
+                payload: ciphertext,
+                flags: [.hasRecipient, .hasSignature, .isReliable],
+                senderID: identity.peerID,
+                recipientID: peerID
+            )
+            try await sendPacket(packet)
+            return
+        }
+
+        guard shouldQueueIfHandshakeMissing else {
+            throw MessageServiceError.sessionNotEstablished(peerID)
+        }
+
+        if try await initiateHandshakeIfNeeded(with: peerID) {
+            let pendingControl = PendingEncryptedControlMessage(
+                payload: payload,
+                subType: subType,
+                identity: identity
+            )
+            lock.withLock {
+                pendingHandshakeControlMessages[peerID.bytes, default: []].append(pendingControl)
+            }
+            DebugLogger.shared.log("NOISE", "Queued \(subType) for \(peerHex) pending handshake")
+            return
+        }
+
+        DebugLogger.shared.log("NOISE", "No Noise session for \(peerHex) and handshake could not be initiated", isError: true)
+        throw MessageServiceError.sessionNotEstablished(peerID)
     }
 
     private func preferredDMChannel(from channels: [Channel]) -> Channel {
