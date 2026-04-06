@@ -272,7 +272,7 @@ struct FriendsListView: View {
                 try await messageService.sendFriendRequest(toPeerData: peer.peerID)
                 loadFriends()
             } catch {
-                DebugLogger.shared.log("DM", "Failed to send friend request to \(username): \(error.localizedDescription)", isError: true)
+                DebugLogger.shared.log("DM", "Failed to send friend request to \(DebugLogger.redact(username)): \(error.localizedDescription)", isError: true)
             }
         }
     }
@@ -289,7 +289,7 @@ struct FriendsListView: View {
                     try await messageService.acceptFriendRequest(from: friend)
                     loadFriends()
                 } catch {
-                    DebugLogger.shared.log("DM", "Failed to accept friend request for \(item.username): \(error.localizedDescription)", isError: true)
+                    DebugLogger.shared.log("DM", "Failed to accept friend request for \(DebugLogger.redact(item.username)): \(error.localizedDescription)", isError: true)
                 }
             }
         } catch {
@@ -306,7 +306,7 @@ struct FriendsListView: View {
             loadFriends()
             NotificationCenter.default.post(name: .friendListDidChange, object: nil)
         } catch {
-            DebugLogger.shared.log("DB", "Failed to remove friend \(item.username): \(error.localizedDescription)", isError: true)
+            DebugLogger.shared.log("DB", "Failed to remove friend \(DebugLogger.redact(item.username)): \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -319,7 +319,7 @@ struct FriendsListView: View {
             loadFriends()
             NotificationCenter.default.post(name: .friendListDidChange, object: nil)
         } catch {
-            DebugLogger.shared.log("DB", "Failed to block friend \(item.username): \(error.localizedDescription)", isError: true)
+            DebugLogger.shared.log("DB", "Failed to block friend \(DebugLogger.redact(item.username)): \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -332,7 +332,7 @@ struct FriendsListView: View {
             loadFriends()
             NotificationCenter.default.post(name: .friendListDidChange, object: nil)
         } catch {
-            DebugLogger.shared.log("DB", "Failed to unblock friend \(item.username): \(error.localizedDescription)", isError: true)
+            DebugLogger.shared.log("DB", "Failed to unblock friend \(DebugLogger.redact(item.username)): \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -345,7 +345,7 @@ struct FriendsListView: View {
             loadFriends()
             NotificationCenter.default.post(name: .friendListDidChange, object: nil)
         } catch {
-            DebugLogger.shared.log("DB", "Failed to decline/cancel friend request for \(item.username): \(error.localizedDescription)", isError: true)
+            DebugLogger.shared.log("DB", "Failed to decline/cancel friend request for \(DebugLogger.redact(item.username)): \(error.localizedDescription)", isError: true)
         }
     }
 
