@@ -578,4 +578,100 @@ final class MessageServiceTests: XCTestCase {
         XCTAssertFalse(pendingControl.flags.contains(.isReliable))
         XCTAssertEqual(String(data: pendingControl.payload, encoding: .utf8), messageID.uuidString)
     }
+
+    func testHandleEncryptedPacket_withoutSession_dropsPacket() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let remotePeerID = PeerID(noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation)
+        let remoteUser = makeUser(
+            username: "alice",
+            displayName: "Alice",
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey
+        )
+        let friend = makeFriend(user: remoteUser, status: .pending)
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+
+        let packet = MessagePayloadBuilder.buildPacket(
+            type: .noiseEncrypted,
+            payload: MessagePayloadBuilder.prependSubType(
+                .friendAccept,
+                to: Data("alice".utf8)
+            ),
+            flags: [.hasRecipient, .hasSignature],
+            senderID: remotePeerID,
+            recipientID: identity.peerID
+        )
+
+        try await messageService.handleEncryptedPacket(packet, from: remotePeerID)
+
+        let context = ModelContext(container)
+        let friendID = friend.id
+        let friendDesc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        let persistedFriend = try XCTUnwrap(context.fetch(friendDesc).first)
+        XCTAssertEqual(persistedFriend.status, .pending)
+
+        let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "dm" })
+        let channels = try context.fetch(channelDesc)
+        XCTAssertTrue(channels.isEmpty)
+    }
+
+    func testHandleEncryptedPacket_decryptFailureDropsPacket() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let (remotePeerID, _) = try establishNoiseSession(with: remoteIdentity)
+        let remoteUser = makeUser(
+            username: "alice",
+            displayName: "Alice",
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey
+        )
+        let friend = makeFriend(user: remoteUser, status: .pending)
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+
+        let packet = MessagePayloadBuilder.buildPacket(
+            type: .noiseEncrypted,
+            payload: MessagePayloadBuilder.prependSubType(
+                .friendAccept,
+                to: Data("alice".utf8)
+            ),
+            flags: [.hasRecipient, .hasSignature],
+            senderID: remotePeerID,
+            recipientID: identity.peerID
+        )
+
+        try await messageService.handleEncryptedPacket(packet, from: remotePeerID)
+
+        let context = ModelContext(container)
+        let friendID = friend.id
+        let friendDesc = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
+        let persistedFriend = try XCTUnwrap(context.fetch(friendDesc).first)
+        XCTAssertEqual(persistedFriend.status, .pending)
+
+        let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "dm" })
+        let channels = try context.fetch(channelDesc)
+        XCTAssertTrue(channels.isEmpty)
+    }
 }

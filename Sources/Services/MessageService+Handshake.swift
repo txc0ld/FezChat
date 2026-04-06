@@ -335,28 +335,30 @@ extension MessageService {
 
     @MainActor
     func handleEncryptedPacket(_ packet: Packet, from peerID: PeerID) async throws {
-        var payload = packet.payload
+        let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
 
-        // Attempt Noise decryption if we have an active session with this peer
-        if let session = noiseSessionManager?.getSession(for: peerID) {
-            do {
-                let nonceBefore = session.receiveCipher.currentNonce
-                let recoveryBefore = session.receiveCipher.nonceRecoveryCount
-                payload = try session.decrypt(ciphertext: payload)
-                let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
-                if session.receiveCipher.nonceRecoveryCount > recoveryBefore {
-                    DebugLogger.shared.log("CRYPTO", "Decrypted \(payload.count)B from \(senderHex) nonce=\(nonceBefore)→\(session.receiveCipher.currentNonce) (recovery)")
-                } else {
-                    DebugLogger.shared.log("CRYPTO", "Decrypted \(payload.count)B from \(senderHex) nonce=\(nonceBefore)→\(session.receiveCipher.currentNonce)")
-                }
-            } catch {
-                // Decryption failed — fall through to try as plaintext (backward compat)
-                let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
-                DebugLogger.shared.log("NOISE", "Decryption failed from \(senderHex), trying plaintext: \(error)", isError: true)
+        guard let session = noiseSessionManager?.getSession(for: peerID) else {
+            DebugLogger.shared.log("NOISE", "Dropped .noiseEncrypted packet from \(senderHex): no active Noise session", isError: true)
+            return
+        }
+
+        let decryptedPayload: Data
+        do {
+            let nonceBefore = session.receiveCipher.currentNonce
+            let recoveryBefore = session.receiveCipher.nonceRecoveryCount
+            decryptedPayload = try session.decrypt(ciphertext: packet.payload)
+            if session.receiveCipher.nonceRecoveryCount > recoveryBefore {
+                DebugLogger.shared.log("CRYPTO", "Decrypted \(decryptedPayload.count)B from \(senderHex) nonce=\(nonceBefore)→\(session.receiveCipher.currentNonce) (recovery)")
+            } else {
+                DebugLogger.shared.log("CRYPTO", "Decrypted \(decryptedPayload.count)B from \(senderHex) nonce=\(nonceBefore)→\(session.receiveCipher.currentNonce)")
             }
+        } catch {
+            DebugLogger.shared.log("NOISE", "Dropped .noiseEncrypted packet from \(senderHex): Noise decryption failed: \(error)", isError: true)
+            return
         }
 
         // Decompress if needed
+        var payload = decryptedPayload
         if packet.flags.contains(.isCompressed) {
             payload = try PayloadCompressor.decompress(payload)
         }
@@ -367,7 +369,6 @@ extension MessageService {
             return
         }
         let contentData = payload.dropFirst()
-        let senderHex = packet.senderID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         DebugLogger.shared.log("RX", "ENCRYPTED \(subType) from \(senderHex) (\(contentData.count)B)")
 
         switch subType {
