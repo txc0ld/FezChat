@@ -102,6 +102,9 @@ final class MessageService: @unchecked Sendable {
     /// Messages queued while waiting for a Noise handshake to complete.
     var pendingHandshakeMessages: [Data: [PendingEncryptedMessage]] = [:]
 
+    /// Control packets queued while waiting for a Noise handshake to complete.
+    var pendingHandshakeControlMessages: [Data: [PendingEncryptedControlMessage]] = [:]
+
     /// A message waiting for a Noise session to be established before it can be encrypted.
     struct PendingEncryptedMessage {
         let payload: Data
@@ -109,6 +112,13 @@ final class MessageService: @unchecked Sendable {
         let channel: Channel
         let identity: Identity
         let messageID: UUID?
+    }
+
+    /// A control packet waiting for a Noise session before it can be encrypted.
+    struct PendingEncryptedControlMessage {
+        let payload: Data
+        let subType: EncryptedSubType
+        let identity: Identity
     }
 
     // MARK: - State
@@ -586,7 +596,11 @@ final class MessageService: @unchecked Sendable {
                     // Exempt handshake and friend request/accept packets from the
                     // unverified limit — these arrive before the peer has announced
                     // and must not consume the budget meant for data packets.
-                    let isExempt = packet.type == .noiseHandshake || Self.isHandshakeRelatedEncrypted(packet)
+                    let hasNoiseSession = packet.type == .noiseEncrypted
+                        && self.noiseSessionManager?.hasSession(for: packet.senderID) == true
+                    let isExempt = packet.type == .noiseHandshake
+                        || Self.isHandshakeRelatedEncrypted(packet)
+                        || hasNoiseSession
 
                     if !isExempt {
                         let count: Int = self.lock.withLock {

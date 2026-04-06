@@ -111,14 +111,19 @@ final class MessageServiceTests: XCTestCase {
         return channel
     }
 
-    private func makeUser(username: String, displayName: String? = nil) -> User {
+    private func makeUser(
+        username: String,
+        displayName: String? = nil,
+        noisePublicKey: Data = Data(repeating: 0xAA, count: 32),
+        signingPublicKey: Data = Data(repeating: 0xBB, count: 32)
+    ) -> User {
         let context = ModelContext(container)
         let user = User(
             username: username,
             displayName: displayName ?? username,
             emailHash: "\(username)-hash",
-            noisePublicKey: Data(repeating: 0xAA, count: 32),
-            signingPublicKey: Data(repeating: 0xBB, count: 32)
+            noisePublicKey: noisePublicKey,
+            signingPublicKey: signingPublicKey
         )
         context.insert(user)
         do {
@@ -157,6 +162,34 @@ final class MessageServiceTests: XCTestCase {
             XCTFail("Failed to save friend: \(error)")
         }
         return friend
+    }
+
+    private func makeRemoteIdentity() throws -> Identity {
+        let remoteKeyManager = KeyManager(keyStore: InMemoryKeyManagerStore())
+        return try remoteKeyManager.generateIdentity()
+    }
+
+    private func establishNoiseSession(with remoteIdentity: Identity) throws -> (PeerID, NoiseSessionManager) {
+        guard let localSessionManager = messageService.noiseSessionManager else {
+            throw MessageServiceError.encryptionFailed("Local Noise session manager missing")
+        }
+
+        let remotePeerID = PeerID(noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation)
+        let remoteSessionManager = NoiseSessionManager(localStaticKey: remoteIdentity.noisePrivateKey)
+
+        let (_, msg1) = try localSessionManager.initiateHandshake(with: remotePeerID)
+        _ = try remoteSessionManager.receiveHandshakeInit(from: identity.peerID, message: msg1)
+        let msg2 = try remoteSessionManager.respondToHandshake(for: identity.peerID)
+        let (_, intermediateSession) = try localSessionManager.processHandshakeMessage(from: remotePeerID, message: msg2)
+        XCTAssertNil(intermediateSession)
+
+        let (msg3, localSession) = try localSessionManager.completeHandshake(with: remotePeerID)
+        XCTAssertEqual(localSession.peerID, remotePeerID)
+
+        let (_, remoteSession) = try remoteSessionManager.processHandshakeMessage(from: identity.peerID, message: msg3)
+        XCTAssertNotNil(remoteSession)
+
+        return (remotePeerID, remoteSessionManager)
     }
 
     // MARK: - Send Text Message
@@ -387,5 +420,102 @@ final class MessageServiceTests: XCTestCase {
         } catch {
             XCTFail("acceptFriendRequest failed: \(error)")
         }
+    }
+
+    func testSendFriendRequest_withoutSession_queuesControlAndStartsHandshake() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let remotePeerID = PeerID(noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation)
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+        mockTransport.reset()
+
+        try await messageService.sendFriendRequest(to: remotePeerID)
+
+        XCTAssertEqual(mockTransport.sentPackets.count, 1, "Only the handshake packet should be sent immediately")
+        let sentPacket = try XCTUnwrap(mockTransport.sentPackets.first)
+        let packet = try PacketSerializer.decode(sentPacket.data)
+        XCTAssertEqual(packet.type, .noiseHandshake)
+        XCTAssertEqual(messageService.pendingHandshakeControlMessages[remotePeerID.bytes]?.count, 1)
+    }
+
+    func testSendFriendRequest_withSession_sendsEncryptedFriendRequest() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let (remotePeerID, remoteSessionManager) = try establishNoiseSession(with: remoteIdentity)
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+        mockTransport.reset()
+
+        try await messageService.sendFriendRequest(to: remotePeerID)
+
+        let sentPacket = try XCTUnwrap(mockTransport.sentPackets.first)
+        let packet = try PacketSerializer.decode(sentPacket.data)
+        XCTAssertEqual(packet.type, .noiseEncrypted)
+
+        let remoteSession = try XCTUnwrap(remoteSessionManager.getSession(for: identity.peerID))
+        let plaintext = try remoteSession.decrypt(ciphertext: packet.payload)
+        XCTAssertEqual(plaintext.first, EncryptedSubType.friendRequest.rawValue)
+
+        let (senderUsername, senderDisplayName) = MessagePayloadBuilder.parseFriendPayload(Data(plaintext.dropFirst()))
+        XCTAssertEqual(senderUsername, "localuser")
+        XCTAssertEqual(senderDisplayName, "Local User")
+    }
+
+    func testAcceptFriendRequest_withSession_sendsEncryptedFriendAccept() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let (remotePeerID, remoteSessionManager) = try establishNoiseSession(with: remoteIdentity)
+        let remoteUser = makeUser(
+            username: "alice",
+            displayName: "Alice",
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey
+        )
+        let friend = makeFriend(user: remoteUser, status: .pending)
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+        mockTransport.reset()
+
+        try await messageService.acceptFriendRequest(from: friend)
+
+        let sentPacket = try XCTUnwrap(mockTransport.sentPackets.first)
+        let packet = try PacketSerializer.decode(sentPacket.data)
+        XCTAssertEqual(packet.type, .noiseEncrypted)
+
+        let remoteSession = try XCTUnwrap(remoteSessionManager.getSession(for: identity.peerID))
+        let plaintext = try remoteSession.decrypt(ciphertext: packet.payload)
+        XCTAssertEqual(plaintext.first, EncryptedSubType.friendAccept.rawValue)
+        XCTAssertEqual(String(data: Data(plaintext.dropFirst()), encoding: .utf8), "localuser")
     }
 }
