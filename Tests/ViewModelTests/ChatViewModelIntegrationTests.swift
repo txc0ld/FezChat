@@ -51,6 +51,58 @@ final class ChatViewModelIntegrationTests: XCTestCase {
         return channel
     }
 
+    private func makeUser(username: String, displayName: String? = nil) -> User {
+        let context = ModelContext(container)
+        let user = User(
+            username: username,
+            displayName: displayName ?? username,
+            emailHash: "\(username)-hash",
+            noisePublicKey: Data(username.utf8),
+            signingPublicKey: Data("\(username)-signing".utf8)
+        )
+        context.insert(user)
+        do {
+            try context.save()
+        } catch {
+            XCTFail("Failed to save user: \(error)")
+        }
+        return user
+    }
+
+    private func makeDMChannel(
+        with user: User,
+        name: String,
+        lastActivityAt: Date = Date()
+    ) -> Channel {
+        let context = ModelContext(container)
+        let userID = user.id
+        let descriptor = FetchDescriptor<User>(predicate: #Predicate { $0.id == userID })
+        let persistedUser: User
+        do {
+            guard let fetchedUser = try context.fetch(descriptor).first else {
+                XCTFail("Failed to fetch persisted user for DM channel")
+                return Channel(type: .dm, name: name, lastActivityAt: lastActivityAt)
+            }
+            persistedUser = fetchedUser
+        } catch {
+            XCTFail("Failed to fetch persisted user for DM channel: \(error)")
+            return Channel(type: .dm, name: name, lastActivityAt: lastActivityAt)
+        }
+
+        let channel = Channel(type: .dm, name: name, lastActivityAt: lastActivityAt)
+        let membership = GroupMembership(user: persistedUser, channel: channel, role: .member)
+        context.insert(channel)
+        context.insert(membership)
+
+        do {
+            try context.save()
+        } catch {
+            XCTFail("Failed to save DM channel: \(error)")
+        }
+
+        return channel
+    }
+
     private func makeMessage(
         channel: Channel,
         type: MessageType = .text,
@@ -267,5 +319,76 @@ final class ChatViewModelIntegrationTests: XCTestCase {
         vm.handleReceivedMessage(msg, in: ch2)
 
         XCTAssertEqual(vm.channels.first?.id, ch2.id, "Channel with new message should be first")
+    }
+
+    func testOpenConversation_loadsMessagesAcrossDuplicateDMChannels() async {
+        let remoteUser = makeUser(username: "tay", displayName: "Tay")
+        let now = Date()
+        let olderChannel = makeDMChannel(
+            with: remoteUser,
+            name: "Tay",
+            lastActivityAt: now.addingTimeInterval(-60)
+        )
+        let newerChannel = makeDMChannel(
+            with: remoteUser,
+            name: "Tay",
+            lastActivityAt: now
+        )
+
+        let _ = makeMessage(
+            channel: olderChannel,
+            content: "older",
+            createdAt: now.addingTimeInterval(-30)
+        )
+        let _ = makeMessage(
+            channel: newerChannel,
+            content: "newer",
+            createdAt: now.addingTimeInterval(-10)
+        )
+
+        await vm.loadChannels()
+        guard let loadedOlderChannel = vm.channels.first(where: { $0.id == olderChannel.id }) else {
+            XCTFail("Failed to load older channel")
+            return
+        }
+
+        await vm.openConversation(loadedOlderChannel)
+
+        XCTAssertEqual(vm.activeChannel?.id, newerChannel.id, "Newest duplicate DM channel should become active")
+        XCTAssertEqual(vm.activeMessages.count, 2, "Messages from duplicate DM channels should load together")
+        XCTAssertEqual(
+            vm.activeMessages.compactMap { String(data: $0.encryptedPayload, encoding: .utf8) },
+            ["older", "newer"]
+        )
+    }
+
+    func testHandleReceivedMessage_inDuplicateDMChannelStaysInOpenConversation() async {
+        let remoteUser = makeUser(username: "tay", displayName: "Tay")
+        let primaryChannel = makeDMChannel(with: remoteUser, name: "Tay")
+        let duplicateChannel = makeDMChannel(with: remoteUser, name: "Tay")
+
+        await vm.loadChannels()
+        guard let loadedPrimaryChannel = vm.channels.first(where: { $0.id == primaryChannel.id }) else {
+            XCTFail("Failed to load primary channel")
+            return
+        }
+        guard let loadedDuplicateChannel = vm.channels.first(where: { $0.id == duplicateChannel.id }) else {
+            XCTFail("Failed to load duplicate channel")
+            return
+        }
+
+        await vm.openConversation(loadedPrimaryChannel)
+
+        let incoming = Message(
+            channel: loadedDuplicateChannel,
+            type: .text,
+            encryptedPayload: Data("relay message".utf8),
+            status: .delivered
+        )
+        vm.handleReceivedMessage(incoming, in: loadedDuplicateChannel)
+
+        XCTAssertEqual(vm.activeMessages.count, 1, "Duplicate DM channel message should stay visible in the open conversation")
+        XCTAssertEqual(vm.unreadCounts[loadedDuplicateChannel.id] ?? 0, 0, "Equivalent DM channel should not accumulate unread while open")
+        XCTAssertEqual(vm.totalUnreadCount, 0)
     }
 }

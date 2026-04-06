@@ -129,6 +129,85 @@ final class ChatViewModel {
         totalUnreadCount = total
     }
 
+    private func conversationChannels(for channel: Channel, context: ModelContext) throws -> [Channel] {
+        guard channel.type == .dm, let conversationKey = channel.dmConversationKey else {
+            let channelID = channel.id
+            let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
+            return try context.fetch(descriptor)
+        }
+
+        let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "dm" })
+        let dmChannels = try context.fetch(descriptor)
+        let matchingChannels = dmChannels.filter { $0.dmConversationKey == conversationKey }
+        return matchingChannels.isEmpty ? [channel] : matchingChannels
+    }
+
+    private func preferredConversationChannel(from channels: [Channel], fallback: Channel) -> Channel {
+        var preferredChannel = channels.first ?? fallback
+
+        for candidate in channels.dropFirst() {
+            if candidate.lastActivityAt > preferredChannel.lastActivityAt {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.lastActivityAt < preferredChannel.lastActivityAt {
+                continue
+            }
+            if candidate.messages.count > preferredChannel.messages.count {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.messages.count < preferredChannel.messages.count {
+                continue
+            }
+            if candidate.createdAt > preferredChannel.createdAt {
+                preferredChannel = candidate
+                continue
+            }
+            if candidate.createdAt < preferredChannel.createdAt {
+                continue
+            }
+            if candidate.id.uuidString < preferredChannel.id.uuidString {
+                preferredChannel = candidate
+            }
+        }
+
+        return preferredChannel
+    }
+
+    private func loadMessages(for channels: [Channel], context: ModelContext) throws -> [Message] {
+        var messages: [Message] = []
+
+        for channel in channels {
+            let channelID = channel.id
+            let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.channel?.id == channelID })
+            messages.append(contentsOf: try context.fetch(descriptor))
+        }
+
+        return messages.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func isSameConversation(_ lhs: Channel, _ rhs: Channel) -> Bool {
+        if lhs.id == rhs.id {
+            return true
+        }
+
+        guard lhs.type == .dm, rhs.type == .dm else {
+            return false
+        }
+
+        guard let lhsKey = lhs.dmConversationKey, let rhsKey = rhs.dmConversationKey else {
+            return false
+        }
+
+        return lhsKey == rhsKey
+    }
+
+    private func isActiveConversation(_ channel: Channel) -> Bool {
+        guard let activeChannel else { return false }
+        return isSameConversation(activeChannel, channel)
+    }
+
     /// Create a new DM channel with a user.
     func createDMChannel(with user: User) async -> Channel? {
         let context = ModelContext(modelContainer)
@@ -228,18 +307,17 @@ final class ChatViewModel {
 
     /// Open a conversation by loading its messages.
     func openConversation(_ channel: Channel) async {
-        activeChannel = channel
         replyTarget = nil
         composingText = ""
 
         let context = ModelContext(modelContainer)
-        let channelID = channel.id
 
         do {
-            activeMessages = try context.fetch(FetchDescriptor<Message>())
-                .filter { $0.channel?.id == channelID }
-                .sorted { $0.createdAt < $1.createdAt }
-            markChannelAsRead(channel)
+            let conversationChannels = try conversationChannels(for: channel, context: context)
+            let preferredChannelID = preferredConversationChannel(from: conversationChannels, fallback: channel).id
+            activeChannel = channels.first(where: { $0.id == preferredChannelID }) ?? channel
+            activeMessages = try loadMessages(for: conversationChannels, context: context)
+            markChannelAsRead(activeChannel ?? channel)
         } catch {
             errorMessage = "Failed to load messages: \(error.localizedDescription)"
         }
@@ -393,20 +471,31 @@ final class ChatViewModel {
     /// Mark a channel as read up to the current time.
     func markChannelAsRead(_ channel: Channel) {
         let previousUnread = unreadCounts[channel.id] ?? 0
-        unreadCounts[channel.id] = 0
-        totalUnreadCount = max(0, totalUnreadCount - previousUnread)
-        channel.unreadCount = 0
 
         // Batch read receipts: send one per sender (with their latest message ID)
         // instead of one per unread message.
         let context = ModelContext(modelContainer)
         do {
-            let unread = try context.fetch(FetchDescriptor<Message>())
-                .filter { $0.channel?.id == channel.id && $0.statusRaw == "delivered" }
+            let conversationChannels = try conversationChannels(for: channel, context: context)
+            var removedUnread = previousUnread
+
+            for conversationChannel in conversationChannels where conversationChannel.id != channel.id {
+                let unread = unreadCounts[conversationChannel.id] ?? conversationChannel.unreadCount
+                unreadCounts[conversationChannel.id] = 0
+                conversationChannel.unreadCount = 0
+                removedUnread += unread
+            }
+
+            unreadCounts[channel.id] = 0
+            channel.unreadCount = 0
+            totalUnreadCount = max(0, totalUnreadCount - removedUnread)
+
+            let unreadMessages = try loadMessages(for: conversationChannels, context: context)
+                .filter { $0.statusRaw == "delivered" }
 
             // Group by sender and pick the latest message per sender for the receipt
             var latestPerSender: [Data: Message] = [:]
-            for message in unread {
+            for message in unreadMessages {
                 guard let sender = message.sender else { continue }
                 let key = sender.noisePublicKey
                 if let existing = latestPerSender[key] {
@@ -441,7 +530,7 @@ final class ChatViewModel {
     /// Handle a newly received message (called by delegate or notification).
     func handleReceivedMessage(_ message: Message, in channel: Channel) {
         // Add to active messages if this is the open channel
-        if activeChannel?.id == channel.id {
+        if isActiveConversation(channel) {
             activeMessages.append(message)
         } else {
             // Increment stored and in-memory unread count

@@ -195,6 +195,7 @@ struct ChatListCell: View {
 /// Lightweight UI model for the chat list. Populated by ViewModel from SwiftData Channel/Message.
 struct ConversationPreview: Identifiable, Sendable {
     let id: UUID
+    let relatedChannelIDs: [UUID]
     let displayName: String
     let avatarData: Data?
     let lastMessagePreview: String
@@ -239,6 +240,7 @@ extension ConversationPreview {
     static let sampleConversations: [ConversationPreview] = [
         ConversationPreview(
             id: UUID(),
+            relatedChannelIDs: [],
             displayName: "Alice",
             avatarData: nil,
             lastMessagePreview: "Are you at the Pyramid Stage?",
@@ -254,6 +256,7 @@ extension ConversationPreview {
         ),
         ConversationPreview(
             id: UUID(),
+            relatedChannelIDs: [],
             displayName: "Event Squad",
             avatarData: nil,
             lastMessagePreview: "Voice note",
@@ -269,6 +272,7 @@ extension ConversationPreview {
         ),
         ConversationPreview(
             id: UUID(),
+            relatedChannelIDs: [],
             displayName: "Bob",
             avatarData: nil,
             lastMessagePreview: "Photo",
@@ -284,6 +288,7 @@ extension ConversationPreview {
         ),
         ConversationPreview(
             id: UUID(),
+            relatedChannelIDs: [],
             displayName: "Charlie",
             avatarData: nil,
             lastMessagePreview: "Let's meet at the food court",
