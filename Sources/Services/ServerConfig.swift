@@ -1,23 +1,34 @@
 import Foundation
 
-/// Central configuration for all Blip server endpoints.
-///
-/// All server URLs should reference this config instead of hardcoding domains.
-/// This makes it easy to switch between environments (dev, staging, production).
 enum ServerConfig {
+    private static func infoPlistValue(for key: String) -> String? {
+        Bundle.main.infoDictionary?[key] as? String
+    }
 
-    /// Base URL for the auth/user API (Cloudflare Worker).
-    static let authBaseURL = "https://blip-auth.john-mckean.workers.dev/v1"
+    static let authBaseURL: String = {
+        infoPlistValue(for: "BLIP_AUTH_BASE_URL") ?? "https://blip-auth.john-mckean.workers.dev/v1"
+    }()
 
-    /// Base URL for the relay server (WebSocket + state sync).
-    static let relayBaseURL = "https://blip-relay.john-mckean.workers.dev"
+    static let relayBaseURL: String = {
+        infoPlistValue(for: "BLIP_RELAY_BASE_URL") ?? "https://blip-relay.john-mckean.workers.dev"
+    }()
 
-    /// Base URL for the CDN worker that serves public event assets and manifests.
-    static let cdnBaseURL = "https://blip-cdn.john-mckean.workers.dev"
+    static let cdnBaseURL: String = {
+        infoPlistValue(for: "BLIP_CDN_BASE_URL") ?? "https://blip-cdn.john-mckean.workers.dev"
+    }()
 
-    /// WebSocket relay endpoint.
-    static let relayWebSocketURL = URL(string: "wss://blip-relay.john-mckean.workers.dev/ws")!
+    static let relayWebSocketURL: URL = {
+        let base = infoPlistValue(for: "BLIP_RELAY_BASE_URL") ?? "https://blip-relay.john-mckean.workers.dev"
+        let wsBase = base.replacingOccurrences(of: "https://", with: "wss://")
 
-    /// Events manifest CDN URL.
-    static let eventsManifestURL = "\(cdnBaseURL)/manifests/events.json"
+        guard let url = URL(string: "\(wsBase)/ws") else {
+            fatalError("Invalid relay WebSocket URL")
+        }
+
+        return url
+    }()
+
+    static let eventsManifestURL: String = {
+        "\(cdnBaseURL)/manifests/events.json"
+    }()
 }
