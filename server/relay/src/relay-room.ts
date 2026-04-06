@@ -51,6 +51,12 @@ export class RelayRoom implements DurableObject {
   /** Per-peer message timestamps for rate limiting. */
   private messageTimestamps: Map<PeerIDHex, number[]> = new Map();
 
+  /** Generation counter per peer to detect superseded drains on reconnect. */
+  private drainGeneration: Map<PeerIDHex, number> = new Map();
+
+  /** Per-peer retry counter to cap drain retries at 3. */
+  private drainRetryCount: Map<PeerIDHex, number> = new Map();
+
   /** Per-peer state blobs for GCS sync (opaque binary, no decryption). */
   private peerState: Map<PeerIDHex, { data: ArrayBuffer; updatedAt: number }> = new Map();
 
@@ -156,10 +162,16 @@ export class RelayRoom implements DurableObject {
     ws.send("connected");
 
     // Drain any store-and-forward packets queued while this peer was offline.
-    this.drainQueue(peerIdHex, ws);
+    // Messages arriving during drain are deferred until drain completes to
+    // ensure queued packets are delivered before new inbound traffic.
+    const drainPromise = this.drainQueue(peerIdHex, ws);
 
     ws.addEventListener("message", (event: MessageEvent) => {
-      this.handleMessage(ws, event);
+      drainPromise.then(() => {
+        if (this.wsToPeer.has(ws)) {
+          this.handleMessage(ws, event);
+        }
+      });
     });
 
     ws.addEventListener("close", () => {
@@ -276,15 +288,24 @@ export class RelayRoom implements DurableObject {
     }
   }
 
-  /** Drain queued packets for a peer who just connected. */
+  /** Drain queued packets for a peer who just connected.
+   *  Uses a generation counter to detect when a newer drain has superseded
+   *  this one (e.g. rapid disconnect/reconnect), preventing duplicate delivery. */
   private async drainQueue(peerHex: PeerIDHex, ws: WebSocket): Promise<void> {
+    const generation = (this.drainGeneration.get(peerHex) ?? 0) + 1;
+    this.drainGeneration.set(peerHex, generation);
+
     const entries = await this.state.storage.list({ prefix: `${QUEUE_PREFIX}${peerHex}:` });
     if (entries.size === 0) return;
 
     const now = Date.now();
     const keysToDelete: string[] = [];
+    const failedKeys: string[] = [];
 
     for (const [key, value] of entries) {
+      // Bail if superseded by a newer drain (peer reconnected).
+      if (this.drainGeneration.get(peerHex) !== generation) return;
+
       const entry = value as { data: number[]; storedAt: number };
 
       // Skip expired packets.
@@ -297,15 +318,43 @@ export class RelayRoom implements DurableObject {
         const packet = new Uint8Array(entry.data);
         ws.send(packet.buffer);
         keysToDelete.push(key);
-      } catch {
-        // WebSocket failed during drain — stop, remaining stay queued.
-        break;
+      } catch (err) {
+        console.warn(`[relay] drainQueue: send failed for ${peerHex}, key=${key} — skipping`);
+        failedKeys.push(key);
+        continue;
       }
     }
+
+    // Only delete if this drain wasn't superseded.
+    if (this.drainGeneration.get(peerHex) !== generation) return;
 
     // Clean up delivered/expired entries.
     for (const key of keysToDelete) {
       await this.state.storage.delete(key);
+    }
+
+    if (failedKeys.length === 0) {
+      this.drainRetryCount.delete(peerHex);
+      return;
+    }
+
+    const attempt = (this.drainRetryCount.get(peerHex) ?? 0) + 1;
+    if (attempt <= 3) {
+      this.drainRetryCount.set(peerHex, attempt);
+      console.warn(
+        `[relay] drainQueue: ${failedKeys.length} packets failed for ${peerHex}, scheduling retry ${attempt}/3`
+      );
+      setTimeout(() => {
+        const currentWs = this.peers.get(peerHex);
+        if (currentWs) {
+          void this.drainQueue(peerHex, currentWs);
+        }
+      }, 5000 * attempt);
+    } else {
+      console.warn(
+        `[relay] drainQueue: max retries reached for ${peerHex}, ${failedKeys.length} packets remain queued for TTL expiry`
+      );
+      this.drainRetryCount.delete(peerHex);
     }
   }
 
@@ -338,6 +387,7 @@ export class RelayRoom implements DurableObject {
       }
       this.wsToPeer.delete(ws);
       this.messageTimestamps.delete(peerIdHex);
+      this.drainRetryCount.delete(peerIdHex);
     }
   }
 }

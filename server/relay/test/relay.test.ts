@@ -1,7 +1,7 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import worker, { parseAuthHeader, derivePeerIdHex, validateAuthorizationHeader } from "../src/index";
-import { extractRecipient } from "../src/relay-room";
+import { extractRecipient, RelayRoom } from "../src/relay-room";
 import {
   HEADER_SIZE,
   PEER_ID_LENGTH,
@@ -133,6 +133,54 @@ function collectBinaryMessages(ws: WebSocket): ArrayBuffer[] {
   return messages;
 }
 
+type QueueEntry = { data: number[]; storedAt: number };
+
+class FakeStorage {
+  private entries = new Map<string, QueueEntry>();
+
+  seed(entries: Array<[string, QueueEntry]>): void {
+    this.entries = new Map(entries);
+  }
+
+  async list(options?: { prefix?: string; limit?: number }): Promise<Map<string, QueueEntry>> {
+    const prefix = options?.prefix ?? "";
+    const limit = options?.limit;
+    const filtered = [...this.entries.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .sort(([left], [right]) => left.localeCompare(right));
+
+    const sliced = typeof limit === "number" ? filtered.slice(0, limit) : filtered;
+    return new Map(sliced);
+  }
+
+  async delete(key: string): Promise<boolean> {
+    return this.entries.delete(key);
+  }
+
+  has(key: string): boolean {
+    return this.entries.has(key);
+  }
+
+  keys(): string[] {
+    return [...this.entries.keys()].sort();
+  }
+}
+
+function makeRelayRoom(storage: FakeStorage): RelayRoom {
+  const state = {
+    storage,
+  } as unknown as DurableObjectState;
+
+  return new RelayRoom(state, {});
+}
+
+function queuedPacketEntry(storedAt: number): QueueEntry {
+  return {
+    data: [0x01, 0x02, 0x03],
+    storedAt,
+  };
+}
+
 // --- Unit Tests: Auth Validation ---
 
 describe("parseAuthHeader", () => {
@@ -224,6 +272,149 @@ describe("extractRecipient", () => {
   it("returns null for packet too short", () => {
     const tiny = new Uint8Array(10);
     expect(extractRecipient(tiny)).toBeNull();
+  });
+});
+
+describe("RelayRoom drain retry behavior", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("continues draining after a send failure and retries failed packets", async () => {
+    const peerHex = "deadbeefcafebabe";
+    const now = Date.now();
+    const storage = new FakeStorage();
+    storage.seed([
+      [`q:${peerHex}:0001:a`, queuedPacketEntry(now)],
+      [`q:${peerHex}:0002:b`, queuedPacketEntry(now)],
+      [`q:${peerHex}:0003:c`, queuedPacketEntry(now)],
+    ]);
+
+    const room = makeRelayRoom(storage);
+    const send = vi
+      .fn<(payload: ArrayBuffer) => void>()
+      .mockImplementationOnce(() => {
+        throw new Error("socket hiccup");
+      })
+      .mockImplementation(() => {});
+    const ws = { send } as unknown as WebSocket;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+    }).peers.set(peerHex, ws);
+
+    await (room as unknown as {
+      drainQueue(peerHex: PeerIDHex, ws: WebSocket): Promise<void>;
+    }).drainQueue(peerHex, ws);
+
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(storage.keys()).toEqual([`q:${peerHex}:0001:a`]);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.get(peerHex)
+    ).toBe(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] drainQueue: send failed for ${peerHex}, key=q:${peerHex}:0001:a — skipping`
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] drainQueue: 1 packets failed for ${peerHex}, scheduling retry 1/3`
+    );
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(storage.keys()).toEqual([]);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.has(peerHex)
+    ).toBe(false);
+  });
+
+  it("caps retries at three and leaves failed packets queued", async () => {
+    const peerHex = "0011223344556677";
+    const now = Date.now();
+    const storage = new FakeStorage();
+    storage.seed([[`q:${peerHex}:0001:a`, queuedPacketEntry(now)]]);
+
+    const room = makeRelayRoom(storage);
+    const send = vi.fn<(payload: ArrayBuffer) => void>().mockImplementation(() => {
+      throw new Error("still broken");
+    });
+    const ws = { send } as unknown as WebSocket;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+    }).peers.set(peerHex, ws);
+
+    await (room as unknown as {
+      drainQueue(peerHex: PeerIDHex, ws: WebSocket): Promise<void>;
+    }).drainQueue(peerHex, ws);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(10000);
+    await vi.advanceTimersByTimeAsync(15000);
+
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(storage.keys()).toEqual([`q:${peerHex}:0001:a`]);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.has(peerHex)
+    ).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] drainQueue: max retries reached for ${peerHex}, 1 packets remain queued for TTL expiry`
+    );
+  });
+
+  it("cleans retry state when a peer is removed", () => {
+    const peerHex = "8899aabbccddeeff";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const ws = { send: () => {} } as unknown as WebSocket;
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).peers.set(peerHex, ws);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).wsToPeer.set(ws, peerHex);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).messageTimestamps.set(peerHex, [Date.now()]);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).drainRetryCount.set(peerHex, 2);
+
+    (room as unknown as {
+      removePeer(ws: WebSocket): void;
+    }).removePeer(ws);
+
+    expect(
+      (room as unknown as { peers: Map<PeerIDHex, WebSocket> }).peers.has(peerHex)
+    ).toBe(false);
+    expect(
+      (room as unknown as { wsToPeer: Map<WebSocket, PeerIDHex> }).wsToPeer.has(ws)
+    ).toBe(false);
+    expect(
+      (room as unknown as { messageTimestamps: Map<PeerIDHex, number[]> }).messageTimestamps.has(peerHex)
+    ).toBe(false);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.has(peerHex)
+    ).toBe(false);
   });
 });
 

@@ -50,3 +50,11 @@
 - [x] Update the PTT chunk path to emit real Opus frames instead of raw PCM slices.
 - [x] Run package tests, regenerate the project, and run the simulator build.
 - [x] Push `feat/BDEV-181-opus-codec`, open a PR linked to `BDEV-181`, and post the update in `#blip-dev`.
+
+## BDEV-205 Drain Retry Follow-up
+
+- [x] Inspect the current relay drain path and existing relay tests.
+- [x] Replace break-on-send-error with skip-and-retry behavior in `relay-room.ts`.
+- [x] Add or extend relay tests for partial drain failure, retry scheduling, and retry cleanup.
+- [x] Run `cd server/relay && npm test` and `cd server/relay && npx wrangler deploy --dry-run`.
+- [x] Push `fix/BDEV-205-drain-break-bug`, update PR `#148`, and post the follow-up in `#blip-dev`.
