@@ -7,6 +7,28 @@ import BlipProtocol
 /// Extracted from MessageService to reduce its size and improve testability.
 enum MessagePayloadBuilder {
 
+    // MARK: - Channel-Scoped Payloads
+
+    /// Build a channel-scoped payload: [channelID(36B) 0x00 content]
+    static func buildChannelScopedPayload(channelID: UUID, content: Data) -> Data {
+        var payload = Data()
+        payload.append(channelID.uuidString.data(using: .utf8) ?? Data())
+        payload.append(0x00)
+        payload.append(content)
+        return payload
+    }
+
+    /// Parse a channel-scoped payload into (channelID, content).
+    static func parseChannelScopedPayload(_ data: Data) -> (channelID: UUID?, content: Data) {
+        let bytes = [UInt8](data)
+        let separatorIndex = bytes.firstIndex(of: 0x00) ?? bytes.endIndex
+        let channelIDBytes = Data(bytes[0 ..< separatorIndex])
+        let channelID = String(data: channelIDBytes, encoding: .utf8).flatMap(UUID.init)
+        let contentStart = min(separatorIndex + 1, bytes.endIndex)
+        let content = Data(bytes[contentStart...])
+        return (channelID, content)
+    }
+
     // MARK: - Text Payloads
 
     /// Build a text message payload: [messageID(36B) 0x00 replyToID(36B)? 0x00 content(UTF-8)]
@@ -39,6 +61,19 @@ enum MessagePayloadBuilder {
         let content = Data(bytes[contentStart...])
 
         return (messageID, content, replyToID)
+    }
+
+    /// Build a group text payload: [channelID(36B) 0x00 textPayload]
+    static func buildGroupTextPayload(content: String, channelID: UUID, messageID: UUID, replyToID: UUID?) -> Data {
+        let textPayload = buildTextPayload(content: content, messageID: messageID, replyToID: replyToID)
+        return buildChannelScopedPayload(channelID: channelID, content: textPayload)
+    }
+
+    /// Parse a group text payload into (channelID, messageID, content, replyToID).
+    static func parseGroupTextPayload(_ data: Data) -> (channelID: UUID?, messageID: UUID, content: Data, replyToID: UUID?) {
+        let (channelID, scopedContent) = parseChannelScopedPayload(data)
+        let (messageID, content, replyToID) = parseTextPayload(scopedContent)
+        return (channelID, messageID, content, replyToID)
     }
 
     // MARK: - Media Payloads

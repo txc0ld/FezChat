@@ -426,8 +426,42 @@ extension MessageService {
 
         let context = ModelContext(modelContainer)
 
-        // Parse message ID and content from payload
-        let (messageID, content, replyToID) = MessagePayloadBuilder.parseTextPayload(data)
+        let messageID: UUID
+        let content: Data
+        let replyToID: UUID?
+        let channel: Channel
+        let senderUser: User?
+
+        switch subType {
+        case .groupMessage:
+            let parsedPayload = MessagePayloadBuilder.parseGroupTextPayload(data)
+            guard let groupChannelID = parsedPayload.channelID else {
+                DebugLogger.shared.log("GROUP", "Dropped group message from \(senderHex): missing or invalid channel ID", isError: true)
+                return
+            }
+            messageID = parsedPayload.messageID
+            content = parsedPayload.content
+            replyToID = parsedPayload.replyToID
+            channel = try resolveGroupChannel(groupChannelID: groupChannelID, context: context)
+            senderUser = try resolveSenderUser(for: senderPeerID, context: context)
+
+        default:
+            let parsedPayload = MessagePayloadBuilder.parseTextPayload(data)
+            messageID = parsedPayload.messageID
+            content = parsedPayload.content
+            replyToID = parsedPayload.replyToID
+
+            // Resolve channel and sender together — resolveChannel has a 3-fallback chain
+            // (PeerStore → Noise session → derived PeerID scan) that is more robust than
+            // the old PeerStore-only lookup that failed for relay-first DMs.
+            let resolvedChannel = try resolveChannel(
+                for: subType,
+                senderPeerID: senderPeerID,
+                context: context
+            )
+            channel = resolvedChannel.0
+            senderUser = resolvedChannel.1
+        }
         DebugLogger.shared.log("DM", "Parsed msgID=\(messageID) contentLen=\(content.count) replyTo=\(replyToID?.uuidString ?? "nil")")
 
         // Check for duplicate
@@ -439,14 +473,6 @@ extension MessageService {
             return
         }
 
-        // Resolve channel and sender together — resolveChannel has a 3-fallback chain
-        // (PeerStore → Noise session → derived PeerID scan) that is more robust than
-        // the old PeerStore-only lookup that failed for relay-first DMs.
-        let (channel, senderUser) = try resolveChannel(
-            for: subType,
-            senderPeerID: senderPeerID,
-            context: context
-        )
         DebugLogger.shared.log("DM", "Channel resolved: \(channel.id) type=\(channel.type) sender=\(senderUser?.username ?? "nil")")
 
         // Create and store message
@@ -499,6 +525,18 @@ extension MessageService {
             ]
         )
         DebugLogger.shared.log("RX", "UI notified: msgID=\(messageID) channel=\(channel.id)")
+    }
+
+    @MainActor
+    private func resolveGroupChannel(groupChannelID: UUID, context: ModelContext) throws -> Channel {
+        let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == groupChannelID })
+        if let existing = try context.fetch(descriptor).first {
+            return existing
+        }
+
+        let channel = Channel(id: groupChannelID, type: .group, name: "Group")
+        context.insert(channel)
+        return channel
     }
 
     @MainActor

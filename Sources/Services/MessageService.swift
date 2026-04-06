@@ -241,7 +241,21 @@ final class MessageService: @unchecked Sendable {
         }
 
         // Encrypt and send
-        let payload = MessagePayloadBuilder.buildTextPayload(content: content, messageID: message.id, replyToID: replyTo?.id)
+        let payload: Data
+        if localChannel.isGroup {
+            payload = MessagePayloadBuilder.buildGroupTextPayload(
+                content: content,
+                channelID: localChannel.id,
+                messageID: message.id,
+                replyToID: replyTo?.id
+            )
+        } else {
+            payload = MessagePayloadBuilder.buildTextPayload(
+                content: content,
+                messageID: message.id,
+                replyToID: replyTo?.id
+            )
+        }
         let sendOutcome: SendOutcome
         do {
             sendOutcome = try await encryptAndSend(
@@ -1115,10 +1129,8 @@ final class MessageService: @unchecked Sendable {
             return (channel, nil)
 
         case .groupMessage:
-            // Group messages include a channel reference in the payload; fallback to first group
-            let descriptor = FetchDescriptor<Channel>(predicate: #Predicate {
-                $0.typeRaw == "group"
-            })
+            DebugLogger.emit("GROUP", "resolveChannel called for groupMessage without a channel ID", isError: true)
+            let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "group" })
             if let existing = try context.fetch(descriptor).first {
                 return (existing, nil)
             }
@@ -1138,6 +1150,37 @@ final class MessageService: @unchecked Sendable {
             context.insert(channel)
             return (channel, nil)
         }
+    }
+
+    @MainActor
+    func resolveSenderUser(for senderPeerID: PeerID, context: ModelContext) throws -> User? {
+        let peerData = senderPeerID.bytes
+
+        if let channelPeer = peerStore.findPeer(byPeerIDBytes: peerData),
+           !channelPeer.noisePublicKey.isEmpty {
+            return try resolveOrCreateUser(for: channelPeer, context: context)
+        }
+
+        let allUsers = try context.fetch(FetchDescriptor<User>())
+        for candidate in allUsers where !candidate.noisePublicKey.isEmpty {
+            let derivedPeerID = PeerID(noisePublicKey: candidate.noisePublicKey)
+            if derivedPeerID == senderPeerID {
+                let peerInfo = PeerInfo(
+                    peerID: senderPeerID.bytes,
+                    noisePublicKey: candidate.noisePublicKey,
+                    signingPublicKey: candidate.signingPublicKey,
+                    username: candidate.username,
+                    rssi: -100,
+                    isConnected: false,
+                    lastSeenAt: Date(),
+                    hopCount: 0
+                )
+                peerStore.upsert(peer: peerInfo)
+                return candidate
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Private: Recipient Resolution
@@ -1272,11 +1315,20 @@ final class MessageService: @unchecked Sendable {
             guard let content = String(data: message.encryptedPayload, encoding: .utf8) else {
                 throw MessageServiceError.serializationFailed("Queued text payload could not be decoded")
             }
-            payload = MessagePayloadBuilder.buildTextPayload(
-                content: content,
-                messageID: message.id,
-                replyToID: message.replyTo?.id
-            )
+            if channel.isGroup {
+                payload = MessagePayloadBuilder.buildGroupTextPayload(
+                    content: content,
+                    channelID: channel.id,
+                    messageID: message.id,
+                    replyToID: message.replyTo?.id
+                )
+            } else {
+                payload = MessagePayloadBuilder.buildTextPayload(
+                    content: content,
+                    messageID: message.id,
+                    replyToID: message.replyTo?.id
+                )
+            }
             subType = channel.isGroup ? .groupMessage : .privateMessage
 
         case .voiceNote:

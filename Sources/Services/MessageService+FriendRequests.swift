@@ -445,10 +445,54 @@ extension MessageService {
 
     @MainActor
     func handleGroupManagement(subType: EncryptedSubType, data: Data, from peerID: PeerID) async throws {
+        let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+        let (channelID, contentData) = MessagePayloadBuilder.parseChannelScopedPayload(data)
+        guard let channelID else {
+            DebugLogger.shared.log("GROUP", "Dropped \(subType) from \(senderHex): missing or invalid channel ID", isError: true)
+            return
+        }
+
+        let context = ModelContext(modelContainer)
+        let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
+        guard let channel = try context.fetch(descriptor).first, channel.isGroup else {
+            DebugLogger.shared.log("GROUP", "Dropped \(subType) from \(senderHex): group channel \(channelID) not found", isError: true)
+            return
+        }
+
+        guard let senderUser = try resolveSenderUser(for: peerID, context: context) else {
+            DebugLogger.shared.log("GROUP", "Dropped \(subType) from \(senderHex): sender could not be resolved", isError: true)
+            return
+        }
+
+        guard let senderMembership = channel.memberships.first(where: { $0.user?.id == senderUser.id }) else {
+            DebugLogger.shared.log("GROUP", "Dropped \(subType) from \(senderHex): sender is not a group member", isError: true)
+            return
+        }
+
+        let requiresAdminRole: Bool
+        switch subType {
+        case .groupMemberAdd, .groupMemberRemove, .groupAdminChange:
+            requiresAdminRole = true
+        case .groupKeyDistribution:
+            requiresAdminRole = false
+        default:
+            requiresAdminRole = false
+        }
+
+        if requiresAdminRole && !senderMembership.isAdmin {
+            DebugLogger.shared.log("GROUP", "Dropped \(subType) from \(senderHex): sender lacks group admin role", isError: true)
+            return
+        }
+
         NotificationCenter.default.post(
             name: .didReceiveGroupManagement,
             object: nil,
-            userInfo: ["subType": subType, "data": data, "peerID": peerID]
+            userInfo: [
+                "subType": subType,
+                "data": contentData,
+                "channelID": channel.id,
+                "peerID": peerID,
+            ]
         )
     }
 
