@@ -41,3 +41,12 @@
 - [x] Nodes N-P: Update relay auth to accept JWTs first, preserve raw-key fallback, and signal expired tokens with close code `4001`.
 - [x] Node M: Run server tests, Swift package tests, `xcodegen generate`, and the simulator build.
 - [x] Node Q: Push `feat/BDEV-187-session-tokens-ORIGINAL`, open a PR linked to `BDEV-187`, and post the update in `#blip-dev`.
+
+## BDEV-181 Opus Codec
+
+- [x] Create the task branch and inspect the existing audio codec paths.
+- [x] Add `swift-opus` to `project.yml` and regenerate the Xcode project.
+- [x] Replace the PCM stub encoder/decoder with real Opus encode/decode and keep backward compatibility for stored voice notes.
+- [x] Update the PTT chunk path to emit real Opus frames instead of raw PCM slices.
+- [x] Run package tests, regenerate the project, and run the simulator build.
+- [ ] Push `feat/BDEV-181-opus-codec`, open a PR linked to `BDEV-181`, and post the update in `#blip-dev`.
