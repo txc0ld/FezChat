@@ -674,4 +674,148 @@ final class MessageServiceTests: XCTestCase {
         let channels = try context.fetch(channelDesc)
         XCTAssertTrue(channels.isEmpty)
     }
+
+    func testHandleIncomingGroupMessage_usesPayloadChannelID() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let remotePeerID = PeerID(noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation)
+        let remoteUser = makeUser(
+            username: "alice",
+            displayName: "Alice",
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey
+        )
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+
+        let context = ModelContext(container)
+        let decoyChannel = Channel(type: .group, name: "Decoy")
+        let targetChannel = Channel(type: .group, name: "Target")
+        context.insert(decoyChannel)
+        context.insert(targetChannel)
+        try context.save()
+
+        let messageID = UUID()
+        let payload = MessagePayloadBuilder.buildGroupTextPayload(
+            content: "Hello group",
+            channelID: targetChannel.id,
+            messageID: messageID,
+            replyToID: nil
+        )
+
+        try await messageService.handleIncomingMessage(
+            data: payload,
+            subType: .groupMessage,
+            senderPeerID: remotePeerID,
+            timestamp: Date()
+        )
+
+        let verifyContext = ModelContext(container)
+        let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == messageID })
+        let storedMessage = try XCTUnwrap(verifyContext.fetch(descriptor).first)
+        XCTAssertEqual(storedMessage.channel?.id, targetChannel.id)
+        XCTAssertEqual(String(data: storedMessage.encryptedPayload, encoding: .utf8), "Hello group")
+        XCTAssertEqual(storedMessage.sender?.username, remoteUser.username)
+    }
+
+    func testHandleGroupManagement_requiresAdminForAdminActions() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let remotePeerID = PeerID(noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation)
+        let remoteUser = makeUser(
+            username: "alice",
+            displayName: "Alice",
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey
+        )
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+
+        let context = ModelContext(container)
+        let channel = Channel(type: .group, name: "Group")
+        context.insert(channel)
+        let remoteUserID = remoteUser.id
+        let userDescriptor = FetchDescriptor<User>(predicate: #Predicate { $0.id == remoteUserID })
+        let localRemoteUser = try XCTUnwrap(context.fetch(userDescriptor).first)
+        context.insert(GroupMembership(user: localRemoteUser, channel: channel, role: .member))
+        try context.save()
+
+        let expectation = expectation(forNotification: .didReceiveGroupManagement, object: nil)
+        expectation.isInverted = true
+
+        let payload = MessagePayloadBuilder.buildChannelScopedPayload(
+            channelID: channel.id,
+            content: Data("add-member".utf8)
+        )
+        try await messageService.handleGroupManagement(subType: .groupMemberAdd, data: payload, from: remotePeerID)
+
+        await fulfillment(of: [expectation], timeout: 0.2)
+    }
+
+    func testHandleGroupManagement_allowsAdminActionForAdminMember() async throws {
+        let _ = makeLocalUser()
+        let remoteIdentity = try makeRemoteIdentity()
+        let remotePeerID = PeerID(noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation)
+        let remoteUser = makeUser(
+            username: "alice",
+            displayName: "Alice",
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey
+        )
+
+        let peerInfo = PeerInfo(
+            peerID: remotePeerID.bytes,
+            noisePublicKey: remoteIdentity.noisePublicKey.rawRepresentation,
+            signingPublicKey: remoteIdentity.signingPublicKey,
+            username: "alice",
+            rssi: 0,
+            isConnected: false,
+            lastSeenAt: Date(),
+            hopCount: 0
+        )
+        messageService.peerStore.upsert(peer: peerInfo)
+
+        let context = ModelContext(container)
+        let channel = Channel(type: .group, name: "Group")
+        context.insert(channel)
+        let remoteUserID = remoteUser.id
+        let userDescriptor = FetchDescriptor<User>(predicate: #Predicate { $0.id == remoteUserID })
+        let localRemoteUser = try XCTUnwrap(context.fetch(userDescriptor).first)
+        context.insert(GroupMembership(user: localRemoteUser, channel: channel, role: .admin))
+        try context.save()
+
+        let expectation = expectation(forNotification: .didReceiveGroupManagement, object: nil) { notification in
+            let channelID = notification.userInfo?["channelID"] as? UUID
+            let data = notification.userInfo?["data"] as? Data
+            return channelID == channel.id && data == Data("add-member".utf8)
+        }
+
+        let payload = MessagePayloadBuilder.buildChannelScopedPayload(
+            channelID: channel.id,
+            content: Data("add-member".utf8)
+        )
+        try await messageService.handleGroupManagement(subType: .groupMemberAdd, data: payload, from: remotePeerID)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+    }
 }
