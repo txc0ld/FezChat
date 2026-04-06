@@ -512,28 +512,8 @@ struct NearbyView: View {
 
                 Spacer()
 
-                NavigationLink {
-                    FriendFinderMapView(
-                        friendFinderViewModel: coordinator.friendFinderViewModel,
-                        locationService: coordinator.locationService
-                    )
-                } label: {
-                    Text("Open Full Map")
-                        .font(theme.typography.caption)
-                        .foregroundStyle(.blipAccentPurple)
-                        .padding(.horizontal, BlipSpacing.sm)
-                        .padding(.vertical, BlipSpacing.xs)
-                        .background(
-                            Capsule()
-                                .fill(.blipAccentPurple.opacity(0.12))
-                        )
-                }
-                .buttonStyle(.plain)
-                .frame(minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Open the full friend finder map")
-
                 Button(action: { withAnimation { showMap.toggle() } }) {
-                    Text(showMap ? "Hide Map" : "Show Map")
+                    Text(showMap ? "Hide" : "Show Map")
                         .font(theme.typography.caption)
                         .foregroundStyle(.blipAccentPurple)
                         .padding(.horizontal, BlipSpacing.sm)
@@ -570,24 +550,34 @@ struct NearbyView: View {
                         )
                     }
 
-                    FriendFinderMap(
-                        friends: friendPins,
-                        userLocation: userLocation,
-                        beacons: beaconPins,
-                        onDropBeacon: { _ in
-                            Task {
-                                await resolvedLocationViewModel?.dropBeacon(label: "I'm here!")
-                            }
-                        },
-                        onNavigateToFriend: { friend in
-                            let lat = friend.coordinate.latitude
-                            let lon = friend.coordinate.longitude
-                            if let url = URL(string: "maps://?daddr=\(lat),\(lon)&dirflg=w") {
-                                UIApplication.shared.open(url)
-                            }
+                    NavigationLink {
+                        FriendFinderMapView(
+                            friendFinderViewModel: coordinator.friendFinderViewModel,
+                            locationService: coordinator.locationService
+                        )
+                    } label: {
+                        FriendFinderMap(
+                            friends: friendPins,
+                            userLocation: userLocation,
+                            beacons: beaconPins,
+                            onDropBeacon: { _ in },
+                            onNavigateToFriend: { _ in }
+                        )
+                        .frame(height: 250)
+                        .clipShape(RoundedRectangle(cornerRadius: BlipCornerRadius.xl))
+                        .overlay(alignment: .bottom) {
+                            Text("Tap to expand")
+                                .font(theme.typography.caption)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, BlipSpacing.md)
+                                .padding(.vertical, BlipSpacing.xs)
+                                .background(Capsule().fill(.black.opacity(0.5)))
+                                .padding(.bottom, BlipSpacing.sm)
                         }
-                    )
-                    .frame(height: 350)
+                        .allowsHitTesting(false)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open full friend finder map")
                 }
                 .padding(.horizontal, BlipSpacing.md)
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
