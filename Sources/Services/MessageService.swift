@@ -145,6 +145,12 @@ final class MessageService: @unchecked Sendable {
     private var unverifiedPacketCounts: [Data: Int] = [:]
     private static let maxUnverifiedPackets = 5
 
+    /// Consecutive Noise decrypt failures per sender PeerID bytes.
+    var decryptFailureCounts: [Data: Int] = [:]
+
+    /// Last time automatic Noise session recovery was attempted for a sender.
+    var lastRecoveryAttempt: [Data: Date] = [:]
+
     /// Check if an encrypted packet carries a friend request or accept payload.
     /// These are exempt from the unverified packet counter because they arrive
     /// before the peer has announced (no signing key available yet).
@@ -160,6 +166,12 @@ final class MessageService: @unchecked Sendable {
 
     /// Maximum text payload size in bytes (UTF-8).
     private static let maxTextPayloadSize = 4096
+
+    /// Consecutive decrypt failures required before attempting session recovery.
+    static let decryptFailureRecoveryThreshold = 3
+
+    /// Minimum interval between automatic session recovery attempts for one peer.
+    static let decryptFailureRecoveryCooldown: TimeInterval = 30
 
     /// Free action types that don't consume message balance.
     private static let freeSubTypes: Set<EncryptedSubType> = [
