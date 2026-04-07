@@ -1,7 +1,7 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { describe, it, expect, afterEach } from "vitest";
-import worker, { parseAuthHeader, derivePeerIdHex } from "../src/index";
-import { extractRecipient } from "../src/relay-room";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import worker, { parseAuthHeader, derivePeerIdHex, validateAuthorizationHeader } from "../src/index";
+import { extractRecipient, RelayRoom } from "../src/relay-room";
 import {
   HEADER_SIZE,
   PEER_ID_LENGTH,
@@ -26,6 +26,26 @@ function toBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+}
+
+function toBase64Url(bytes: Uint8Array): string {
+  return toBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function signJWT(payload: Record<string, unknown>, secret: string): Promise<string> {
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = toBase64Url(new TextEncoder().encode(JSON.stringify(header)));
+  const encodedPayload = toBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signingInput));
+  return `${signingInput}.${toBase64Url(new Uint8Array(signature))}`;
 }
 
 async function derivePeerIdBytes(publicKey: Uint8Array): Promise<Uint8Array> {
@@ -87,6 +107,10 @@ afterEach(() => {
   openSockets.length = 0;
 });
 
+beforeEach(() => {
+  (env as Record<string, unknown>).JWT_SECRET = "relay-test-secret";
+});
+
 async function connectPeer(key: Uint8Array): Promise<WebSocket> {
   const req = makeUpgradeRequest(key);
   const ctx = createExecutionContext();
@@ -107,6 +131,54 @@ function collectBinaryMessages(ws: WebSocket): ArrayBuffer[] {
     }
   });
   return messages;
+}
+
+type QueueEntry = { data: number[]; storedAt: number };
+
+class FakeStorage {
+  private entries = new Map<string, QueueEntry>();
+
+  seed(entries: Array<[string, QueueEntry]>): void {
+    this.entries = new Map(entries);
+  }
+
+  async list(options?: { prefix?: string; limit?: number }): Promise<Map<string, QueueEntry>> {
+    const prefix = options?.prefix ?? "";
+    const limit = options?.limit;
+    const filtered = [...this.entries.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .sort(([left], [right]) => left.localeCompare(right));
+
+    const sliced = typeof limit === "number" ? filtered.slice(0, limit) : filtered;
+    return new Map(sliced);
+  }
+
+  async delete(key: string): Promise<boolean> {
+    return this.entries.delete(key);
+  }
+
+  has(key: string): boolean {
+    return this.entries.has(key);
+  }
+
+  keys(): string[] {
+    return [...this.entries.keys()].sort();
+  }
+}
+
+function makeRelayRoom(storage: FakeStorage): RelayRoom {
+  const state = {
+    storage,
+  } as unknown as DurableObjectState;
+
+  return new RelayRoom(state, {});
+}
+
+function queuedPacketEntry(storedAt: number): QueueEntry {
+  return {
+    data: [0x01, 0x02, 0x03],
+    storedAt,
+  };
 }
 
 // --- Unit Tests: Auth Validation ---
@@ -136,6 +208,24 @@ describe("parseAuthHeader", () => {
     expect(result).not.toBeNull();
     expect(result!.length).toBe(32);
     expect(new Uint8Array(result!)).toEqual(key);
+  });
+});
+
+describe("validateAuthorizationHeader", () => {
+  it("accepts a valid JWT", async () => {
+    const publicKey = randomPublicKey();
+    const peerIdHex = await derivePeerIdHex(publicKey);
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const token = await signJWT({
+        sub: peerIdHex,
+        npk: toBase64(publicKey),
+        iat: nowSeconds,
+        exp: nowSeconds + 3600,
+    }, "relay-test-secret");
+
+    const auth = await validateAuthorizationHeader(`Bearer ${token}`, env);
+    expect(auth.peerIdHex).toBe(peerIdHex);
+    expect(auth.source).toBe("jwt");
   });
 });
 
@@ -182,6 +272,224 @@ describe("extractRecipient", () => {
   it("returns null for packet too short", () => {
     const tiny = new Uint8Array(10);
     expect(extractRecipient(tiny)).toBeNull();
+  });
+});
+
+describe("RelayRoom drain retry behavior", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("continues draining after a send failure and retries failed packets", async () => {
+    const peerHex = "deadbeefcafebabe";
+    const now = Date.now();
+    const storage = new FakeStorage();
+    storage.seed([
+      [`q:${peerHex}:0001:a`, queuedPacketEntry(now)],
+      [`q:${peerHex}:0002:b`, queuedPacketEntry(now)],
+      [`q:${peerHex}:0003:c`, queuedPacketEntry(now)],
+    ]);
+
+    const room = makeRelayRoom(storage);
+    const send = vi
+      .fn<(payload: ArrayBuffer) => void>()
+      .mockImplementationOnce(() => {
+        throw new Error("socket hiccup");
+      })
+      .mockImplementation(() => {});
+    const ws = { send } as unknown as WebSocket;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+    }).peers.set(peerHex, ws);
+
+    await (room as unknown as {
+      drainQueue(peerHex: PeerIDHex, ws: WebSocket): Promise<void>;
+    }).drainQueue(peerHex, ws);
+
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(storage.keys()).toEqual([`q:${peerHex}:0001:a`]);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.get(peerHex)
+    ).toBe(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] drainQueue: send failed for ${peerHex}, key=q:${peerHex}:0001:a — skipping`
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] drainQueue: 1 packets failed for ${peerHex}, scheduling retry 1/3`
+    );
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(storage.keys()).toEqual([]);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.has(peerHex)
+    ).toBe(false);
+  });
+
+  it("caps retries at three and leaves failed packets queued", async () => {
+    const peerHex = "0011223344556677";
+    const now = Date.now();
+    const storage = new FakeStorage();
+    storage.seed([[`q:${peerHex}:0001:a`, queuedPacketEntry(now)]]);
+
+    const room = makeRelayRoom(storage);
+    const send = vi.fn<(payload: ArrayBuffer) => void>().mockImplementation(() => {
+      throw new Error("still broken");
+    });
+    const ws = { send } as unknown as WebSocket;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+    }).peers.set(peerHex, ws);
+
+    await (room as unknown as {
+      drainQueue(peerHex: PeerIDHex, ws: WebSocket): Promise<void>;
+    }).drainQueue(peerHex, ws);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(10000);
+    await vi.advanceTimersByTimeAsync(15000);
+
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(storage.keys()).toEqual([`q:${peerHex}:0001:a`]);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.has(peerHex)
+    ).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] drainQueue: max retries reached for ${peerHex}, 1 packets remain queued for TTL expiry`
+    );
+  });
+
+  it("cleans retry state when a peer is removed", () => {
+    const peerHex = "8899aabbccddeeff";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const ws = { send: () => {} } as unknown as WebSocket;
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).peers.set(peerHex, ws);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).wsToPeer.set(ws, peerHex);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).messageTimestamps.set(peerHex, [Date.now()]);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      drainRetryCount: Map<PeerIDHex, number>;
+    }).drainRetryCount.set(peerHex, 2);
+
+    (room as unknown as {
+      removePeer(ws: WebSocket): void;
+    }).removePeer(ws);
+
+    expect(
+      (room as unknown as { peers: Map<PeerIDHex, WebSocket> }).peers.has(peerHex)
+    ).toBe(false);
+    expect(
+      (room as unknown as { wsToPeer: Map<WebSocket, PeerIDHex> }).wsToPeer.has(ws)
+    ).toBe(false);
+    expect(
+      (room as unknown as { messageTimestamps: Map<PeerIDHex, number[]> }).messageTimestamps.has(peerHex)
+    ).toBe(false);
+    expect(
+      (room as unknown as { drainRetryCount: Map<PeerIDHex, number> }).drainRetryCount.has(peerHex)
+    ).toBe(false);
+  });
+
+  it("serializes concurrent drains for the same peer (BDEV-205)", async () => {
+    // Regression test for the rapid disconnect/reconnect race that caused
+    // duplicate packet delivery and double-deletes on the same storage keys.
+    // Two scheduleDrain calls back-to-back must NOT both read+send the same
+    // queued packets. The second drain should run after the first finishes,
+    // and by then the storage will be empty.
+    const peerHex = "ffeeddccbbaa9988";
+    const now = Date.now();
+    const storage = new FakeStorage();
+    storage.seed([
+      [`q:${peerHex}:0001:a`, queuedPacketEntry(now)],
+      [`q:${peerHex}:0002:b`, queuedPacketEntry(now)],
+      [`q:${peerHex}:0003:c`, queuedPacketEntry(now)],
+    ]);
+
+    const room = makeRelayRoom(storage);
+    const send = vi.fn<(payload: ArrayBuffer) => void>().mockImplementation(() => {});
+    const ws = { send } as unknown as WebSocket;
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+    }).peers.set(peerHex, ws);
+
+    // Fire two drains in rapid succession (simulating rapid reconnect).
+    const first = (room as unknown as {
+      scheduleDrain(peerHex: PeerIDHex, ws: WebSocket): Promise<void>;
+    }).scheduleDrain(peerHex, ws);
+    const second = (room as unknown as {
+      scheduleDrain(peerHex: PeerIDHex, ws: WebSocket): Promise<void>;
+    }).scheduleDrain(peerHex, ws);
+
+    await Promise.all([first, second]);
+
+    // Each queued packet must be sent exactly once, even though two drains
+    // were scheduled concurrently.
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(storage.keys()).toEqual([]);
+  });
+
+  it("does not deliver queued packets to a stale socket", async () => {
+    // If the active socket for a peer gets replaced before a scheduled drain
+    // runs (e.g. fast reconnect on a new socket), the original drain must
+    // NOT send queued packets to the stale socket.
+    const peerHex = "1122334455667788";
+    const now = Date.now();
+    const storage = new FakeStorage();
+    storage.seed([[`q:${peerHex}:0001:a`, queuedPacketEntry(now)]]);
+
+    const room = makeRelayRoom(storage);
+    const sendOld = vi.fn<(payload: ArrayBuffer) => void>().mockImplementation(() => {});
+    const oldWs = { send: sendOld } as unknown as WebSocket;
+    const newWs = { send: () => {} } as unknown as WebSocket;
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+    }).peers.set(peerHex, oldWs);
+
+    // Schedule a drain for oldWs, then swap the active socket synchronously
+    // before any microtask runs.
+    const drain = (room as unknown as {
+      scheduleDrain(peerHex: PeerIDHex, ws: WebSocket): Promise<void>;
+    }).scheduleDrain(peerHex, oldWs);
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+    }).peers.set(peerHex, newWs);
+
+    await drain;
+
+    // Old socket must not have received the queued packet.
+    expect(sendOld).not.toHaveBeenCalled();
+    // The packet must remain queued for the new socket's drain.
+    expect(storage.keys()).toEqual([`q:${peerHex}:0001:a`]);
   });
 });
 
@@ -298,7 +606,7 @@ describe("Packet routing", () => {
     expect(errors.length).toBe(0);
   });
 
-  it("does not route broadcast packets", async () => {
+  it("broadcasts non-addressed packets to other peers", async () => {
     const keyA = randomPublicKey();
     const keyB = randomPublicKey();
     const peerIdA = await derivePeerIdBytes(keyA);
@@ -313,7 +621,8 @@ describe("Packet routing", () => {
     wsA.send(packet.buffer);
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(messagesB.length).toBe(0);
+    expect(messagesB.length).toBe(1);
+    expect(new Uint8Array(messagesB[0])).toEqual(packet);
   });
 
   it("preserves binary packet integrity exactly", async () => {

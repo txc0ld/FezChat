@@ -51,6 +51,17 @@ export class RelayRoom implements DurableObject {
   /** Per-peer message timestamps for rate limiting. */
   private messageTimestamps: Map<PeerIDHex, number[]> = new Map();
 
+  /**
+   * In-progress drain promise per peer. New drains chain after the existing one
+   * instead of running concurrently. This prevents duplicate packet delivery and
+   * double-deletes on the same storage keys when a peer rapidly disconnects and
+   * reconnects (BDEV-205).
+   */
+  private drainInProgress: Map<PeerIDHex, Promise<void>> = new Map();
+
+  /** Per-peer retry counter to cap drain retries at 3. */
+  private drainRetryCount: Map<PeerIDHex, number> = new Map();
+
   /** Per-peer state blobs for GCS sync (opaque binary, no decryption). */
   private peerState: Map<PeerIDHex, { data: ArrayBuffer; updatedAt: number }> = new Map();
 
@@ -156,10 +167,18 @@ export class RelayRoom implements DurableObject {
     ws.send("connected");
 
     // Drain any store-and-forward packets queued while this peer was offline.
-    this.drainQueue(peerIdHex, ws);
+    // Serialized via scheduleDrain so concurrent drains for the same peer
+    // (rapid disconnect/reconnect) cannot duplicate-deliver or double-delete.
+    // Incoming messages are deferred until drain completes — provides backpressure
+    // and ensures queued packets are delivered before new inbound traffic.
+    const drainPromise = this.scheduleDrain(peerIdHex, ws);
 
     ws.addEventListener("message", (event: MessageEvent) => {
-      this.handleMessage(ws, event);
+      drainPromise.then(() => {
+        if (this.wsToPeer.has(ws)) {
+          this.handleMessage(ws, event);
+        }
+      });
     });
 
     ws.addEventListener("close", () => {
@@ -276,13 +295,52 @@ export class RelayRoom implements DurableObject {
     }
   }
 
-  /** Drain queued packets for a peer who just connected. */
+  /**
+   * Schedule a drain for `peerHex`, chaining it after any in-progress drain for
+   * the same peer. Per-peer drain serialization is the core BDEV-205 fix:
+   * concurrent drains on rapid reconnect would otherwise read the same storage
+   * keys, send the same packets twice, and double-delete.
+   */
+  private scheduleDrain(peerHex: PeerIDHex, ws: WebSocket): Promise<void> {
+    const previous = this.drainInProgress.get(peerHex) ?? Promise.resolve();
+    const chained = previous
+      .catch(() => {
+        // Don't let a previous drain error block the next one.
+      })
+      .then(async () => {
+        // The peer may have disconnected (or been replaced) while waiting for
+        // the previous drain to finish. Only drain if this socket is still the
+        // active one for this peer.
+        if (this.peers.get(peerHex) !== ws) return;
+        await this.drainQueue(peerHex, ws);
+      });
+
+    this.drainInProgress.set(peerHex, chained);
+
+    // Clear the map entry once this drain settles, but only if it's still the
+    // current one (a newer drain may already have replaced it).
+    void chained.finally(() => {
+      if (this.drainInProgress.get(peerHex) === chained) {
+        this.drainInProgress.delete(peerHex);
+      }
+    });
+
+    return chained;
+  }
+
+  /**
+   * Drain queued packets for a connected peer. Always invoked via scheduleDrain
+   * so concurrent calls for the same peer are serialized. Sent packets are
+   * deleted from storage after the loop; unsent packets stay queued so they can
+   * be retried on the next drain or expire via TTL.
+   */
   private async drainQueue(peerHex: PeerIDHex, ws: WebSocket): Promise<void> {
     const entries = await this.state.storage.list({ prefix: `${QUEUE_PREFIX}${peerHex}:` });
     if (entries.size === 0) return;
 
     const now = Date.now();
     const keysToDelete: string[] = [];
+    const failedKeys: string[] = [];
 
     for (const [key, value] of entries) {
       const entry = value as { data: number[]; storedAt: number };
@@ -297,15 +355,41 @@ export class RelayRoom implements DurableObject {
         const packet = new Uint8Array(entry.data);
         ws.send(packet.buffer);
         keysToDelete.push(key);
-      } catch {
-        // WebSocket failed during drain — stop, remaining stay queued.
-        break;
+      } catch (err) {
+        console.warn(`[relay] drainQueue: send failed for ${peerHex}, key=${key} — skipping`);
+        failedKeys.push(key);
+        continue;
       }
     }
 
-    // Clean up delivered/expired entries.
+    // Clean up delivered/expired entries. Packets that failed to send remain
+    // queued so they can be retried on the next drain or expire via TTL.
     for (const key of keysToDelete) {
       await this.state.storage.delete(key);
+    }
+
+    if (failedKeys.length === 0) {
+      this.drainRetryCount.delete(peerHex);
+      return;
+    }
+
+    const attempt = (this.drainRetryCount.get(peerHex) ?? 0) + 1;
+    if (attempt <= 3) {
+      this.drainRetryCount.set(peerHex, attempt);
+      console.warn(
+        `[relay] drainQueue: ${failedKeys.length} packets failed for ${peerHex}, scheduling retry ${attempt}/3`
+      );
+      setTimeout(() => {
+        const currentWs = this.peers.get(peerHex);
+        if (currentWs) {
+          void this.scheduleDrain(peerHex, currentWs);
+        }
+      }, 5000 * attempt);
+    } else {
+      console.warn(
+        `[relay] drainQueue: max retries reached for ${peerHex}, ${failedKeys.length} packets remain queued for TTL expiry`
+      );
+      this.drainRetryCount.delete(peerHex);
     }
   }
 
@@ -338,6 +422,7 @@ export class RelayRoom implements DurableObject {
       }
       this.wsToPeer.delete(ws);
       this.messageTimestamps.delete(peerIdHex);
+      this.drainRetryCount.delete(peerIdHex);
     }
   }
 }
