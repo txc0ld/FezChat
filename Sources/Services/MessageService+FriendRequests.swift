@@ -84,7 +84,7 @@ extension MessageService {
         // Send friend request through normal flow
         try await sendFriendRequest(to: peerID)
 
-        DebugLogger.shared.log("DM", "FRIEND_REQ by username → \(remote.username)")
+        DebugLogger.shared.log("DM", "FRIEND_REQ by username → \(DebugLogger.redact(remote.username))")
     }
 
     /// Send a friend request to a nearby peer identified by their 8-byte PeerID data.
@@ -181,7 +181,7 @@ extension MessageService {
                 } catch {
                     DebugLogger.shared.log("DB", "Failed to save backfilled keys: \(error.localizedDescription)", isError: true)
                 }
-                DebugLogger.shared.log("DM", "Backfilled keys for \(friendUsername) before createDMChannel")
+                DebugLogger.shared.log("DM", "Backfilled keys for \(DebugLogger.redact(friendUsername)) before createDMChannel")
             }
         }
 
@@ -242,7 +242,7 @@ extension MessageService {
 
         // Parse payload: username + 0x00 + displayName
         let (senderUsername, senderDisplayName) = MessagePayloadBuilder.parseFriendPayload(data)
-        DebugLogger.shared.log("DM", "FRIEND_REQ from \(senderUsername ?? "nil") display=\(senderDisplayName ?? "nil")")
+        DebugLogger.shared.log("DM", "FRIEND_REQ from \(DebugLogger.redact(senderUsername ?? "nil")) display=\(DebugLogger.redact(senderDisplayName ?? "nil"))")
 
         // Resolve sender via PeerStore -> User (try peerID then noisePublicKey fallback)
         let peerData = peerID.bytes
@@ -267,7 +267,7 @@ extension MessageService {
             if let peerByUsername = peerStore.peer(byUsername: username) {
                 fallbackNoiseKey = peerByUsername.noisePublicKey
                 fallbackSigningKey = peerByUsername.signingPublicKey
-                DebugLogger.shared.log("RX", "FRIEND_REQ: pulled keys from PeerStore for fallback User \(username)")
+                DebugLogger.shared.log("RX", "FRIEND_REQ: pulled keys from PeerStore for fallback User \(DebugLogger.redact(username))")
             }
 
             let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == username })
@@ -282,7 +282,7 @@ extension MessageService {
                     } catch {
                         DebugLogger.shared.log("DB", "Failed to save backfilled friend keys: \(error.localizedDescription)", isError: true)
                     }
-                    DebugLogger.shared.log("RX", "FRIEND_REQ: backfilled keys on existing User \(username)")
+                    DebugLogger.shared.log("RX", "FRIEND_REQ: backfilled keys on existing User \(DebugLogger.redact(username))")
                 }
             } else {
                 senderUser = User(
@@ -347,7 +347,7 @@ extension MessageService {
 
         // Parse payload: username
         let (senderUsername, _) = MessagePayloadBuilder.parseFriendPayload(data)
-        DebugLogger.shared.log("DM", "FRIEND_ACCEPT from \(senderUsername ?? "nil")")
+        DebugLogger.shared.log("DM", "FRIEND_ACCEPT from \(DebugLogger.redact(senderUsername ?? "nil"))")
 
         // Find the Friend record for this peer (try peerID then noisePublicKey fallback)
         let peerData = peerID.bytes
@@ -360,7 +360,7 @@ extension MessageService {
             } catch {
                 DebugLogger.shared.log("DM", "FRIEND_ACCEPT: failed to resolve user from PeerStore: \(error)", isError: true)
             }
-            DebugLogger.shared.log("DM", "FRIEND_ACCEPT: resolved user=\(friendUser?.username ?? "nil") via PeerStore")
+            DebugLogger.shared.log("DM", "FRIEND_ACCEPT: resolved user=\(DebugLogger.redact(friendUser?.username ?? "nil")) via PeerStore")
         }
 
         // Fallback: find by username
@@ -403,7 +403,7 @@ extension MessageService {
                 } catch {
                     DebugLogger.shared.log("DB", "Failed to save backfilled keys: \(error.localizedDescription)", isError: true)
                 }
-                DebugLogger.shared.log("DM", "Backfilled keys for \(resolvedUsername) before createDMChannel")
+                DebugLogger.shared.log("DM", "Backfilled keys for \(DebugLogger.redact(resolvedUsername)) before createDMChannel")
             }
         }
 
@@ -600,13 +600,13 @@ extension MessageService {
             let syncService = UserSyncService()
             guard let remote = try await syncService.lookupUser(username: username),
                   let noiseKeyHex = remote.noisePublicKey else {
-                DebugLogger.shared.log("DM", "fetchRemoteKeys: no keys on server for \(username)")
+                DebugLogger.shared.log("DM", "fetchRemoteKeys: no keys on server for \(DebugLogger.redact(username))")
                 return
             }
 
             let noiseKeyData = Data(hexString: noiseKeyHex)
             guard !noiseKeyData.isEmpty else {
-                DebugLogger.shared.log("DM", "fetchRemoteKeys: invalid noiseKey hex for \(username)")
+                DebugLogger.shared.log("DM", "fetchRemoteKeys: invalid noiseKey hex for \(DebugLogger.redact(username))")
                 return
             }
 
@@ -637,9 +637,9 @@ extension MessageService {
             )
             peerStore.upsert(peer: peerInfo)
 
-            DebugLogger.shared.log("DM", "fetchRemoteKeys: stored keys for \(username) from server")
+            DebugLogger.shared.log("DM", "fetchRemoteKeys: stored keys for \(DebugLogger.redact(username)) from server")
         } catch {
-            DebugLogger.shared.log("DM", "fetchRemoteKeys: failed for \(username): \(error.localizedDescription)", isError: true)
+            DebugLogger.shared.log("DM", "fetchRemoteKeys: failed for \(DebugLogger.redact(username)): \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -723,7 +723,7 @@ extension MessageService {
             let membership = GroupMembership(user: localUser, channel: preferredChannel, role: .member)
             context.insert(membership)
             try context.save()
-            DebugLogger.shared.log("DM", "Repaired orphan DM channel for \(username)")
+            DebugLogger.shared.log("DM", "Repaired orphan DM channel for \(DebugLogger.redact(username))")
             return preferredChannel
         }
 
@@ -732,7 +732,7 @@ extension MessageService {
         let membership = GroupMembership(user: localUser, channel: channel, role: .member)
         context.insert(membership)
         try context.save()
-        DebugLogger.shared.log("DM", "Created DM channel with \(username)")
+        DebugLogger.shared.log("DM", "Created DM channel with \(DebugLogger.redact(username))")
         return channel
     }
 

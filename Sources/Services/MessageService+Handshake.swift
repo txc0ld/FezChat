@@ -534,7 +534,7 @@ extension MessageService {
             return
         }
 
-        DebugLogger.shared.log("DM", "Channel resolved: \(channel.id) type=\(channel.type) sender=\(senderUser?.username ?? "nil")")
+        DebugLogger.shared.log("DM", "Channel resolved: \(channel.id) type=\(channel.type) sender=\(DebugLogger.redact(senderUser?.username ?? "nil"))")
 
         // Create and store message
         let message = Message(

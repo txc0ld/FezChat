@@ -530,7 +530,7 @@ final class MessageService: @unchecked Sendable {
         )
 
         try await sendPacket(packet)
-        DebugLogger.shared.log("TX", "ANNOUNCE → \(localUser.username)")
+        DebugLogger.shared.log("TX", "ANNOUNCE → \(DebugLogger.redact(localUser.username))")
     }
 
     // MARK: - Receive Message
@@ -904,7 +904,7 @@ final class MessageService: @unchecked Sendable {
             } else {
                 senderBindings[transportData] = claimedSender
                 let claimedHex = claimedSender.prefix(4).map { String(format: "%02x", $0) }.joined()
-                DebugLogger.shared.log("RX", "SENDER BOUND: transport=\(peerHex) → sender=\(claimedHex) (\(username))")
+                DebugLogger.shared.log("RX", "SENDER BOUND: transport=\(peerHex) → sender=\(claimedHex) (\(DebugLogger.redact(username)))")
                 // Announce carries the signing key — reset unverified counter
                 unverifiedPacketCounts.removeValue(forKey: claimedSender)
             }
@@ -938,7 +938,7 @@ final class MessageService: @unchecked Sendable {
                 existingUser.noisePublicKey = noiseKeyToStore
                 existingUser.displayName = displayName
                 updated = true
-                DebugLogger.shared.log("RX", "BACKFILL User.noisePublicKey for \(username)")
+                DebugLogger.shared.log("RX", "BACKFILL User.noisePublicKey for \(DebugLogger.redact(username))")
             }
             if !realSigningKey.isEmpty && existingUser.signingPublicKey.isEmpty {
                 existingUser.signingPublicKey = realSigningKey
@@ -961,7 +961,7 @@ final class MessageService: @unchecked Sendable {
         NotificationCenter.default.post(name: .meshPeerStateChanged, object: nil)
 
         let noisePrefix = noiseKeyToStore.prefix(4).map { String(format: "%02x", $0) }.joined()
-        DebugLogger.shared.log("RX", "ANNOUNCE ← \(username) from \(peerHex) noiseKey=\(noisePrefix)… sigKey=\(realSigningKey.isEmpty ? "none" : "\(realSigningKey.count)B")")
+        DebugLogger.shared.log("RX", "ANNOUNCE ← \(DebugLogger.redact(username)) from \(peerHex) noiseKey=\(DebugLogger.redactHex(noisePrefix))… sigKey=\(realSigningKey.isEmpty ? "none" : "\(realSigningKey.count)B")")
         logger.debug("Announce received from \(username)")
     }
 
@@ -1236,19 +1236,19 @@ final class MessageService: @unchecked Sendable {
 
             let keyLen = user.noisePublicKey.count
             let keyPresent = !user.noisePublicKey.isEmpty
-            DebugLogger.emit("DM", "resolveRecipient: checking \(user.username) noiseKey=\(keyPresent ? "\(keyLen)B" : "empty")")
+            DebugLogger.emit("DM", "resolveRecipient: checking \(DebugLogger.redact(user.username)) noiseKey=\(keyPresent ? "\(keyLen)B" : "empty")")
 
             // Skip local user
             if user.noisePublicKey == localNoiseKey {
-                DebugLogger.emit("DM", "resolveRecipient: skipping local user \(user.username)")
-                DebugLogger.emit("DM", "resolveRecipient: skipping local user \(user.username)")
+                DebugLogger.emit("DM", "resolveRecipient: skipping local user \(DebugLogger.redact(user.username))")
+                DebugLogger.emit("DM", "resolveRecipient: skipping local user \(DebugLogger.redact(user.username))")
                 continue
             }
 
             // Skip users with empty keys
             if user.noisePublicKey.isEmpty {
-                DebugLogger.emit("DM", "resolveRecipient: \(user.username) has empty noisePublicKey — skipping", isError: true)
-                DebugLogger.emit("DM", "resolveRecipient: \(user.username) has EMPTY noisePublicKey — skipping", isError: true)
+                DebugLogger.emit("DM", "resolveRecipient: \(DebugLogger.redact(user.username)) has empty noisePublicKey — skipping", isError: true)
+                DebugLogger.emit("DM", "resolveRecipient: \(DebugLogger.redact(user.username)) has EMPTY noisePublicKey — skipping", isError: true)
                 continue
             }
 
@@ -1256,21 +1256,21 @@ final class MessageService: @unchecked Sendable {
             let userKey = user.noisePublicKey
             if let recipientPeer = peerStore.peer(byNoisePublicKey: userKey) {
                 let peerHex = recipientPeer.peerID.prefix(4).map { String(format: "%02x", $0) }.joined()
-                DebugLogger.emit("DM", "resolveRecipient: resolved \(user.username) → peerID \(peerHex)")
-                DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(peerHex) via=ble (\(user.username))")
+                DebugLogger.emit("DM", "resolveRecipient: resolved \(DebugLogger.redact(user.username)) → peerID \(peerHex)")
+                DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(peerHex) via=ble (\(DebugLogger.redact(user.username)))")
                 return PeerID(bytes: recipientPeer.peerID)
             }
 
             // Fallback: construct PeerID from stored key
             if user.noisePublicKey.count == PeerID.length {
-                DebugLogger.emit("DM", "resolveRecipient: using raw key as PeerID for \(user.username)")
+                DebugLogger.emit("DM", "resolveRecipient: using raw key as PeerID for \(DebugLogger.redact(user.username))")
                 let keyHex = user.noisePublicKey.prefix(4).map { String(format: "%02x", $0) }.joined()
-                DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(keyHex) via=cache (raw key, \(user.username))")
+                DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(keyHex) via=cache (raw key, \(DebugLogger.redact(user.username)))")
                 return PeerID(bytes: user.noisePublicKey)
             }
-            DebugLogger.emit("DM", "resolveRecipient: \(user.username) has key but no peer in PeerStore", isError: true)
+            DebugLogger.emit("DM", "resolveRecipient: \(DebugLogger.redact(user.username)) has key but no peer in PeerStore", isError: true)
             let derivedHex = user.noisePublicKey.prefix(4).map { String(format: "%02x", $0) }.joined()
-            DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(derivedHex) via=relay (derived, \(user.username))")
+            DebugLogger.emit("DM", "resolveRecipientPeerID: found=\(derivedHex) via=relay (derived, \(DebugLogger.redact(user.username)))")
             return PeerID(noisePublicKey: user.noisePublicKey)
         }
 

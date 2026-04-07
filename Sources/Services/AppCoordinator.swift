@@ -265,7 +265,7 @@ final class AppCoordinator {
 
                 let noiseKeyHex = loadedIdentity.noisePublicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
                 let signingKeyHex = loadedIdentity.signingPublicKey.map { String(format: "%02x", $0) }.joined()
-                DebugLogger.shared.log("AUTH", "Key re-sync starting for \(user.username) — noiseKey: \(noiseKeyHex.prefix(16))…, signingKey: \(signingKeyHex.prefix(16))…")
+                DebugLogger.shared.log("AUTH", "Key re-sync starting for \(DebugLogger.redact(user.username)) — noiseKey: \(DebugLogger.redactHex(String(noiseKeyHex.prefix(16))))…, signingKey: \(DebugLogger.redactHex(String(signingKeyHex.prefix(16))))…")
 
                 try await UserSyncService().registerUser(
                     emailHash: user.emailHash,
@@ -274,7 +274,7 @@ final class AppCoordinator {
                     signingPublicKey: loadedIdentity.signingPublicKey
                 )
 
-                DebugLogger.shared.log("AUTH", "Key upload succeeded for \(user.username)")
+                DebugLogger.shared.log("AUTH", "Key upload succeeded for \(DebugLogger.redact(user.username))")
                 Task { @MainActor [weak self] in
                     await self?.establishAuthSession(forceRefresh: true)
                 }
@@ -509,7 +509,7 @@ final class AppCoordinator {
 
             if result != nil {
                 logger.info("SELF_CHECK PASS — \(localUser.username, privacy: .private) found on server")
-                DebugLogger.shared.log("SELF_CHECK", "PASS — \(localUser.username) found on server")
+                DebugLogger.shared.log("SELF_CHECK", "PASS — \(DebugLogger.redact(localUser.username)) found on server")
             } else {
                 logger.warning("SELF_CHECK FAIL — \(localUser.username, privacy: .private) not registered, re-registering")
                 DebugLogger.shared.log("SELF_CHECK", "FAIL — not registered, re-registering", isError: true)

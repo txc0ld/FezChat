@@ -92,7 +92,7 @@ final class UserSyncService: Sendable {
         signingPublicKey: Data? = nil
     ) async throws {
         guard await Self.registrationGate.tryAcquire() else {
-            DebugLogger.emit("AUTH", "Registration skipped for \(username) — already in progress")
+            DebugLogger.emit("AUTH", "Registration skipped for \(DebugLogger.redact(username)) — already in progress")
             return
         }
 
@@ -135,14 +135,14 @@ final class UserSyncService: Sendable {
             let identity: Identity
             do {
                 guard let loadedIdentity = try KeyManager.shared.loadIdentity() else {
-                    DebugLogger.emit("AUTH", "Registration signing failed for \(username) — missing local identity", isError: true)
+                    DebugLogger.emit("AUTH", "Registration signing failed for \(DebugLogger.redact(username)) — missing local identity", isError: true)
                     throw SyncError.serverError("Missing signing identity")
                 }
                 identity = loadedIdentity
             } catch let error as SyncError {
                 throw error
             } catch {
-                DebugLogger.emit("AUTH", "Failed to load signing identity for \(username): \(error.localizedDescription)", isError: true)
+                DebugLogger.emit("AUTH", "Failed to load signing identity for \(DebugLogger.redact(username)): \(error.localizedDescription)", isError: true)
                 throw SyncError.serverError("Failed to load signing identity")
             }
 
@@ -150,10 +150,10 @@ final class UserSyncService: Sendable {
             do {
                 signature = try signChallenge(challenge, secretKey: identity.signingSecretKey)
             } catch let error as SyncError {
-                DebugLogger.emit("AUTH", "Failed to sign registration challenge for \(username): \(error.localizedDescription)", isError: true)
+                DebugLogger.emit("AUTH", "Failed to sign registration challenge for \(DebugLogger.redact(username)): \(error.localizedDescription)", isError: true)
                 throw error
             } catch {
-                DebugLogger.emit("AUTH", "Failed to sign registration challenge for \(username): \(error.localizedDescription)", isError: true)
+                DebugLogger.emit("AUTH", "Failed to sign registration challenge for \(DebugLogger.redact(username)): \(error.localizedDescription)", isError: true)
                 throw SyncError.serverError("Ed25519 signing failed")
             }
 
@@ -168,7 +168,7 @@ final class UserSyncService: Sendable {
         }
 
         let responseBody = String(data: data, encoding: .utf8) ?? "<non-UTF8>"
-        DebugLogger.emit("AUTH", "Register \(username): \(http.statusCode) — \(responseBody)")
+        DebugLogger.emit("AUTH", "Register \(DebugLogger.redact(username)): \(http.statusCode) — \(DebugLogger.redact(responseBody))")
 
         switch http.statusCode {
         case 200, 201:
@@ -202,7 +202,7 @@ final class UserSyncService: Sendable {
         for attempt in 1...maxAttempts {
             do {
                 logger.info("Registration attempt \(attempt)/\(maxAttempts) for \(username, privacy: .private)")
-                DebugLogger.emit("REGISTER", "Attempt \(attempt)/\(maxAttempts) for \(username)")
+                DebugLogger.emit("REGISTER", "Attempt \(attempt)/\(maxAttempts) for \(DebugLogger.redact(username))")
 
                 try await registerUser(
                     emailHash: emailHash,

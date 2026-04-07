@@ -26,6 +26,24 @@ enum LogLevel: Int, Comparable, Sendable {
 final class DebugLogger {
     static let shared = DebugLogger()
 
+    nonisolated static func redact(_ value: String) -> String {
+        #if DEBUG
+        return value
+        #else
+        guard value.count > 2 else { return "***" }
+        return String(value.prefix(2)) + "***"
+        #endif
+    }
+
+    nonisolated static func redactHex(_ value: String) -> String {
+        #if DEBUG
+        return value
+        #else
+        guard value.count > 4 else { return "****" }
+        return String(value.prefix(4)) + "..."
+        #endif
+    }
+
     struct Entry: Identifiable, Sendable {
         let id = UUID()
         let timestamp = Date()
