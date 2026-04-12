@@ -55,6 +55,7 @@ final class ChatViewModel {
     private let messageService: MessageService
     private let audioService: AudioService
     private let imageService: ImageService
+    private let notificationService: NotificationService
     private let logger = Logger(subsystem: "com.blip", category: "ChatViewModel")
 
     /// Typing indicator cleanup tasks keyed by "\(channelID)_\(peerID)".
@@ -66,12 +67,14 @@ final class ChatViewModel {
         modelContainer: ModelContainer,
         messageService: MessageService,
         audioService: AudioService = AudioService(),
-        imageService: ImageService = ImageService()
+        imageService: ImageService = ImageService(),
+        notificationService: NotificationService = NotificationService()
     ) {
         self.modelContainer = modelContainer
         self.messageService = messageService
         self.audioService = audioService
         self.imageService = imageService
+        self.notificationService = notificationService
         self.messageService.delegate = self
     }
 
@@ -537,6 +540,16 @@ final class ChatViewModel {
             channel.unreadCount += 1
             unreadCounts[channel.id] = channel.unreadCount
             totalUnreadCount += 1
+
+            if !channel.isMuted {
+                notificationService.notifyNewMessage(
+                    senderName: message.sender?.resolvedDisplayName ?? "Someone",
+                    messagePreview: String(data: message.rawPayload, encoding: .utf8) ?? "",
+                    channelID: channel.id,
+                    channelName: channel.type == .group ? channel.name : nil,
+                    messageType: message.typeRaw
+                )
+            }
         }
 
         // Update channel activity and re-sort

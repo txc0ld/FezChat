@@ -209,7 +209,8 @@ final class AppCoordinator {
 
         self.chatViewModel = ChatViewModel(
             modelContainer: modelContainer,
-            messageService: msgService
+            messageService: msgService,
+            notificationService: notificationService
         )
         self.meshViewModel = MeshViewModel(modelContainer: modelContainer, peerStore: peerStore)
         self.locationViewModel = LocationViewModel(
