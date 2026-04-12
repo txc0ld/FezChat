@@ -5,114 +5,170 @@ import {
 } from "cloudflare:test";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("@neondatabase/serverless", () => ({
-  neon: () => async (strings: TemplateStringsArray, ...values: unknown[]) => {
+  neon: () => {
     const users = ((globalThis as any).__blipAuthMockUsers ??= []) as MockUser[];
-    const normalized = strings.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
+    const query = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const normalized = strings.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
 
-    if (normalized.includes("insert into users (email_hash, username, is_verified, created_at, noise_public_key, signing_public_key)")) {
-      const emailHash = values[0] as string;
-      const username = values[1] as string;
-      const createdAt = values[2] as string;
-      const noisePublicKey = values[3] as Uint8Array | null;
-      const signingPublicKey = values[4] as Uint8Array | null;
-
-      const existingUser = users.find((candidate) => candidate.email_hash === emailHash);
-      if (existingUser) {
-        existingUser.username = username;
-        existingUser.noise_public_key = noisePublicKey ?? existingUser.noise_public_key;
-        existingUser.signing_public_key = signingPublicKey ?? existingUser.signing_public_key;
-        existingUser.is_verified = false;
-        existingUser.updated_at = new Date().toISOString();
-        return [{ id: existingUser.id }];
+      if (normalized === "select 1") {
+        const warmupError = (globalThis as any).__blipAuthMockWarmupError;
+        if (warmupError) {
+          throw warmupError;
+        }
+        return [{ "?column?": 1 }];
       }
 
-      const user: MockUser = {
-        id: crypto.randomUUID(),
-        email_hash: emailHash,
-        username,
-        is_verified: false,
-        message_balance: 0,
-        last_active_at: null,
-        created_at: createdAt,
-        updated_at: new Date().toISOString(),
-        noise_public_key: noisePublicKey,
-        signing_public_key: signingPublicKey,
-      };
-      users.push(user);
-      return [{ id: user.id }];
-    }
+      if (normalized.includes("insert into users (email_hash, username, is_verified, created_at, noise_public_key, signing_public_key)")) {
+        const emailHash = values[0] as string;
+        const username = values[1] as string;
+        const createdAt = values[2] as string;
+        const noisePublicKey = values[3] as Uint8Array | null;
+        const signingPublicKey = values[4] as Uint8Array | null;
 
-    if (normalized.includes("update users set") && normalized.includes("where username =")) {
-      const emailHash = values[0] as string;
-      const noisePublicKey = values[1] as Uint8Array | null;
-      const signingPublicKey = values[2] as Uint8Array | null;
-      const username = values[3] as string;
-      const user = users.find((candidate) => candidate.username === username);
-      if (!user) {
-        return [];
+        const existingUser = users.find((candidate) => candidate.email_hash === emailHash);
+        if (existingUser) {
+          existingUser.username = username;
+          existingUser.noise_public_key = noisePublicKey ?? existingUser.noise_public_key;
+          existingUser.signing_public_key = signingPublicKey ?? existingUser.signing_public_key;
+          existingUser.is_verified = false;
+          existingUser.updated_at = new Date().toISOString();
+          return [{ id: existingUser.id }];
+        }
+
+        const user: MockUser = {
+          id: crypto.randomUUID(),
+          email_hash: emailHash,
+          username,
+          is_verified: false,
+          message_balance: 0,
+          last_active_at: null,
+          created_at: createdAt,
+          updated_at: new Date().toISOString(),
+          noise_public_key: noisePublicKey,
+          signing_public_key: signingPublicKey,
+        };
+        users.push(user);
+        return [{ id: user.id }];
       }
-      user.email_hash = emailHash;
-      user.noise_public_key = noisePublicKey ?? user.noise_public_key;
-      user.signing_public_key = signingPublicKey ?? user.signing_public_key;
-      user.is_verified = false;
-      user.updated_at = new Date().toISOString();
-      return [{ id: user.id }];
-    }
 
-    if (normalized.includes("select id, noise_public_key, signing_public_key from users where noise_public_key =")) {
-      const requestedKey = values[0] as Uint8Array;
-      return users
-        .filter((user) => user.noise_public_key && bytesEqual(user.noise_public_key, requestedKey))
-        .map((user) => ({
+      if (normalized.includes("update users set") && normalized.includes("where username =")) {
+        const emailHash = values[0] as string;
+        const noisePublicKey = values[1] as Uint8Array | null;
+        const signingPublicKey = values[2] as Uint8Array | null;
+        const username = values[3] as string;
+        const user = users.find((candidate) => candidate.username === username);
+        if (!user) {
+          return [];
+        }
+        user.email_hash = emailHash;
+        user.noise_public_key = noisePublicKey ?? user.noise_public_key;
+        user.signing_public_key = signingPublicKey ?? user.signing_public_key;
+        user.is_verified = false;
+        user.updated_at = new Date().toISOString();
+        return [{ id: user.id }];
+      }
+
+      if (normalized.includes("select id, noise_public_key, signing_public_key from users where noise_public_key =")
+        && normalized.includes("or (")
+        && normalized.includes("for update")) {
+        const currentNoisePublicKey = values[0] as Uint8Array;
+        const nextNoisePublicKey = values[1] as Uint8Array;
+        const nextSigningPublicKey = values[2] as Uint8Array;
+        const user = users.find((candidate) =>
+          (candidate.noise_public_key && bytesEqual(candidate.noise_public_key, currentNoisePublicKey)) ||
+          (
+            candidate.noise_public_key &&
+            candidate.signing_public_key &&
+            bytesEqual(candidate.noise_public_key, nextNoisePublicKey) &&
+            bytesEqual(candidate.signing_public_key, nextSigningPublicKey)
+          )
+        );
+        return user ? [{
           id: user.id,
           noise_public_key: user.noise_public_key,
           signing_public_key: user.signing_public_key,
-        }));
-    }
-
-    if (normalized.includes("update users set") && normalized.includes("where email_hash =")) {
-      const lastActiveAt = values[0] as string | null;
-      const emailHash = values[1] as string;
-      const user = users.find((candidate) => candidate.email_hash === emailHash);
-      if (!user) {
-        return [];
+        }] : [];
       }
-      user.last_active_at = lastActiveAt;
-      user.updated_at = new Date().toISOString();
-      return [{
-        id: user.id,
-        is_verified: user.is_verified,
-        message_balance: user.message_balance,
-      }];
-    }
 
-    if (normalized.includes("select id, username, is_verified, message_balance, last_active_at, created_at from users where email_hash =")) {
-      const emailHash = values[0] as string;
-      const user = users.find((candidate) => candidate.email_hash === emailHash);
-      return user ? [{
-        id: user.id,
-        username: user.username,
-        is_verified: user.is_verified,
-        message_balance: user.message_balance,
-        last_active_at: user.last_active_at,
-        created_at: user.created_at,
-      }] : [];
-    }
+      if (normalized.includes("select id, noise_public_key, signing_public_key from users where noise_public_key =")) {
+        const requestedKey = values[0] as Uint8Array;
+        return users
+          .filter((user) => user.noise_public_key && bytesEqual(user.noise_public_key, requestedKey))
+          .map((user) => ({
+            id: user.id,
+            noise_public_key: user.noise_public_key,
+            signing_public_key: user.signing_public_key,
+          }));
+      }
 
-    if (normalized.includes("select id, username, is_verified, noise_public_key, signing_public_key, last_active_at from users where lower(username) = lower(")) {
-      const username = String(values[0]).toLowerCase();
-      const user = users.find((candidate) => candidate.username.toLowerCase() === username);
-      return user ? [{
-        id: user.id,
-        username: user.username,
-        is_verified: user.is_verified,
-        noise_public_key: user.noise_public_key,
-        signing_public_key: user.signing_public_key,
-        last_active_at: user.last_active_at,
-      }] : [];
-    }
+      if (normalized.includes("update users set")
+        && normalized.includes("noise_public_key =")
+        && normalized.includes("signing_public_key =")
+        && normalized.includes("where id =")) {
+        const noisePublicKey = values[0] as Uint8Array;
+        const signingPublicKey = values[1] as Uint8Array;
+        const userID = values[2] as string;
+        const user = users.find((candidate) => candidate.id === userID);
+        if (!user) {
+          return [];
+        }
+        user.noise_public_key = noisePublicKey;
+        user.signing_public_key = signingPublicKey;
+        user.updated_at = new Date().toISOString();
+        return [{ id: user.id }];
+      }
 
-    throw new Error(`Unhandled mock SQL query: ${normalized}`);
+      if (normalized.includes("update users set") && normalized.includes("where email_hash =")) {
+        const lastActiveAt = values[0] as string | null;
+        const emailHash = values[1] as string;
+        const user = users.find((candidate) => candidate.email_hash === emailHash);
+        if (!user) {
+          return [];
+        }
+        user.last_active_at = lastActiveAt;
+        user.updated_at = new Date().toISOString();
+        return [{
+          id: user.id,
+          is_verified: user.is_verified,
+          message_balance: user.message_balance,
+        }];
+      }
+
+      if (normalized.includes("select id, username, is_verified, message_balance, last_active_at, created_at from users where email_hash =")) {
+        const emailHash = values[0] as string;
+        const user = users.find((candidate) => candidate.email_hash === emailHash);
+        return user ? [{
+          id: user.id,
+          username: user.username,
+          is_verified: user.is_verified,
+          message_balance: user.message_balance,
+          last_active_at: user.last_active_at,
+          created_at: user.created_at,
+        }] : [];
+      }
+
+      if (normalized.includes("select id, username, is_verified, noise_public_key, signing_public_key, last_active_at from users where lower(username) = lower(")) {
+        const username = String(values[0]).toLowerCase();
+        const user = users.find((candidate) => candidate.username.toLowerCase() === username);
+        return user ? [{
+          id: user.id,
+          username: user.username,
+          is_verified: user.is_verified,
+          noise_public_key: user.noise_public_key,
+          signing_public_key: user.signing_public_key,
+          last_active_at: user.last_active_at,
+        }] : [];
+      }
+
+      throw new Error(`Unhandled mock SQL query: ${normalized}`);
+    };
+
+    const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => query(strings, ...values);
+    const transactionalSql = sql as typeof sql & {
+      transaction: <T>(callback: (txSql: typeof sql) => Promise<T>) => Promise<T>;
+    };
+    transactionalSql.transaction = async <T>(callback: (txSql: typeof sql) => Promise<T>): Promise<T> => callback(sql);
+    return transactionalSql;
   },
 }));
 import worker, {
@@ -264,11 +320,14 @@ beforeEach(async () => {
   for (const key of keys.keys) {
     await env.CODES.delete(key.name);
   }
+  vi.restoreAllMocks();
   (env as Record<string, unknown>).DEV_BYPASS = "false";
   (env as Record<string, unknown>).JWT_SECRET = "test-jwt-secret";
   (env as Record<string, unknown>).JWT_EXPIRY_SECONDS = "3600";
   (env as Record<string, unknown>).JWT_REFRESH_GRACE_SECONDS = "300";
+  (env as Record<string, unknown>).CORS_ORIGIN = "http://localhost:3000";
   delete (env as Record<string, unknown>).DATABASE_URL;
+  delete (globalThis as Record<string, unknown>).__blipAuthMockWarmupError;
   resetMockUsers();
 });
 
@@ -771,6 +830,83 @@ describe("protected endpoints", () => {
   });
 });
 
+describe("POST /v1/users/keys", () => {
+  it("rotates keys for an authenticated user", async () => {
+    (env as Record<string, unknown>).DATABASE_URL = "mock://db";
+    const { user, noisePublicKey, signingPrivateKey } = await seedAuthUser();
+    const timestamp = new Date().toISOString();
+    const signature = await issueTimestampSignature(signingPrivateKey, timestamp);
+    const tokenResponse = await request("POST", "/v1/auth/token", {
+      noisePublicKey: base64Encode(noisePublicKey),
+      timestamp,
+      signature,
+    });
+    const token = (await json(tokenResponse)).token as string;
+
+    const nextNoisePublicKey = crypto.getRandomValues(new Uint8Array(32));
+    const nextSigningKeyPair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const nextSigningPublicKey = new Uint8Array(await crypto.subtle.exportKey("raw", nextSigningKeyPair.publicKey));
+
+    const res = await request(
+      "POST",
+      "/v1/users/keys",
+      {
+        noisePublicKey: bytesToHex(nextNoisePublicKey),
+        signingPublicKey: bytesToHex(nextSigningPublicKey),
+      },
+      { Authorization: `Bearer ${token}` }
+    );
+
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ updated: true, userId: user.id });
+    expect(mockUsers()).toContainEqual(
+      expect.objectContaining({
+        id: user.id,
+        noise_public_key: nextNoisePublicKey,
+        signing_public_key: nextSigningPublicKey,
+      })
+    );
+  });
+
+  it("treats a duplicate stale-JWT key rotation as success when keys already match", async () => {
+    (env as Record<string, unknown>).DATABASE_URL = "mock://db";
+    const { user, noisePublicKey, signingPrivateKey } = await seedAuthUser();
+    const timestamp = new Date().toISOString();
+    const signature = await issueTimestampSignature(signingPrivateKey, timestamp);
+    const tokenResponse = await request("POST", "/v1/auth/token", {
+      noisePublicKey: base64Encode(noisePublicKey),
+      timestamp,
+      signature,
+    });
+    const token = (await json(tokenResponse)).token as string;
+
+    const nextNoisePublicKey = crypto.getRandomValues(new Uint8Array(32));
+    const nextSigningKeyPair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const nextSigningPublicKey = new Uint8Array(await crypto.subtle.exportKey("raw", nextSigningKeyPair.publicKey));
+    const requestBody = {
+      noisePublicKey: bytesToHex(nextNoisePublicKey),
+      signingPublicKey: bytesToHex(nextSigningPublicKey),
+    };
+
+    const firstResponse = await request(
+      "POST",
+      "/v1/users/keys",
+      requestBody,
+      { Authorization: `Bearer ${token}` }
+    );
+    const secondResponse = await request(
+      "POST",
+      "/v1/users/keys",
+      requestBody,
+      { Authorization: `Bearer ${token}` }
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(await json(secondResponse)).toEqual({ updated: true, userId: user.id });
+  });
+});
+
 // ─── Edge Cases ──────────────────────────────────────────────
 
 describe("edge cases", () => {
@@ -792,12 +928,71 @@ describe("edge cases", () => {
   it("handles CORS preflight", async () => {
     const req = new Request("http://localhost/v1/auth/send-code", {
       method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:3000",
+        "Access-Control-Request-Method": "POST",
+      },
     });
     const ctx = createExecutionContext();
     const res = await worker.fetch(req, env as unknown as WorkerEnv, ctx);
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(204);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3000");
     expect(res.headers.get("Access-Control-Allow-Methods")).toContain("POST");
+  });
+
+  it("omits CORS headers when CORS_ORIGIN is unset", async () => {
+    delete (env as Record<string, unknown>).CORS_ORIGIN;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const optionsRequest = new Request("http://localhost/v1/auth/send-code", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:3000",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+    const optionsContext = createExecutionContext();
+    const optionsResponse = await worker.fetch(optionsRequest, env as unknown as WorkerEnv, optionsContext);
+    await waitOnExecutionContext(optionsContext);
+
+    const healthResponse = await request("GET", "/v1/auth/health");
+
+    expect(optionsResponse.status).toBe(204);
+    expect(optionsResponse.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(optionsResponse.headers.get("Access-Control-Allow-Methods")).toBeNull();
+    expect(healthResponse.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[auth] CORS_ORIGIN env var is not set - rejecting all CORS requests"
+    );
+  });
+});
+
+describe("scheduled DB warmup", () => {
+  it("logs successful warmup pings", async () => {
+    (env as Record<string, unknown>).DATABASE_URL = "postgres://unit-test";
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const ctx = createExecutionContext();
+
+    await worker.scheduled({} as ScheduledEvent, env as unknown as WorkerEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(infoSpy).toHaveBeenCalledWith("[auth] DB warmup ping OK");
+  });
+
+  it("logs failed warmup pings", async () => {
+    (env as Record<string, unknown>).DATABASE_URL = "postgres://unit-test";
+    (globalThis as Record<string, unknown>).__blipAuthMockWarmupError = new Error("db down");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createExecutionContext();
+
+    await worker.scheduled({} as ScheduledEvent, env as unknown as WorkerEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[auth] DB warmup ping FAILED:",
+      expect.any(Error)
+    );
   });
 });
 

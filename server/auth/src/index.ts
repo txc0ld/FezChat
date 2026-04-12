@@ -18,7 +18,7 @@ export interface Env {
   JWT_TTL_SECONDS?: string;
   JWT_EXPIRY_SECONDS?: string;
   JWT_REFRESH_GRACE_SECONDS?: string;
-  /** Set to e.g. "https://heyblip.au" in production. Defaults to "*" for dev. */
+  /** Set to e.g. "https://heyblip.au" in production and local dev. */
   CORS_ORIGIN?: string;
   /** Set to "true" to skip Resend and use a fixed test code (000000). */
   DEV_BYPASS?: string;
@@ -111,15 +111,26 @@ const NOISE_PUBLIC_KEY_LENGTH = 32;
 const ED25519_SIGNATURE_LENGTH = 64;
 const MAX_USERNAME_LENGTH = 30;
 const MAX_BODY_BYTES = 16_384;
+let hasLoggedMissingCorsOrigin = false;
 
-function corsHeaders(env: Env): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": env.CORS_ORIGIN ?? "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+function corsHeaders(env?: Env): Record<string, string> {
+  const headers: Record<string, string> = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
   };
+  const corsOrigin = env?.CORS_ORIGIN;
+  if (!corsOrigin) {
+    if (env && !hasLoggedMissingCorsOrigin) {
+      console.error("[auth] CORS_ORIGIN env var is not set - rejecting all CORS requests");
+      hasLoggedMissingCorsOrigin = true;
+    }
+    return headers;
+  }
+
+  headers["Access-Control-Allow-Origin"] = corsOrigin;
+  headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS";
+  headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+  return headers;
 }
 
 export default {
@@ -182,7 +193,15 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     const sql = await getDb(env);
     if (sql) {
-      ctx.waitUntil(sql`SELECT 1`.catch(() => {}));
+      ctx.waitUntil(
+        sql`SELECT 1`
+          .then(() => {
+            console.info("[auth] DB warmup ping OK");
+          })
+          .catch((error) => {
+            console.error("[auth] DB warmup ping FAILED:", error);
+          })
+      );
     }
   },
 };
@@ -552,6 +571,20 @@ function bufferToUint8Array(buf: any): Uint8Array {
     return utf8ToBytes(buf);
   }
   return new Uint8Array();
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 async function issueJWTForUser(noisePublicKey: Uint8Array, env: Env): Promise<{ token: string; expiresAt: string; claims: JWTPayload }> {
@@ -1025,14 +1058,54 @@ async function handleKeys(request: Request, env: Env): Promise<Response> {
 
   try {
     const auth = await authenticateRequest(request, env);
-    const result = await sql`
-      UPDATE users SET
-        noise_public_key = ${noisePublicKey},
-        signing_public_key = ${signingPublicKey},
-        updated_at = NOW()
-      WHERE noise_public_key = ${auth.noisePublicKey}
-      RETURNING id
-    `;
+    const transactionalSql = sql as typeof sql & {
+      transaction?: <T>(callback: (txSql: typeof sql) => Promise<T>) => Promise<T>;
+    };
+
+    const updateKeys = async (txSql: typeof sql) => {
+      const locked = await txSql`
+        SELECT id, noise_public_key, signing_public_key FROM users
+        WHERE noise_public_key = ${auth.noisePublicKey}
+           OR (
+                noise_public_key = ${noisePublicKey}
+            AND signing_public_key = ${signingPublicKey}
+           )
+        FOR UPDATE
+      `;
+
+      if (locked.length === 0) {
+        return [];
+      }
+
+      const currentNoisePublicKey = locked[0]?.noise_public_key
+        ? bufferToUint8Array(locked[0].noise_public_key)
+        : null;
+      const currentSigningPublicKey = locked[0]?.signing_public_key
+        ? bufferToUint8Array(locked[0].signing_public_key)
+        : null;
+
+      if (
+        currentNoisePublicKey &&
+        currentSigningPublicKey &&
+        equalBytes(currentNoisePublicKey, noisePublicKey) &&
+        equalBytes(currentSigningPublicKey, signingPublicKey)
+      ) {
+        return [{ id: locked[0].id }];
+      }
+
+      return txSql`
+        UPDATE users SET
+          noise_public_key = ${noisePublicKey},
+          signing_public_key = ${signingPublicKey},
+          updated_at = NOW()
+        WHERE id = ${locked[0].id}
+        RETURNING id
+      `;
+    };
+
+    const result = typeof transactionalSql.transaction === "function"
+      ? await transactionalSql.transaction(async (txSql) => updateKeys(txSql))
+      : await updateKeys(sql);
 
     if (result.length === 0) {
       return json({ error: "User not found" }, 404, env);
@@ -1177,7 +1250,7 @@ async function parseBody<T>(request: Request): Promise<T | null> {
 }
 
 function json(data: unknown, status = 200, env?: Env): Response {
-  const cors = env ? corsHeaders(env) : { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, GET, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+  const cors = corsHeaders(env);
   return new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json", ...cors },
