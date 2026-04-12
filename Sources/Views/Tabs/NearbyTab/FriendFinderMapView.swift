@@ -438,6 +438,7 @@ struct FriendFinderMapView: View {
         locationService.startUpdating(accuracy: .friendSharing)
         refreshLocationSnapshot()
         startLocationRefresh()
+        friendFinderViewModel?.sendProximityPing()
     }
 
     private func refreshLocationSnapshot() {
@@ -515,6 +516,13 @@ private struct FriendFinderPinView: View {
     @State private var ringPulsing = false
 
     var body: some View {
+        let baseSize: CGFloat = {
+            guard !isSelected else { return 36 }
+            guard let rssi = friend.rssiMeters else { return 28 }
+            let clamped = min(max(rssi, 2), 30)
+            return CGFloat(34 - (clamped - 2) * (12.0 / 28.0))
+        }()
+
         Button(action: onTap) {
             ZStack {
                 // Accuracy radius ring
@@ -543,7 +551,7 @@ private struct FriendFinderPinView: View {
                     AvatarView(
                         imageData: friend.avatarData,
                         name: friend.displayName,
-                        size: isSelected ? 36 : 28,
+                        size: baseSize,
                         ringStyle: .friend,
                         showOnlineIndicator: true
                     )

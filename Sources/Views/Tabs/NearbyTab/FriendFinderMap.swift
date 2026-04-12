@@ -369,6 +369,7 @@ struct FriendMapPin: Identifiable, Hashable {
     var avatarData: Data? = nil
     var accuracyMeters: Double = 0
     var distanceFromUser: Double? = nil
+    var rssiMeters: Double? = nil
     var isOutOfRange: Bool = false
 
     var precisionDescription: String {

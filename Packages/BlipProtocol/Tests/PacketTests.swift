@@ -286,6 +286,31 @@ struct PacketStructTests {
     }
 }
 
+@Suite("ProximityPingPayload")
+struct ProximityPingPayloadTests {
+
+    @Test("Proximity ping round-trips")
+    func roundTrip() {
+        let payload = ProximityPingPayload(rssiHint: -72)
+        let data = payload.serialize()
+
+        #expect(data.count == ProximityPingPayload.serializedSize)
+        #expect(ProximityPingPayload.deserialize(from: data)?.rssiHint == -72)
+    }
+
+    @Test("Default RSSI hint is unavailable")
+    func unavailableRSSI() {
+        let payload = ProximityPingPayload()
+        #expect(payload.rssiHint == ProximityPingPayload.unavailableRSSI)
+    }
+
+    @Test("Too-short data returns nil")
+    func tooShortReturnsNil() {
+        #expect(ProximityPingPayload.deserialize(from: Data([0x01])) == nil)
+        #expect(ProximityPingPayload.deserialize(from: Data()) == nil)
+    }
+}
+
 @Suite("EncryptedSubType")
 struct EncryptedSubTypeTests {
 

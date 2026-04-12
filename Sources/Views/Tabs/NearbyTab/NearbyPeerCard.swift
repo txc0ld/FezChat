@@ -259,16 +259,7 @@ struct NearbyPeerCard: View {
     /// Very approximate — BLE RSSI is noisy, especially in crowds.
     private var estimatedDistance: String {
         guard hasSignalData else { return "Nearby" }
-
-        let txPower: Double = -59
-        let n: Double = 2.5
-        let distance = pow(10.0, (txPower - Double(rssi)) / (10.0 * n))
-
-        if distance < 2 { return "~1m" }
-        else if distance < 5 { return "~\(Int(distance))m" }
-        else if distance < 15 { return "~\(Int(round(distance / 5) * 5))m" }
-        else if distance < 50 { return "~\(Int(round(distance / 10) * 10))m" }
-        else { return "50m+" }
+        return RSSIDistance.displayString(fromRSSI: rssi)
     }
 
     private var initials: String {

@@ -86,26 +86,45 @@ final class FriendFinderViewModel {
     // MARK: - Location Packet Handling
 
     private func handleLocationPacket(_ packet: Packet, from peerID: PeerID) {
-        guard let payload = LocationPayload.deserialize(from: packet.payload) else {
-            logger.warning("Failed to deserialize location payload from \(peerID)")
-            return
+        switch packet.type {
+        case .proximityPing:
+            handleProximityPing(packet, from: peerID)
+        default:
+            guard let payload = LocationPayload.deserialize(from: packet.payload) else {
+                logger.warning("Failed to deserialize location payload from \(peerID)")
+                return
+            }
+
+            let key = peerID.description
+
+            if payload.isBeacon {
+                handleBeacon(payload, from: peerID)
+                return
+            }
+
+            // Update or insert peer location.
+            peerLocations[key] = PeerLocationEntry(
+                peerID: peerID,
+                payload: payload,
+                receivedAt: Date()
+            )
+
+            rebuildFriendPins()
         }
+    }
+
+    private func handleProximityPing(_ packet: Packet, from peerID: PeerID) {
+        guard ProximityPingPayload.deserialize(from: packet.payload) != nil else { return }
 
         let key = peerID.description
-
-        if payload.isBeacon {
-            handleBeacon(payload, from: peerID)
-            return
+        if let entry = peerLocations[key] {
+            peerLocations[key] = PeerLocationEntry(
+                peerID: entry.peerID,
+                payload: entry.payload,
+                receivedAt: Date()
+            )
+            rebuildFriendPins()
         }
-
-        // Update or insert peer location.
-        peerLocations[key] = PeerLocationEntry(
-            peerID: peerID,
-            payload: payload,
-            receivedAt: Date()
-        )
-
-        rebuildFriendPins()
     }
 
     private func handleBeacon(_ payload: LocationPayload, from peerID: PeerID) {
@@ -137,6 +156,11 @@ final class FriendFinderViewModel {
                 CLLocation(latitude: user.latitude, longitude: user.longitude)
                     .distance(from: CLLocation(latitude: coord.latitude, longitude: coord.longitude))
             }
+            let rssiMeters: Double? = {
+                let info = PeerStore.shared.findPeer(byPeerIDBytes: entry.peerID.bytes)
+                guard let info, info.hasSignalData else { return nil }
+                return RSSIDistance.meters(fromRSSI: info.rssi)
+            }()
 
             let precision: LocationPinPrecision
             if accuracy < 20 {
@@ -156,6 +180,7 @@ final class FriendFinderViewModel {
                 lastUpdated: entry.receivedAt,
                 accuracyMeters: accuracy,
                 distanceFromUser: distance,
+                rssiMeters: rssiMeters,
                 isOutOfRange: entry.payload.age > LocationPayload.updateInterval * 2
             )
         }
@@ -236,6 +261,32 @@ final class FriendFinderViewModel {
             createdBy: "You",
             expiresAt: Date().addingTimeInterval(LocationPayload.beaconTTL)
         ))
+    }
+
+    func sendProximityPing() {
+        do {
+            guard let identity = try KeyManager.shared.loadIdentity() else {
+                DebugLogger.shared.log("PEER", "Failed to send proximity ping: missing identity", isError: true)
+                return
+            }
+            let payload = ProximityPingPayload()
+            let packet = Packet(
+                type: .proximityPing,
+                ttl: 2,
+                timestamp: Packet.currentTimestamp(),
+                flags: PacketFlags(),
+                senderID: identity.peerID,
+                payload: payload.serialize()
+            )
+            let data = try PacketSerializer.encode(packet)
+            NotificationCenter.default.post(
+                name: .shouldBroadcastPacket,
+                object: nil,
+                userInfo: ["data": data]
+            )
+        } catch {
+            DebugLogger.shared.log("PEER", "Failed to send proximity ping: \(error)", isError: true)
+        }
     }
 
     // MARK: - Helpers
