@@ -13,6 +13,12 @@ struct MessageInput: View {
     /// Called when user taps the attachment button.
     var onAttachment: () -> Void = {}
 
+    /// Called when user selects "Camera" from the attachment menu.
+    var onCamera: () -> Void = {}
+
+    /// Called when user selects "Photo Library" from the attachment menu.
+    var onPhotoLibrary: () -> Void = {}
+
     /// Called when PTT begins (finger down).
     var onPTTStart: () -> Void = {}
 
@@ -63,8 +69,8 @@ struct MessageInput: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Add attachment")
         .confirmationDialog("Attachment", isPresented: $showAttachmentMenu) {
-            Button("Camera") { onAttachment() }
-            Button("Photo Library") { onAttachment() }
+            Button("Camera") { onCamera() }
+            Button("Photo Library") { onPhotoLibrary() }
             Button("Voice Note") { onAttachment() }
             Button("Cancel", role: .cancel) {}
         }

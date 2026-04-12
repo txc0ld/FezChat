@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 // MARK: - ChatView
 
@@ -18,6 +19,9 @@ struct ChatView: View {
     @State private var isPTTRecording = false
     @State private var pttAudioLevels: [Float] = []
     @State private var isRecordingVoiceNote = false
+    @State private var showCameraPicker = false
+    @State private var showPhotoPicker = false
+    @State private var selectedPhoto: PhotosPickerItem?
     @State private var voiceNoteService = AudioService()
 
     @Environment(AppCoordinator.self) private var coordinator
@@ -88,6 +92,16 @@ struct ChatView: View {
                 onAttachment: {
                     Task { await recordAndSendVoiceNote() }
                 },
+                onCamera: {
+                    if SystemImagePicker.isAvailable(.camera) {
+                        showCameraPicker = true
+                    } else {
+                        showPhotoPicker = true
+                    }
+                },
+                onPhotoLibrary: {
+                    showPhotoPicker = true
+                },
                 onPTTStart: {
                     isPTTRecording = true
                     pttAudioLevels = []
@@ -109,6 +123,38 @@ struct ChatView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .fullScreenCover(isPresented: $showImageViewer) {
             ImageViewer(imageData: selectedImageData, isPresented: $showImageViewer)
+        }
+        .fullScreenCover(isPresented: $showCameraPicker) {
+            SystemImagePicker(isPresented: $showCameraPicker, sourceType: .camera) { image in
+                guard let vm = chatViewModel else { return }
+                guard let data = image.jpegData(compressionQuality: 0.85) ?? image.pngData() else {
+                    DebugLogger.shared.log("UI", "Failed to encode captured camera image", isError: true)
+                    return
+                }
+
+                Task {
+                    await vm.sendImage(imageData: data)
+                }
+            }
+        }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhoto,
+            matching: .images
+        )
+        .onChange(of: selectedPhoto) { _, newItem in
+            guard let vm = chatViewModel else { return }
+
+            Task {
+                do {
+                    if let data = try await newItem?.loadTransferable(type: Data.self) {
+                        await vm.sendImage(imageData: data)
+                    }
+                } catch {
+                    DebugLogger.shared.log("UI", "Failed to load selected photo: \(error)", isError: true)
+                }
+                selectedPhoto = nil
+            }
         }
         .overlay(alignment: .top) {
             if let error = chatViewModel?.errorMessage {
