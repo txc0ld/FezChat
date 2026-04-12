@@ -291,7 +291,7 @@ final class SOSViewModel {
         }
 
         // Broadcast resolution
-        await broadcastSOSResolve(alertID: alert.id)
+        await broadcastSOSResolve(alertID: alert.id, resolution: .cancelled)
 
         activeAlert = nil
         flowState = .idle
@@ -315,7 +315,7 @@ final class SOSViewModel {
             errorMessage = error.localizedDescription
         }
 
-        await broadcastSOSResolve(alertID: alert.id)
+        await broadcastSOSResolve(alertID: alert.id, resolution: .falseAlarm)
 
         activeAlert = nil
         flowState = .resolved(alertID: alert.id, resolution: .falseAlarm)
@@ -448,7 +448,7 @@ final class SOSViewModel {
             errorMessage = error.localizedDescription
         }
 
-        await broadcastSOSResolve(alertID: alert.id)
+        await broadcastSOSResolve(alertID: alert.id, resolution: resolution)
 
         notificationService.notifySOSResolved(alertID: alert.id)
 
@@ -636,7 +636,7 @@ final class SOSViewModel {
         }
     }
 
-    private func broadcastSOSResolve(alertID: UUID) async {
+    private func broadcastSOSResolve(alertID: UUID, resolution: SOSResolution) async {
         let identity: Identity
         do {
             guard let loaded = try KeyManager.shared.loadIdentity() else {
@@ -651,6 +651,8 @@ final class SOSViewModel {
 
         var payload = Data()
         payload.append(alertID.uuidString.data(using: .utf8) ?? Data())
+        payload.append(0x00)
+        payload.append(resolveByte(for: resolution))
 
         let packet = Packet(
             type: .sosResolve,
@@ -671,6 +673,25 @@ final class SOSViewModel {
         } catch {
             logger.error("Failed to encode SOS resolve packet: \(error.localizedDescription)")
             return
+        }
+    }
+
+    private func resolveByte(for resolution: SOSResolution) -> UInt8 {
+        switch resolution {
+        case .treatedOnSite: return 0x01
+        case .transported: return 0x02
+        case .falseAlarm: return 0x03
+        case .cancelled: return 0x04
+        }
+    }
+
+    private func resolution(from byte: UInt8) -> SOSResolution? {
+        switch byte {
+        case 0x01: return .treatedOnSite
+        case 0x02: return .transported
+        case 0x03: return .falseAlarm
+        case 0x04: return .cancelled
+        default: return nil
         }
     }
 
@@ -826,8 +847,24 @@ final class SOSViewModel {
     }
 
     private func handleSOSResolved(_ packet: Packet) async {
-        let uuidString = String(data: packet.payload, encoding: .utf8) ?? ""
+        let payload = packet.payload
+        let separatorIndex = payload.firstIndex(of: 0x00)
+        let uuidData = separatorIndex.map { payload[..<$0] } ?? payload[...]
+        let resolutionByte = separatorIndex.flatMap { index -> UInt8? in
+            let nextIndex = payload.index(after: index)
+            guard nextIndex < payload.endIndex else { return nil }
+            return payload[nextIndex]
+        }
+
+        let uuidString = String(data: Data(uuidData), encoding: .utf8) ?? ""
         guard let alertID = UUID(uuidString: uuidString) else { return }
+
+        let resolution = resolutionByte.flatMap(resolution(from:))
+        if let resolution {
+            logger.info("Received SOS resolution \(resolution.rawValue, privacy: .public) for alert \(alertID.uuidString, privacy: .public)")
+        } else {
+            logger.info("Received SOS resolution without outcome for alert \(alertID.uuidString, privacy: .public)")
+        }
 
         notificationService.notifySOSResolved(alertID: alertID)
         await refreshVisibleAlerts()

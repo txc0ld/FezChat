@@ -2,6 +2,8 @@ import XCTest
 import SwiftData
 import CoreLocation
 @testable import Blip
+@testable import BlipCrypto
+import BlipProtocol
 
 // MARK: - Tests
 
@@ -36,6 +38,7 @@ final class SOSViewModelTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        try? KeyManager.shared.deleteIdentity()
         container = nil
         locationService = nil
         messageService = nil
@@ -52,6 +55,58 @@ final class SOSViewModelTests: XCTestCase {
             await Task.yield()
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
+    }
+
+    private func captureBroadcastPacket(
+        trigger: @escaping @MainActor () async -> Void
+    ) async throws -> Packet {
+        try? KeyManager.shared.deleteIdentity()
+        let identity = try KeyManager.shared.generateIdentity()
+        try KeyManager.shared.storeIdentity(identity)
+
+        let expectation = expectation(description: "broadcast packet")
+        var observer: NSObjectProtocol?
+        var capturedPacket: Packet?
+
+        observer = NotificationCenter.default.addObserver(
+            forName: .shouldBroadcastPacket,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let data = notification.userInfo?["data"] as? Data else { return }
+            capturedPacket = try? PacketSerializer.decode(data)
+            expectation.fulfill()
+        }
+
+        await trigger()
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        return try XCTUnwrap(capturedPacket)
+    }
+
+    private func decodeResolvePayload(_ payload: Data) -> (UUID, UInt8?)? {
+        if let separatorIndex = payload.firstIndex(of: 0x00) {
+            let uuidData = payload[..<separatorIndex]
+            guard let uuidString = String(data: Data(uuidData), encoding: .utf8),
+                  let alertID = UUID(uuidString: uuidString) else {
+                return nil
+            }
+
+            let byteIndex = payload.index(after: separatorIndex)
+            let resolutionByte = byteIndex < payload.endIndex ? payload[byteIndex] : nil
+            return (alertID, resolutionByte)
+        }
+
+        guard let uuidString = String(data: payload, encoding: .utf8),
+              let alertID = UUID(uuidString: uuidString) else {
+            return nil
+        }
+
+        return (alertID, nil)
     }
 
     // MARK: - Init Hydration
@@ -201,6 +256,30 @@ final class SOSViewModelTests: XCTestCase {
         XCTAssertNotNil(alert.resolvedAt)
     }
 
+    func testCancelActiveAlertBroadcastsCancelledResolutionByte() async throws {
+        let context = ModelContext(container)
+        let alert = SOSAlert(
+            severity: .amber,
+            preciseLocation: GeoPoint(latitude: 51.0, longitude: -2.5),
+            fuzzyLocation: "u10hf",
+            expiresAt: Date().addingTimeInterval(86_400)
+        )
+        context.insert(alert)
+        try context.save()
+
+        vm.activeAlert = alert
+        vm.flowState = .active(alertID: alert.id)
+
+        let packet = try await captureBroadcastPacket {
+            await self.vm.cancelActiveAlert()
+        }
+
+        XCTAssertEqual(packet.type, .sosResolve)
+        let decoded = try XCTUnwrap(decodeResolvePayload(packet.payload))
+        XCTAssertEqual(decoded.0, alert.id)
+        XCTAssertEqual(decoded.1, 0x04)
+    }
+
     // MARK: - False Alarm Tracking
 
     func testFalseAlarmIncrementsCounter() async {
@@ -291,6 +370,30 @@ final class SOSViewModelTests: XCTestCase {
         } else {
             XCTFail("Expected .resolved state with falseAlarm resolution, got \(vm.flowState)")
         }
+    }
+
+    func testMarkFalseAlarmBroadcastsFalseAlarmResolutionByte() async throws {
+        let context = ModelContext(container)
+        let alert = SOSAlert(
+            severity: .green,
+            preciseLocation: GeoPoint(latitude: 51.0, longitude: -2.5),
+            fuzzyLocation: "u10hf",
+            expiresAt: Date().addingTimeInterval(86_400)
+        )
+        context.insert(alert)
+        try context.save()
+
+        vm.activeAlert = alert
+        vm.flowState = .active(alertID: alert.id)
+
+        let packet = try await captureBroadcastPacket {
+            await self.vm.markFalseAlarm()
+        }
+
+        XCTAssertEqual(packet.type, .sosResolve)
+        let decoded = try XCTUnwrap(decodeResolvePayload(packet.payload))
+        XCTAssertEqual(decoded.0, alert.id)
+        XCTAssertEqual(decoded.1, 0x03)
     }
 
     // MARK: - Severity Confirmation
