@@ -97,7 +97,11 @@ struct ChatListView: View {
                 AddFriendByUsernameSheet()
             }
             .sheet(isPresented: $showMessageSearch) {
-                MessageSearchView()
+                MessageSearchView(onResultTap: { channelID in
+                    if let channel = chatViewModel?.channels.first(where: { $0.id == channelID }) {
+                        selectedConversation = makeConversationPreview(for: channel)
+                    }
+                })
             }
             .sheet(isPresented: $showNewMessage) {
                 newMessageSheet

@@ -7,6 +7,8 @@ import SwiftData
 /// Queries SwiftData for text messages and filters in-memory by payload content.
 struct MessageSearchView: View {
 
+    var onResultTap: ((UUID) -> Void)?
+
     @State private var searchText = ""
     @State private var searchResults: [MessageSearchResult] = []
     @State private var isSearching = false
@@ -183,8 +185,14 @@ struct MessageSearchView: View {
                 .padding(.horizontal, BlipSpacing.xs)
 
                 ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, result in
-                    MessageSearchResultRow(result: result, query: searchText)
-                        .staggeredReveal(index: index)
+                    Button {
+                        dismiss()
+                        onResultTap?(result.channelID)
+                    } label: {
+                        MessageSearchResultRow(result: result, query: searchText)
+                    }
+                    .buttonStyle(.plain)
+                    .staggeredReveal(index: index)
                 }
             }
             .padding(.horizontal, BlipSpacing.md)
