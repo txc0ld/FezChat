@@ -196,6 +196,27 @@ struct FragmentAssemblerTests {
         }
     }
 
+    @Test("Out-of-range first fragment is discarded")
+    func outOfRangeFirstFragmentDiscarded() throws {
+        let assembler = FragmentAssembler()
+        let fragment = Fragment(
+            fragmentID: Data([0xAA, 0xBB, 0xCC, 0xDD]),
+            index: 2,
+            total: 2,
+            data: Data([0x01, 0x02])
+        )
+
+        let result = try assembler.receive(fragment)
+
+        guard case .incomplete(let received, let total) = result else {
+            Issue.record("Expected incomplete result for discarded fragment")
+            return
+        }
+        #expect(received == 0)
+        #expect(total == 2)
+        #expect(assembler.activeAssemblyCount == 0)
+    }
+
     @Test("Inconsistent total is rejected")
     func inconsistentTotal() throws {
         let assembler = FragmentAssembler()
@@ -208,6 +229,33 @@ struct FragmentAssemblerTests {
         #expect(throws: FragmentAssemblyError.self) {
             try assembler.receive(frag2)
         }
+    }
+
+    @Test("Out-of-range fragment on existing assembly is discarded")
+    func outOfRangeExistingFragmentDiscarded() throws {
+        let assembler = FragmentAssembler()
+        let id = Data([0x10, 0x20, 0x30, 0x40])
+
+        let first = Fragment(fragmentID: id, index: 0, total: 2, data: Data([0xAA]))
+        let invalid = Fragment(fragmentID: id, index: 2, total: 2, data: Data([0xBB]))
+        let second = Fragment(fragmentID: id, index: 1, total: 2, data: Data([0xCC]))
+
+        _ = try assembler.receive(first)
+        let invalidResult = try assembler.receive(invalid)
+
+        guard case .incomplete(let received, let total) = invalidResult else {
+            Issue.record("Expected incomplete result for discarded fragment")
+            return
+        }
+        #expect(received == 1)
+        #expect(total == 2)
+
+        let finalResult = try assembler.receive(second)
+        guard case .complete(let payload) = finalResult else {
+            Issue.record("Expected assembly to complete after valid fragments")
+            return
+        }
+        #expect(payload == Data([0xAA, 0xCC]))
     }
 
     @Test("Multiple concurrent assemblies work")

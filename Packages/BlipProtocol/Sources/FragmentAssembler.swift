@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 /// Errors from fragment assembly.
 public enum FragmentAssemblyError: Error, Sendable, Equatable {
@@ -30,6 +31,8 @@ public final class FragmentAssembler: Sendable {
     /// Fragment lifetime in seconds.
     public static let fragmentLifetime: TimeInterval = 30.0
 
+    private static let logger = Logger(subsystem: "com.blip", category: "FragmentAssembler")
+
     /// Internal assembly state for one fragment group.
     private final class Assembly: @unchecked Sendable {
         let fragmentID: Data
@@ -47,7 +50,8 @@ public final class FragmentAssembler: Sendable {
         }
 
         var isComplete: Bool {
-            fragments.count == Int(total)
+            guard fragments.count == Int(total) else { return false }
+            return (0 ..< total).allSatisfy { fragments[$0] != nil }
         }
 
         var isExpired: Bool {
@@ -58,9 +62,14 @@ public final class FragmentAssembler: Sendable {
         func reassemble() -> Data {
             var result = Data()
             for i in 0 ..< total {
-                if let chunk = fragments[i] {
-                    result.append(chunk)
+                guard let chunk = fragments[i] else {
+                    preconditionFailure(
+                        "FragmentAssembler: missing fragment at index \(i) " +
+                            "(total=\(total), present keys=\(fragments.keys.sorted())). " +
+                            "isComplete returned true but the index set is incomplete."
+                    )
                 }
+                result.append(chunk)
             }
             return result
         }
@@ -112,6 +121,13 @@ public final class FragmentAssembler: Sendable {
                 )
             }
 
+            guard fragment.index < existing.total else {
+                Self.logger.error(
+                    "Dropping fragment with out-of-range index \(fragment.index, privacy: .public) (total=\(existing.total, privacy: .public))"
+                )
+                return .incomplete(received: existing.fragments.count, total: Int(existing.total))
+            }
+
             // Add fragment
             existing.fragments[fragment.index] = fragment.data
             existing.lastAccessedAt = Date()
@@ -131,6 +147,13 @@ public final class FragmentAssembler: Sendable {
             // New assembly
             if assemblies.count >= FragmentAssembler.maxConcurrentAssemblies {
                 evictLRU()
+            }
+
+            guard fragment.index < fragment.total else {
+                Self.logger.error(
+                    "Dropping fragment with out-of-range index \(fragment.index, privacy: .public) (total=\(fragment.total, privacy: .public))"
+                )
+                return .incomplete(received: 0, total: Int(fragment.total))
             }
 
             let assembly = Assembly(fragmentID: fragment.fragmentID, total: fragment.total)
