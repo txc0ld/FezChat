@@ -84,6 +84,11 @@ export class RelayRoom implements DurableObject {
 
     // Handle state sync (non-WebSocket).
     const stateAction = request.headers.get("X-State-Action");
+    if (stateAction) {
+      console.info(`[relay] state ${stateAction} for peer ${peerIdHex}`);
+    } else {
+      console.info(`[relay] WebSocket upgrade request from peer ${peerIdHex}`);
+    }
     if (stateAction === "put") {
       return this.handleStatePut(peerIdHex, request);
     }
@@ -152,11 +157,12 @@ export class RelayRoom implements DurableObject {
     // If a peer reconnects, close the old socket.
     const existing = this.peers.get(peerIdHex);
     if (existing) {
+      console.info(`[relay] peer ${peerIdHex} reconnected - replacing existing socket`);
       this.wsToPeer.delete(existing);
       try {
         existing.close(1000, "replaced");
       } catch {
-        // Already closed — ignore.
+        console.info(`[relay] close on replaced socket for peer ${peerIdHex} failed (already closed)`);
       }
     }
 
@@ -165,6 +171,7 @@ export class RelayRoom implements DurableObject {
 
     // Send "connected" text frame to confirm the connection (matches iOS client expectation).
     ws.send("connected");
+    console.info(`[relay] peer ${peerIdHex} connected (${this.peers.size} peers now online)`);
 
     // Drain any store-and-forward packets queued while this peer was offline.
     // Serialized via scheduleDrain so concurrent drains for the same peer
@@ -213,6 +220,7 @@ export class RelayRoom implements DurableObject {
       const timestamps = this.messageTimestamps.get(senderPeerIdHex) ?? [];
       const recentTimestamps = timestamps.filter(t => now - t < 1000);
       if (recentTimestamps.length >= RATE_LIMIT_PER_SECOND) {
+        console.warn(`[relay] rate limit hit for peer ${senderPeerIdHex} - packet dropped`);
         return; // Rate limited — drop silently.
       }
       recentTimestamps.push(now);
@@ -245,7 +253,9 @@ export class RelayRoom implements DurableObject {
           // can leave recipients sharing memory; `new Uint8Array(data)` allocates a
           // fresh buffer and copies only the view's bytes.
           peerWs.send(new Uint8Array(data).buffer);
-        } catch {
+        } catch (err) {
+          const failedPeer = this.wsToPeer.get(peerWs) ?? "unknown";
+          console.warn(`[relay] broadcast send failed for peer ${failedPeer}, removing:`, err);
           this.removePeer(peerWs);
         }
       }
@@ -258,7 +268,8 @@ export class RelayRoom implements DurableObject {
       try {
         recipientWs.send(data.buffer);
         return;
-      } catch {
+      } catch (err) {
+        console.warn(`[relay] addressed send failed for recipient ${recipientHex}, removing and queuing:`, err);
         this.removePeer(recipientWs);
       }
     }
@@ -419,6 +430,8 @@ export class RelayRoom implements DurableObject {
   private removePeer(ws: WebSocket): void {
     const peerIdHex = this.wsToPeer.get(ws);
     if (peerIdHex) {
+      const remainingPeers = this.peers.get(peerIdHex) === ws ? this.peers.size - 1 : this.peers.size;
+      console.info(`[relay] peer ${peerIdHex} removed (${remainingPeers} peers remaining)`);
       // Only remove from peers if this ws is still the registered one
       // (handles race with reconnection replacing the socket).
       if (this.peers.get(peerIdHex) === ws) {

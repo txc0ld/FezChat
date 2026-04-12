@@ -53,6 +53,14 @@ async function derivePeerIdBytes(publicKey: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(hash).slice(0, PEER_ID_LENGTH);
 }
 
+function hexToPeerID(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = Number.parseInt(hex.slice(i, i + 2), 16);
+  }
+  return bytes;
+}
+
 function buildPacket(opts: {
   senderPeerId: Uint8Array;
   recipientPeerId?: Uint8Array;
@@ -687,6 +695,238 @@ describe("Disconnect cleanup", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     expect(errors.length).toBe(0);
+  });
+});
+
+describe("relay logging", () => {
+  it("logs WebSocket upgrade requests and state sync requests", async () => {
+    const peerHex = "aaaaaaaaaaaaaaaa";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const upgradeResponse = await room.fetch(new Request("https://relay.heyblip.au/ws", {
+      headers: {
+        "X-Derived-Peer-ID": peerHex,
+      },
+    }));
+    const stateResponse = await room.fetch(new Request("https://relay.heyblip.au/state", {
+      headers: {
+        "X-Derived-Peer-ID": peerHex,
+        "X-State-Action": "get",
+      },
+    }));
+
+    expect(upgradeResponse.status).toBe(101);
+    expect(stateResponse.status).toBe(404);
+    expect(infoSpy).toHaveBeenCalledWith(
+      `[relay] WebSocket upgrade request from peer ${peerHex}`
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      `[relay] state get for peer ${peerHex}`
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      `[relay] peer ${peerHex} connected (1 peers now online)`
+    );
+    infoSpy.mockRestore();
+  });
+
+  it("logs when closing a replaced socket throws", () => {
+    const peerHex = "0011223344556677";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const existing = {
+      close: vi.fn(() => {
+        throw new Error("already closed");
+      }),
+    } as unknown as WebSocket;
+    const replacement = {
+      accept: vi.fn(),
+      send: vi.fn(),
+      addEventListener: vi.fn(),
+    } as unknown as WebSocket;
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleSession(ws: WebSocket, peerIdHex: PeerIDHex): void;
+    }).peers.set(peerHex, existing);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleSession(ws: WebSocket, peerIdHex: PeerIDHex): void;
+    }).wsToPeer.set(existing, peerHex);
+
+    (room as unknown as {
+      handleSession(ws: WebSocket, peerIdHex: PeerIDHex): void;
+    }).handleSession(replacement, peerHex);
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      `[relay] peer ${peerHex} reconnected - replacing existing socket`
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      `[relay] close on replaced socket for peer ${peerHex} failed (already closed)`
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      `[relay] peer ${peerHex} connected (1 peers now online)`
+    );
+    infoSpy.mockRestore();
+  });
+
+  it("logs when a peer is rate limited", () => {
+    const senderPeerHex = "5555555555555555";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const senderWs = {} as WebSocket;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const packet = buildPacket({ senderPeerId: hexToPeerID(senderPeerHex) });
+
+    (room as unknown as {
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).wsToPeer.set(senderWs, senderPeerHex);
+    (room as unknown as {
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      messageTimestamps: Map<PeerIDHex, number[]>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).messageTimestamps.set(
+      senderPeerHex,
+      Array.from({ length: 100 }, () => Date.now())
+    );
+
+    (room as unknown as {
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).handleMessage(senderWs, { data: packet.buffer } as MessageEvent);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] rate limit hit for peer ${senderPeerHex} - packet dropped`
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("logs the peer ID when broadcast delivery fails", () => {
+    const senderPeerHex = "1111111111111111";
+    const recipientPeerHex = "2222222222222222";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const senderWs = {} as WebSocket;
+    const failingPeerWs = {
+      send: vi.fn(() => {
+        throw new Error("boom");
+      }),
+    } as unknown as WebSocket;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const packet = buildPacket({ senderPeerId: hexToPeerID(senderPeerHex) });
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).peers.set(senderPeerHex, senderWs);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).peers.set(recipientPeerHex, failingPeerWs);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).wsToPeer.set(senderWs, senderPeerHex);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).wsToPeer.set(failingPeerWs, recipientPeerHex);
+
+    (room as unknown as {
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).handleMessage(senderWs, { data: packet.buffer } as MessageEvent);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] broadcast send failed for peer ${recipientPeerHex}, removing:`,
+      expect.any(Error)
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("logs the recipient when addressed delivery fails", () => {
+    const senderPeerHex = "3333333333333333";
+    const recipientPeerHex = "4444444444444444";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const senderWs = {} as WebSocket;
+    const failingRecipientWs = {
+      send: vi.fn(() => {
+        throw new Error("boom");
+      }),
+    } as unknown as WebSocket;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const packet = buildPacket({
+      senderPeerId: hexToPeerID(senderPeerHex),
+      recipientPeerId: hexToPeerID(recipientPeerHex),
+    });
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).peers.set(senderPeerHex, senderWs);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).peers.set(recipientPeerHex, failingRecipientWs);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).wsToPeer.set(senderWs, senderPeerHex);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).wsToPeer.set(failingRecipientWs, recipientPeerHex);
+
+    (room as unknown as {
+      handleMessage(senderWs: WebSocket, event: MessageEvent): void;
+    }).handleMessage(senderWs, { data: packet.buffer } as MessageEvent);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      `[relay] addressed send failed for recipient ${recipientPeerHex}, removing and queuing:`,
+      expect.any(Error)
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("logs when a peer is removed", () => {
+    const peerHex = "6666666666666666";
+    const storage = new FakeStorage();
+    const room = makeRelayRoom(storage);
+    const ws = {} as WebSocket;
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      removePeer(ws: WebSocket): void;
+    }).peers.set(peerHex, ws);
+    (room as unknown as {
+      peers: Map<PeerIDHex, WebSocket>;
+      wsToPeer: Map<WebSocket, PeerIDHex>;
+      removePeer(ws: WebSocket): void;
+    }).wsToPeer.set(ws, peerHex);
+
+    (room as unknown as {
+      removePeer(ws: WebSocket): void;
+    }).removePeer(ws);
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      `[relay] peer ${peerHex} removed (0 peers remaining)`
+    );
+    infoSpy.mockRestore();
   });
 });
 
