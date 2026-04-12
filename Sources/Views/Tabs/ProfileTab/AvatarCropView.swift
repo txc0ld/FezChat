@@ -9,6 +9,7 @@ import SwiftUI
 struct AvatarCropView: View {
 
     @Binding var isPresented: Bool
+    let image: UIImage
     var onCrop: ((CGRect) -> Void)?
 
     @State private var scale: CGFloat = 1.0
@@ -52,20 +53,11 @@ struct AvatarCropView: View {
 
     private var cropArea: some View {
         ZStack {
-            // Placeholder image (in production, use the actual selected image)
-            LinearGradient(
-                colors: [.blipGradientDeepPurple, .blipGradientMidnightBlue, .blipGradientDarkTeal],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(width: imageSize.width * scale, height: imageSize.height * scale)
-            .offset(offset)
-            .overlay(
-                Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.white.opacity(0.3))
-                    .offset(offset)
-            )
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: imageSize.width * scale, height: imageSize.height * scale)
+                .offset(offset)
 
             // Dimmed overlay with circular cutout
             CropMask(circleSize: cropCircleSize)
@@ -81,6 +73,11 @@ struct AvatarCropView: View {
             // Grid lines (thirds)
             cropGridLines
                 .allowsHitTesting(false)
+        }
+        .onAppear {
+            let aspect = image.size.width / max(image.size.height, 1)
+            let width: CGFloat = 300
+            imageSize = CGSize(width: width, height: width / aspect)
         }
         .frame(width: cropCircleSize + 40, height: cropCircleSize + 40)
         .clipShape(Rectangle())
@@ -195,9 +192,10 @@ struct AvatarCropView: View {
 
         let cropX = (scaledWidth / 2 - offset.width - cropCircleSize / 2) / scaledWidth
         let cropY = (scaledHeight / 2 - offset.height - cropCircleSize / 2) / scaledHeight
-        let cropSize = cropCircleSize / scaledWidth
+        let cropWidth = cropCircleSize / scaledWidth
+        let cropHeight = cropCircleSize / scaledHeight
 
-        return CGRect(x: cropX, y: cropY, width: cropSize, height: cropSize)
+        return CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight)
     }
 }
 
@@ -227,7 +225,10 @@ private struct CropMask: Shape {
 // MARK: - Preview
 
 #Preview("Avatar Crop") {
-    AvatarCropView(isPresented: .constant(true))
+    AvatarCropView(
+        isPresented: .constant(true),
+        image: UIImage(systemName: "person.crop.circle.fill") ?? UIImage()
+    )
         .preferredColorScheme(.dark)
         .blipTheme()
 }

@@ -19,7 +19,9 @@ struct EditProfileView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var avatarImage: Image?
     @State private var avatarData: Data?
+    @State private var showCameraPicker = false
     @State private var showAvatarCrop = false
+    @State private var cropSourceImage: UIImage?
     @State private var showEmailVerify = false
     @State private var usernameError: String?
     @State private var isSaving = false
@@ -72,8 +74,31 @@ struct EditProfileView: View {
                 }
             }
             .sheet(isPresented: $showAvatarCrop) {
-                AvatarCropView(isPresented: $showAvatarCrop)
+                if let sourceImage = cropSourceImage {
+                    AvatarCropView(isPresented: $showAvatarCrop, image: sourceImage) { cropRect in
+                        let renderer = UIGraphicsImageRenderer(size: CGSize(
+                            width: sourceImage.size.width * cropRect.width,
+                            height: sourceImage.size.height * cropRect.height
+                        ))
+                        let cropped = renderer.image { _ in
+                            sourceImage.draw(at: CGPoint(
+                                x: -sourceImage.size.width * cropRect.origin.x,
+                                y: -sourceImage.size.height * cropRect.origin.y
+                            ))
+                        }
+                        avatarImage = Image(uiImage: cropped)
+                        avatarData = cropped.jpegData(compressionQuality: 0.8)
+                    }
                     .presentationDetents([.large])
+                }
+            }
+            .fullScreenCover(isPresented: $showCameraPicker) {
+                SystemImagePicker(isPresented: $showCameraPicker, sourceType: .camera) { image in
+                    cropSourceImage = image
+                    avatarImage = Image(uiImage: image)
+                    avatarData = image.jpegData(compressionQuality: 0.8)
+                    showAvatarCrop = true
+                }
             }
         }
     }
@@ -112,12 +137,13 @@ struct EditProfileView: View {
                     }
                     .frame(minHeight: BlipSizing.minTapTarget)
 
-                    Button(action: { showAvatarCrop = true }) {
+                    Button(action: { showCameraPicker = true }) {
                         Label("Take Photo", systemImage: "camera")
                             .font(secondaryFont)
                             .foregroundStyle(.blipAccentPurple)
                     }
                     .frame(minHeight: BlipSizing.minTapTarget)
+                    .disabled(!SystemImagePicker.isAvailable(.camera))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -129,6 +155,8 @@ struct EditProfileView: View {
                        let uiImage = UIImage(data: data) {
                         avatarImage = Image(uiImage: uiImage)
                         avatarData = uiImage.jpegData(compressionQuality: 0.8)
+                        cropSourceImage = uiImage
+                        showAvatarCrop = true
                     }
                 } catch {
                     DebugLogger.shared.log("PROFILE", "Failed to load photo: \(error.localizedDescription)", isError: true)
@@ -138,6 +166,7 @@ struct EditProfileView: View {
         .onAppear {
             if avatarImage == nil, let data = user?.avatarThumbnail, let uiImage = UIImage(data: data) {
                 avatarImage = Image(uiImage: uiImage)
+                cropSourceImage = uiImage
             }
         }
     }
