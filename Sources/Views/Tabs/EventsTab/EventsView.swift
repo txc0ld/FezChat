@@ -20,6 +20,7 @@ struct EventsView: View {
 
     @State private var stages: [StageMapItem] = []
     @State private var scheduleStages: [ScheduleStage] = []
+    @State private var shareSetTimeID: UUID?
     @State private var friendPins: [FriendMapPin] = []
     @State private var meetingPoints: [MeetingPointMapItem] = []
     @State private var crowdPulseData: [CrowdPulseCell] = []
@@ -56,6 +57,15 @@ struct EventsView: View {
                     }
                 )
                 .presentationDetents([.large])
+            }
+            .sheet(isPresented: Binding(
+                get: { shareSetTimeID != nil },
+                set: { if !$0 { shareSetTimeID = nil } }
+            )) {
+                if let shareText = buildShareText(for: shareSetTimeID) {
+                    ShareSheet(items: [shareText])
+                        .presentationDetents([.medium])
+                }
             }
             .task {
                 await loadEventData()
@@ -161,8 +171,18 @@ struct EventsView: View {
                     case .map:
                         mapSection
                     case .schedule:
-                        // TODO: BDEV-136 — wire onSaveAct, onToggleReminder, onShareGoing to EventsViewModel
-                        ScheduleView(stages: scheduleStages)
+                        ScheduleView(
+                            stages: scheduleStages,
+                            onSaveAct: { setTimeID in
+                                Task { await eventsViewModel?.toggleSaveSetTime(setTimeID: setTimeID) }
+                            },
+                            onToggleReminder: { setTimeID in
+                                Task { await eventsViewModel?.toggleReminder(setTimeID: setTimeID) }
+                            },
+                            onShareGoing: { setTimeID in
+                                shareSetTimeID = setTimeID
+                            }
+                        )
                     case .announcements:
                         AnnouncementFeed(announcements: announcements)
                     case .lostAndFound:
@@ -447,6 +467,18 @@ struct EventsView: View {
         eventsViewModel?.announcements ?? []
     }
 
+    private func buildShareText(for setTimeID: UUID?) -> String? {
+        guard let id = setTimeID else { return nil }
+        for stage in scheduleStages {
+            if let act = stage.acts.first(where: { $0.id == id }) {
+                let eventName = eventsViewModel?.activeEvent?.name ?? "an event"
+                let time = act.startTime.formatted(date: .omitted, time: .shortened)
+                return "I'm going to see \(act.artistName) at \(stage.name) (\(time)) — \(eventName) \u{1F3B6}"
+            }
+        }
+        return nil
+    }
+
     private var eventCenter: CLLocationCoordinate2D {
         if let activeEvent = eventsViewModel?.activeEvent {
             return CLLocationCoordinate2D(
@@ -520,6 +552,18 @@ enum EventSection: CaseIterable {
         case .lostAndFound: return "magnifyingglass"
         }
     }
+}
+
+// MARK: - ShareSheet
+
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Sample Data
