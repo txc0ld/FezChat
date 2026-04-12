@@ -43,6 +43,59 @@ final class SOSViewModelTests: XCTestCase {
         vm = nil
     }
 
+    private func waitFor(
+        timeoutNanoseconds: UInt64 = 1_000_000_000,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        let deadline = ContinuousClock.now.advanced(by: .nanoseconds(Int64(timeoutNanoseconds)))
+        while !condition() && ContinuousClock.now < deadline {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    // MARK: - Init Hydration
+
+    func testInitLoadsResponderStatusAndVisibleAlerts() async throws {
+        let context = ModelContext(container)
+        let responder = MedicalResponder(
+            accessCodeHash: "hash",
+            callsign: "Medic-1",
+            isOnDuty: true
+        )
+        let alert = SOSAlert(
+            severity: .red,
+            preciseLocation: GeoPoint(latitude: 51.0, longitude: -2.5),
+            fuzzyLocation: "u10hf",
+            message: "Need help",
+            status: .active,
+            expiresAt: Date().addingTimeInterval(86_400)
+        )
+        context.insert(responder)
+        context.insert(alert)
+        try context.save()
+
+        let hydratedViewModel = SOSViewModel(
+            modelContainer: container,
+            locationService: locationService,
+            messageService: messageService,
+            notificationService: notificationService
+        )
+
+        await waitFor {
+            hydratedViewModel.isMedicalResponder &&
+            hydratedViewModel.responderCallsign == "Medic-1" &&
+            hydratedViewModel.isOnDuty &&
+            hydratedViewModel.visibleAlerts.contains(where: { $0.id == alert.id })
+        }
+
+        XCTAssertTrue(hydratedViewModel.isMedicalResponder)
+        XCTAssertEqual(hydratedViewModel.responderCallsign, "Medic-1")
+        XCTAssertTrue(hydratedViewModel.isOnDuty)
+        XCTAssertEqual(hydratedViewModel.visibleAlerts.count, 1)
+        XCTAssertEqual(hydratedViewModel.visibleAlerts.first?.id, alert.id)
+    }
+
     // MARK: - SOS Activation Flow
 
     func testStartSOSFlowTransitionsToSelectingSeverity() {

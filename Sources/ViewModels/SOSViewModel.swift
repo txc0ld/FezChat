@@ -154,6 +154,11 @@ final class SOSViewModel {
         self.notificationService = notificationService
 
         setupSOSReceiver()
+
+        Task { [weak self] in
+            await self?.loadResponderStatus()
+            await self?.refreshVisibleAlerts()
+        }
     }
 
     deinit {
