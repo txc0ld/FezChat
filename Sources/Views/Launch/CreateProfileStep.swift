@@ -100,6 +100,7 @@ struct CreateProfileStep: View {
                 }
                 .fullWidth()
                 .disabled(!isFormValid || isCreatingIdentity)
+                .accessibilityHint("Creates your profile and continues to permissions.")
                 .padding(.horizontal, BlipSpacing.lg)
                 .padding(.bottom, BlipSpacing.xl)
             }
@@ -156,7 +157,9 @@ struct CreateProfileStep: View {
         }
         .buttonStyle(.plain)
         .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Choose profile photo")
+        .accessibilityHint("Double tap to open your photo library.")
         .accessibilityAddTraits(.isButton)
         .onChange(of: selectedAvatarItem) { _, newItem in
             Task {
@@ -179,6 +182,7 @@ struct CreateProfileStep: View {
             Text("Username")
                 .font(.custom(BlipFontName.medium, size: 13, relativeTo: .caption))
                 .foregroundStyle(theme.colors.mutedText)
+                .accessibilityHidden(true)
 
             TextField("", text: $username)
                 .font(theme.typography.body)
@@ -188,6 +192,8 @@ struct CreateProfileStep: View {
                 .autocorrectionDisabled()
                 .focused($focusedField, equals: .username)
                 .frame(minHeight: BlipSizing.minTapTarget)
+                .accessibilityLabel("Username")
+                .accessibilityHint("Enter your desired username, 3 to 30 characters.")
                 .overlay(alignment: .leading) {
                     if username.isEmpty {
                         Text("Choose a username")
@@ -215,6 +221,7 @@ struct CreateProfileStep: View {
             Text("Email")
                 .font(.custom(BlipFontName.medium, size: 13, relativeTo: .caption))
                 .foregroundStyle(theme.colors.mutedText)
+                .accessibilityHidden(true)
 
             HStack {
                 TextField("", text: $email)
@@ -226,6 +233,8 @@ struct CreateProfileStep: View {
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .email)
                     .frame(minHeight: BlipSizing.minTapTarget)
+                    .accessibilityLabel("Email address")
+                    .accessibilityHint("Enter your email address to receive a verification code.")
                     .overlay(alignment: .leading) {
                         if email.isEmpty {
                             Text("you@example.com")
@@ -251,11 +260,14 @@ struct CreateProfileStep: View {
                     }
                     .disabled(isSendingCode)
                     .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
+                    .accessibilityLabel("Verify email")
+                    .accessibilityHint("Send a verification code to your email address.")
                 }
 
                 if isEmailVerified {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(theme.colors.statusGreen)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -268,6 +280,7 @@ struct CreateProfileStep: View {
             Text("Verification code")
                 .font(.custom(BlipFontName.medium, size: 13, relativeTo: .caption))
                 .foregroundStyle(theme.colors.mutedText)
+                .accessibilityHidden(true)
 
             HStack {
                 TextField("", text: $otpCode)
@@ -277,6 +290,8 @@ struct CreateProfileStep: View {
                     .keyboardType(.numberPad)
                     .focused($focusedField, equals: .otp)
                     .frame(minHeight: BlipSizing.minTapTarget)
+                    .accessibilityLabel("Verification code")
+                    .accessibilityHint("Enter the 6-digit code sent to your email address.")
                     .overlay(alignment: .leading) {
                         if otpCode.isEmpty {
                             Text("000000")
@@ -312,6 +327,8 @@ struct CreateProfileStep: View {
             }
             .disabled(isSendingCode || resendCooldown > 0)
             .frame(minHeight: BlipSizing.minTapTarget)
+            .accessibilityLabel("Resend verification code")
+            .accessibilityHint("Send a new verification code to your email address.")
         }
     }
 

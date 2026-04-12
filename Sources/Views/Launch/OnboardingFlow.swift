@@ -74,8 +74,11 @@ struct OnboardingFlow: View {
                         height: 8
                     )
                     .animation(SpringConstants.accessiblePageEntrance, value: currentStep)
+                    .accessibilityLabel("Step \(index + 1) of \(stepCount)")
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Onboarding progress: step \(currentStep + 1) of \(stepCount)")
     }
 
     // MARK: - Navigation

@@ -72,6 +72,7 @@ struct PermissionsStep: View {
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(theme.colors.statusGreen)
+                        .accessibilityLabel("Bluetooth enabled")
                     Text("Bluetooth enabled")
                         .font(.custom(BlipFontName.medium, size: 15, relativeTo: .body))
                         .foregroundStyle(theme.colors.statusGreen)
@@ -92,8 +93,10 @@ struct PermissionsStep: View {
                         Text("Open Settings")
                             .font(.custom(BlipFontName.medium, size: 14, relativeTo: .footnote))
                             .foregroundStyle(Color.blipAccentPurple)
+                            .accessibilityAddTraits(.isButton)
                     }
                     .frame(minHeight: BlipSizing.minTapTarget)
+                    .accessibilityHint("Opens the iOS Settings app for Blip.")
                 }
                 .padding(.horizontal, BlipSpacing.xl)
                 .padding(.bottom, BlipSpacing.md)
@@ -114,6 +117,7 @@ struct PermissionsStep: View {
                     }
                 }
                 .fullWidth()
+                .accessibilityHint(permissionGranted ? "Finishes onboarding and opens the app." : "Requests Bluetooth permission from iOS.")
 
                 if !permissionGranted && !permissionDenied {
                     Text("Required for Blip to work")
