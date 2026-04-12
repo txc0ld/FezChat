@@ -252,6 +252,7 @@ struct CreateProfileStep: View {
                         if isSendingCode {
                             ProgressView()
                                 .tint(Color.blipAccentPurple)
+                                .accessibilityLabel("Sending verification email")
                         } else {
                             Text("Verify")
                                 .font(.custom(BlipFontName.semiBold, size: 14, relativeTo: .footnote))
@@ -309,6 +310,7 @@ struct CreateProfileStep: View {
                 if isVerifyingCode {
                     ProgressView()
                         .tint(theme.colors.mutedText)
+                        .accessibilityLabel("Verifying code")
                 }
             }
 

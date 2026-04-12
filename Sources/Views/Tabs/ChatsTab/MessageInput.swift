@@ -181,7 +181,7 @@ struct MessageInput: View {
             if text.isEmpty {
                 Text("Message")
                     .font(theme.typography.body)
-                    .foregroundStyle(theme.colors.mutedText.opacity(0.6))
+                    .foregroundStyle(theme.colors.mutedText.opacity(0.8))
                     .padding(.horizontal, BlipSpacing.sm + 4)
                     .allowsHitTesting(false)
             }

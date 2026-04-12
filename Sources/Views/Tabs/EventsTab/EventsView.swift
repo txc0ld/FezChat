@@ -146,6 +146,7 @@ struct EventsView: View {
             // Out of range banner
             if !isInRange {
                 outOfRangeBanner
+                    .accessibilityLabel("You are out of range of this event. Limited access.")
             }
 
             // Loading indicator when event data is being fetched

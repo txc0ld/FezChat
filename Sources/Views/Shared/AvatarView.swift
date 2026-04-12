@@ -92,7 +92,7 @@ struct AvatarView: View {
                 .fill(initialsGradient)
                 .overlay(
                     Text(initials)
-                        .font(.system(size: size * 0.36, weight: .semibold, design: .rounded))
+                        .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                 )
         }

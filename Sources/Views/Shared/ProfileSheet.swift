@@ -110,6 +110,7 @@ struct ProfileSheet: View {
                             .stroke(colorScheme == .dark ? .black : .white, lineWidth: 2)
                     )
                     .offset(x: 28, y: 28)
+                    .accessibilityLabel("Online")
             }
         }
     }
