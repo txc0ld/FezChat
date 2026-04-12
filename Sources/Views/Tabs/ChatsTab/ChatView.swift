@@ -23,6 +23,7 @@ struct ChatView: View {
     @State private var showPhotoPicker = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var voiceNoteService = AudioService()
+    @State private var showDeleteConfirmation: Message?
 
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.theme) private var theme
@@ -87,7 +88,11 @@ struct ChatView: View {
                     }
                 ),
                 onSend: { trimmedText in
-                    Task { await sendMessage(text: trimmedText) }
+                    if chatViewModel?.editingMessage != nil {
+                        Task { await chatViewModel?.applyEdit(newText: trimmedText) }
+                    } else {
+                        Task { await sendMessage(text: trimmedText) }
+                    }
                 },
                 onAttachment: {
                     Task { await recordAndSendVoiceNote() }
@@ -109,6 +114,19 @@ struct ChatView: View {
                 onPTTEnd: {
                     isPTTRecording = false
                     pttAudioLevels = []
+                },
+                replyContext: chatViewModel?.replyTarget.map { msg in
+                    (
+                        senderName: msg.sender?.resolvedDisplayName ?? "Unknown",
+                        preview: String(data: msg.rawPayload, encoding: .utf8) ?? ""
+                    )
+                },
+                onClearReply: {
+                    chatViewModel?.clearReplyTarget()
+                },
+                isEditing: chatViewModel?.editingMessage != nil,
+                onCancelEdit: {
+                    chatViewModel?.cancelEditing()
                 }
             )
             .accessibilityValue(isRecordingVoiceNote ? "Recording voice note" : "")
@@ -121,6 +139,22 @@ struct ChatView: View {
             }
         }
         .toolbarBackground(.hidden, for: .navigationBar)
+        .alert(
+            "Delete message?",
+            isPresented: Binding(
+                get: { showDeleteConfirmation != nil },
+                set: { if !$0 { showDeleteConfirmation = nil } }
+            )
+        ) {
+            Button("Delete", role: .destructive) {
+                if let message = showDeleteConfirmation {
+                    Task { await chatViewModel?.deleteMessage(message) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This can't be undone.")
+        }
         .fullScreenCover(isPresented: $showImageViewer) {
             ImageViewer(imageData: selectedImageData, isPresented: $showImageViewer)
         }
@@ -248,18 +282,7 @@ struct ChatView: View {
 
                         // Messages in this date group
                         ForEach(Array(section.messages.enumerated()), id: \.element.id) { messageIndex, message in
-                            MessageBubble(
-                                message: message,
-                                index: messageIndex,
-                                onReply: {
-                                    // TODO: BDEV-136 — populate reply quote in MessageInput
-                                },
-                                onImageTap: {
-                                    selectedImageData = message.imageData
-                                    showImageViewer = true
-                                }
-                            )
-                            .id(message.id)
+                            messageBubble(for: message, at: messageIndex)
                         }
                     }
 
@@ -279,6 +302,30 @@ struct ChatView: View {
             .onAppear {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
+        }
+    }
+
+    // MARK: - Message Bubble
+
+    private func messageBubble(for message: ChatMessage, at index: Int) -> some View {
+        let messageID = message.id
+        return MessageBubble(
+            message: message,
+            index: index,
+            onReply: { findOriginal(messageID) { chatViewModel?.setReplyTarget($0) } },
+            onImageTap: {
+                selectedImageData = message.imageData
+                showImageViewer = true
+            },
+            onEdit: { findOriginal(messageID) { chatViewModel?.startEditing($0) } },
+            onDelete: { findOriginal(messageID) { showDeleteConfirmation = $0 } }
+        )
+        .id(message.id)
+    }
+
+    private func findOriginal(_ id: UUID, action: (Message) -> Void) {
+        if let original = chatViewModel?.activeMessages.first(where: { $0.id == id }) {
+            action(original)
         }
     }
 
@@ -330,11 +377,13 @@ struct ChatView: View {
                 senderAvatarData: message.sender?.avatarThumbnail,
                 isFromMe: message.sender == nil,
                 showSenderName: conversation.ringStyle == .none,
-                text: String(data: message.rawPayload, encoding: .utf8) ?? "",
+                text: message.isDeleted
+                    ? "Message deleted"
+                    : (String(data: message.rawPayload, encoding: .utf8) ?? ""),
                 contentType: message.type,
                 deliveryStatus: Self.mapDeliveryStatus(message.status),
                 timestamp: message.createdAt,
-                isEdited: false,
+                isEdited: message.isEdited,
                 replyPreview: message.replyTo.flatMap {
                     String(data: $0.rawPayload, encoding: .utf8)
                 },

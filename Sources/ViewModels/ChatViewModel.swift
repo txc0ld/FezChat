@@ -49,6 +49,9 @@ final class ChatViewModel {
     /// Selected message for reply threading.
     var replyTarget: Message?
 
+    /// Message currently being edited, if any.
+    var editingMessage: Message?
+
     // MARK: - Dependencies
 
     private let modelContainer: ModelContainer
@@ -573,16 +576,58 @@ final class ChatViewModel {
 
     // MARK: - Message Actions
 
-    /// Delete a message.
+    /// Mark a message as deleted locally.
     func deleteMessage(_ message: Message) async {
         let context = ModelContext(modelContainer)
-        context.delete(message)
         do {
+            let messageID = message.id
+            let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == messageID })
+            guard let localMessage = try context.fetch(descriptor).first else { return }
+            localMessage.isDeleted = true
+            localMessage.rawPayload = Data()
             try context.save()
-            activeMessages.removeAll { $0.id == message.id }
+            if let idx = activeMessages.firstIndex(where: { $0.id == messageID }) {
+                activeMessages[idx] = localMessage
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Begin editing a message (only own messages within 5 minutes).
+    func startEditing(_ message: Message) {
+        let fiveMinutesAgo = Date().addingTimeInterval(-300)
+        guard message.sender == nil, message.createdAt > fiveMinutesAgo else { return }
+        editingMessage = message
+        composingText = String(data: message.rawPayload, encoding: .utf8) ?? ""
+    }
+
+    /// Cancel edit mode.
+    func cancelEditing() {
+        editingMessage = nil
+        composingText = ""
+    }
+
+    /// Apply an edit to a message locally.
+    func applyEdit(newText: String) async {
+        guard let editing = editingMessage else { return }
+        let context = ModelContext(modelContainer)
+        do {
+            let editID = editing.id
+            let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == editID })
+            guard let localMessage = try context.fetch(descriptor).first else { return }
+            localMessage.rawPayload = newText.data(using: .utf8) ?? Data()
+            localMessage.isEdited = true
+            localMessage.editedAt = Date()
+            try context.save()
+            if let idx = activeMessages.firstIndex(where: { $0.id == editID }) {
+                activeMessages[idx] = localMessage
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        editingMessage = nil
+        composingText = ""
     }
 
     /// Set a message as the reply target.

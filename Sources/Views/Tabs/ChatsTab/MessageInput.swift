@@ -25,6 +25,18 @@ struct MessageInput: View {
     /// Called when PTT ends (finger up).
     var onPTTEnd: () -> Void = {}
 
+    /// Reply context: sender name and preview text for the reply bar.
+    var replyContext: (senderName: String, preview: String)?
+
+    /// Called when user dismisses the reply bar.
+    var onClearReply: () -> Void = {}
+
+    /// Whether the input is in edit mode.
+    var isEditing: Bool = false
+
+    /// Called when user cancels edit mode.
+    var onCancelEdit: () -> Void = {}
+
     @State private var isSendMode = false
     @State private var isPTTActive = false
     @State private var showAttachmentMenu = false
@@ -38,6 +50,16 @@ struct MessageInput: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Edit bar
+            if isEditing {
+                editBar
+            }
+
+            // Reply bar
+            if let reply = replyContext, !isEditing {
+                replyBar(senderName: reply.senderName, preview: reply.preview)
+            }
+
             // Input bar
             HStack(alignment: .bottom, spacing: BlipSpacing.sm) {
                 // Attachment button
@@ -53,6 +75,81 @@ struct MessageInput: View {
             .padding(.vertical, BlipSpacing.sm)
             .background(inputBackground)
         }
+    }
+
+    // MARK: - Edit Bar
+
+    private var editBar: some View {
+        HStack(spacing: BlipSpacing.sm) {
+            Image(systemName: "pencil")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.blipAccentPurple)
+
+            Text("Editing message")
+                .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
+                .foregroundStyle(Color.blipAccentPurple)
+
+            Spacer()
+
+            Button {
+                onCancelEdit()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.colors.mutedText)
+            }
+            .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
+            .accessibilityLabel("Cancel editing")
+        }
+        .padding(.horizontal, BlipSpacing.md)
+        .padding(.vertical, BlipSpacing.sm)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, BlipSpacing.md)
+        .padding(.top, BlipSpacing.xs)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .animation(SpringConstants.gentleAnimation, value: isEditing)
+    }
+
+    // MARK: - Reply Bar
+
+    private func replyBar(senderName: String, preview: String) -> some View {
+        HStack(spacing: BlipSpacing.sm) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.blipAccentPurple)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Replying to \(senderName)")
+                    .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
+                    .foregroundStyle(Color.blipAccentPurple)
+
+                Text(preview)
+                    .font(.custom(BlipFontName.regular, size: 13, relativeTo: .caption))
+                    .foregroundStyle(theme.colors.mutedText)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button {
+                onClearReply()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.colors.mutedText)
+            }
+            .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
+            .accessibilityLabel("Dismiss reply")
+        }
+        .padding(.horizontal, BlipSpacing.md)
+        .padding(.vertical, BlipSpacing.sm)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, BlipSpacing.md)
+        .padding(.top, BlipSpacing.xs)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .animation(SpringConstants.gentleAnimation, value: replyContext?.senderName)
     }
 
     // MARK: - Attachment Button
@@ -133,6 +230,7 @@ struct MessageInput: View {
                     guard !trimmed.isEmpty else { return }
                     onSend(trimmed)
                     text = ""
+                    onClearReply()
                 }
             } else {
                 // PTT hold button
