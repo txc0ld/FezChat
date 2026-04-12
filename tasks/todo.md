@@ -133,3 +133,10 @@
 - [x] Branch Friend Finder packet handling for `.proximityPing`.
 - [x] Send a proximity ping when the Friend Finder map initializes.
 - [x] Run the simulator build and `swift test --package-path Packages/BlipProtocol`.
+
+## BDEV-220 Friend Finder Map Polish
+
+- [x] Replace Friend Finder hex display names with usernames where available and assign stable friend colors.
+- [x] Add a friend detail GlassCard with navigate and dismiss actions.
+- [x] Add beacon-drop confirmation and guard location sharing when GPS is unavailable.
+- [x] Run the simulator build.
