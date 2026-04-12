@@ -47,6 +47,9 @@ final class Message {
     var fragmentTotal: Int?
     var isRelayed: Bool
     var hopCount: Int
+    var isEdited: Bool
+    var isDeleted: Bool
+    var editedAt: Date?
     var createdAt: Date
     var expiresAt: Date?
 
@@ -91,6 +94,9 @@ final class Message {
         fragmentTotal: Int? = nil,
         isRelayed: Bool = false,
         hopCount: Int = 0,
+        isEdited: Bool = false,
+        isDeleted: Bool = false,
+        editedAt: Date? = nil,
         createdAt: Date = Date(),
         expiresAt: Date? = nil
     ) {
@@ -106,6 +112,9 @@ final class Message {
         self.fragmentTotal = fragmentTotal
         self.isRelayed = isRelayed
         self.hopCount = hopCount
+        self.isEdited = isEdited
+        self.isDeleted = isDeleted
+        self.editedAt = editedAt
         self.createdAt = createdAt
         self.expiresAt = expiresAt
     }
