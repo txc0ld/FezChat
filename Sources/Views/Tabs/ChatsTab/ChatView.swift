@@ -24,6 +24,9 @@ struct ChatView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var voiceNoteService = AudioService()
     @State private var showDeleteConfirmation: Message?
+    @State private var isNearBottom = true
+    @State private var unseenMessageCount = 0
+    @State private var scrollProxy: ScrollViewProxy?
 
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.theme) private var theme
@@ -286,23 +289,71 @@ struct ChatView: View {
                         }
                     }
 
-                    // Anchor for auto-scroll
+                    // Anchor for auto-scroll + bottom detection
                     Color.clear
                         .frame(height: 1)
                         .id("bottom")
+                        .onAppear { isNearBottom = true; unseenMessageCount = 0 }
+                        .onDisappear { isNearBottom = false }
                 }
                 .padding(.vertical, BlipSpacing.md)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: messages.count) { _, _ in
-                withAnimation(SpringConstants.accessibleMessage) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+            .onChange(of: messages.count) { oldCount, newCount in
+                if isNearBottom {
+                    withAnimation(SpringConstants.accessibleMessage) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                } else {
+                    let newMessages = newCount - oldCount
+                    if newMessages > 0 {
+                        unseenMessageCount += newMessages
+                    }
                 }
             }
             .onAppear {
+                scrollProxy = proxy
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
+        .overlay(alignment: .bottom) {
+            if !isNearBottom {
+                jumpToLatestButton
+                    .padding(.bottom, BlipSpacing.md)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(SpringConstants.gentleAnimation, value: isNearBottom)
+            }
+        }
+    }
+
+    private var jumpToLatestButton: some View {
+        Button {
+            withAnimation(SpringConstants.accessibleMessage) {
+                scrollProxy?.scrollTo("bottom", anchor: .bottom)
+            }
+            unseenMessageCount = 0
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                if unseenMessageCount > 0 {
+                    Text("\(unseenMessageCount) new")
+                        .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
+                }
+            }
+            .foregroundStyle(Color.blipAccentPurple)
+            .padding(.horizontal, BlipSpacing.md)
+            .padding(.vertical, BlipSpacing.sm)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.blipAccentPurple.opacity(0.3), lineWidth: 0.5)
+            )
+        }
+        .accessibilityLabel(unseenMessageCount > 0
+            ? "\(unseenMessageCount) new messages. Jump to latest."
+            : "Jump to latest message")
     }
 
     // MARK: - Message Bubble
