@@ -103,3 +103,33 @@
 - [x] Fix invalid-threshold fragment splitting behavior in `Packages/BlipProtocol/Sources/FragmentSplitter.swift`.
 - [x] Tighten `PacketPadding` visibility/docs and add regression coverage for documented boundary behavior.
 - [x] Run `swift test --package-path Packages/BlipProtocol`.
+
+## BDEV-237 Transport Delivery Failure
+
+- [x] Add `didFailDelivery` to the transport delegate contract and trigger it from `TransportCoordinator` after retry exhaustion.
+- [x] Bridge transport failures through `AppCoordinator` and post `.didFailMessageDelivery`.
+- [x] Mark matching `Message` records as `.failed` in `MessageService` and surface the status in chat UI.
+- [x] Add a BlipMesh regression test for retry exhaustion and run `swift test --package-path Packages/BlipMesh`.
+- [x] Run the simulator build.
+
+## BDEV-239 TestFlight Deploy Pipeline
+
+- [x] Add `.github/workflows/deploy-testflight.yml` with manual dispatch + `main` push triggers.
+- [x] Add `ExportOptions.plist` for App Store Connect export.
+- [x] Validate required signing / App Store Connect secrets up front and clean up temp credentials on failure.
+- [x] Verify the workflow YAML parses locally.
+
+## BDEV-221 RSSI Friend Finder Bridge
+
+- [x] Add shared `RSSIDistance` utility and regenerate the Xcode project.
+- [x] Replace Nearby peer-card RSSI formatting with the shared helper.
+- [x] Bridge `PeerStore` RSSI into `FriendFinderViewModel` and add `rssiMeters` to `FriendMapPin`.
+- [x] Make Friend Finder pin sizing RSSI-aware.
+- [x] Run `xcodegen generate`, the simulator build, and `swift test --package-path Packages/BlipProtocol`.
+
+## BDEV-222 Proximity Ping
+
+- [x] Add `ProximityPingPayload` to `BlipProtocol` and extend protocol tests.
+- [x] Branch Friend Finder packet handling for `.proximityPing`.
+- [x] Send a proximity ping when the Friend Finder map initializes.
+- [x] Run the simulator build and `swift test --package-path Packages/BlipProtocol`.
