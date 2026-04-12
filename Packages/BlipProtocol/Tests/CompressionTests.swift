@@ -286,4 +286,11 @@ struct PaddingTests {
         // 1800 can reach 2048 with 248 padding
         #expect(PacketPadding.paddedSize(for: 1800) == 2048)
     }
+
+    @Test("paddedSize overflows exact higher-tier boundaries")
+    func paddedSizeExactTierOverflow() {
+        #expect(PacketPadding.paddedSize(for: 512) == 768)
+        #expect(PacketPadding.paddedSize(for: 1024) == 1280)
+        #expect(PacketPadding.paddedSize(for: 2048) == 2304)
+    }
 }

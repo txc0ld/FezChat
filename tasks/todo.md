@@ -96,3 +96,10 @@
 
 - [x] Fix BDEV-231 500-response detail leaks and verify with `npm test` plus `grep -n '"detail"'`.
 - [x] Fix the non-overlapping BDEV-233 challenge IP/rate-limit work and verify with `npm test`.
+
+## BDEV-236 Protocol Correctness
+
+- [x] Fix compression truncation handling in `Packages/BlipProtocol/Sources/Compression.swift`.
+- [x] Fix invalid-threshold fragment splitting behavior in `Packages/BlipProtocol/Sources/FragmentSplitter.swift`.
+- [x] Tighten `PacketPadding` visibility/docs and add regression coverage for documented boundary behavior.
+- [x] Run `swift test --package-path Packages/BlipProtocol`.

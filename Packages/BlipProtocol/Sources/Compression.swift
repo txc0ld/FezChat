@@ -88,7 +88,7 @@ public enum PayloadCompressor {
             )
         }
 
-        guard compressedSize > 0 else { return nil }
+        guard compressedSize > 0, compressedSize < destinationCapacity else { return nil }
         return Data(bytes: destinationBuffer, count: compressedSize)
     }
 

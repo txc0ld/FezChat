@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 import Security
 
 /// Fragment header layout:
@@ -61,6 +62,7 @@ public struct Fragment: Sendable, Equatable {
 /// - Fragment header: fragmentID (4B) + index (2B) + total (2B) = 8 bytes
 /// - Fragment TTL: capped at 5 hops
 public enum FragmentSplitter {
+    private static let logger = Logger(subsystem: "com.blip", category: "FragmentSplitter")
 
     /// Default fragmentation threshold (worst case: addressed + signed).
     public static let threshold = Packet.fragmentationThreshold
@@ -85,7 +87,17 @@ public enum FragmentSplitter {
     ///   a single-element array is returned.
     public static func split(_ payload: Data, threshold: Int = FragmentSplitter.threshold) -> [Fragment] {
         let maxChunkSize = threshold - headerOverhead
-        guard maxChunkSize > 0 else { return [] }
+        guard maxChunkSize > 0 else {
+            logger.error(
+                "FragmentSplitter: threshold \(threshold, privacy: .public) <= headerOverhead \(headerOverhead, privacy: .public), wrapping as single fragment"
+            )
+            return [Fragment(
+                fragmentID: generateFragmentID(),
+                index: 0,
+                total: 1,
+                data: payload
+            )]
+        }
 
         // If it fits, still wrap it in a single fragment for consistency at the wire level.
         // But callers should check `needsFragmentation` first and skip this for efficiency.

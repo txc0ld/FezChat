@@ -84,6 +84,17 @@ struct FragmentSplitterTests {
     func maxTTL() {
         #expect(FragmentSplitter.maxFragmentTTL == 5)
     }
+
+    @Test("Invalid threshold wraps payload as single fragment")
+    func invalidThresholdStillWrapsPayload() {
+        let payload = Data(repeating: 0xAB, count: 32)
+        let fragments = FragmentSplitter.split(payload, threshold: FragmentHeader.size)
+
+        #expect(fragments.count == 1)
+        #expect(fragments[0].index == 0)
+        #expect(fragments[0].total == 1)
+        #expect(fragments[0].data == payload)
+    }
 }
 
 @Suite("Fragment serialization")

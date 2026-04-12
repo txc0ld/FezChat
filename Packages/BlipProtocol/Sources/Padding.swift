@@ -75,10 +75,11 @@ public enum PacketPadding {
 
     /// Compute the padded size for a given data length.
     ///
-    /// Within the tier system (0-2048), returns the smallest tier boundary that
-    /// leaves padding in [1, 256].
+    /// Within the tier system (0-2048), returns the smallest size whose padding
+    /// stays in the supported `[1, 256]` range.
+    /// Exact tier boundaries therefore overflow to the next 256-byte step rather
+    /// than staying on the same tier, because zero-length padding is not valid.
     /// Beyond 2048, rounds up to the next multiple of 256.
-    /// Padding is always in [1, 256].
     public static func paddedSize(for dataLength: Int) -> Int {
         // Check tier boundaries
         for size in blockSizes {
@@ -98,7 +99,9 @@ public enum PacketPadding {
     ///
     /// Returns the smallest block size that is >= dataLength.
     /// If dataLength exceeds 2048, rounds up to the next multiple of 2048.
-    public static func nextBlockSize(for dataLength: Int) -> Int {
+    /// This helper does not account for the `[1, 256]` padding constraint that
+    /// `paddedSize(for:)` applies, so exact tier boundaries can differ.
+    static func nextBlockSize(for dataLength: Int) -> Int {
         for size in blockSizes {
             if dataLength <= size {
                 return size
