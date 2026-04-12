@@ -84,3 +84,15 @@
 - [x] Inspect `sendTypingIndicator` and confirm it skips the fresh-context channel re-fetch used by other send paths.
 - [x] Re-fetch the `Channel` in a fresh `ModelContext` after debounce and pass that local instance into `encryptAndSend`.
 - [x] Run package tests, the simulator build, then push the branch, open the PR, and post the `#blip-dev` update.
+
+## Critical Alpha Blockers
+
+- [x] Fix BDEV-230 in `FragmentAssembler` and verify `swift test --package-path Packages/BlipProtocol`.
+- [x] Fix BDEV-228 attachment action routing and verify the simulator build.
+- [x] Fix BDEV-227 avatar crop image flow and verify the simulator build.
+- [x] Fix BDEV-226 background message notifications and verify the simulator build.
+
+## Auth Hardening Lane
+
+- [x] Fix BDEV-231 500-response detail leaks and verify with `npm test` plus `grep -n '"detail"'`.
+- [x] Fix the non-overlapping BDEV-233 challenge IP/rate-limit work and verify with `npm test`.
