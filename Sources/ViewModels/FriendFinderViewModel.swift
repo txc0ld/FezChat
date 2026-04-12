@@ -147,6 +147,7 @@ final class FriendFinderViewModel {
         let userCoord = userLocation
 
         friends = peerLocations.values.map { entry in
+            let peerInfo = PeerStore.shared.findPeer(byPeerIDBytes: entry.peerID.bytes)
             let coord = CLLocationCoordinate2D(
                 latitude: entry.payload.latitude,
                 longitude: entry.payload.longitude
@@ -157,9 +158,8 @@ final class FriendFinderViewModel {
                     .distance(from: CLLocation(latitude: coord.latitude, longitude: coord.longitude))
             }
             let rssiMeters: Double? = {
-                let info = PeerStore.shared.findPeer(byPeerIDBytes: entry.peerID.bytes)
-                guard let info, info.hasSignalData else { return nil }
-                return RSSIDistance.meters(fromRSSI: info.rssi)
+                guard let peerInfo, peerInfo.hasSignalData else { return nil }
+                return RSSIDistance.meters(fromRSSI: peerInfo.rssi)
             }()
 
             let precision: LocationPinPrecision
@@ -173,10 +173,11 @@ final class FriendFinderViewModel {
 
             return FriendMapPin(
                 id: stableUUID(for: entry.peerID),
-                displayName: String(entry.peerID.description.prefix(8)),
+                displayName: peerInfo?.username
+                    ?? String(entry.peerID.description.prefix(8)),
                 coordinate: coord,
                 precision: precision,
-                color: .blue,
+                color: stableColor(for: entry.peerID),
                 lastUpdated: entry.receivedAt,
                 accuracyMeters: accuracy,
                 distanceFromUser: distance,
@@ -328,6 +329,11 @@ final class FriendFinderViewModel {
             bytes[8], bytes[9], bytes[10], bytes[11],
             bytes[12], bytes[13], bytes[14], bytes[15]
         ))
+    }
+
+    private func stableColor(for peerID: PeerID) -> Color {
+        let palette: [Color] = [.blue, .green, .orange, .pink, .purple, .teal, .indigo, .mint]
+        return palette[Int(peerID.bytes[0]) % palette.count]
     }
 }
 

@@ -17,6 +17,7 @@ struct FriendFinderMapView: View {
     @State private var isSharingLocation = false
     @State private var selectedFriend: FriendMapPin? = nil
     @State private var showFriendList = true
+    @State private var showBeaconConfirm = false
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var sharingPulse = false
     @State private var currentUserLocation: CLLocationCoordinate2D? = nil
@@ -65,6 +66,12 @@ struct FriendFinderMapView: View {
         .onDisappear {
             stopLocationRefresh()
         }
+        .alert("Drop Beacon", isPresented: $showBeaconConfirm) {
+            Button("Drop Here") { performDropBeacon() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Share your current location as a beacon. It will expire in 30 minutes.")
+        }
     }
 
     // MARK: - Map Layer
@@ -109,6 +116,15 @@ struct FriendFinderMapView: View {
             MapScaleView()
         }
         .ignoresSafeArea(edges: .bottom)
+        .overlay(alignment: .bottom) {
+            if let selectedFriend {
+                friendDetailCard(for: selectedFriend)
+                    .padding(.horizontal, BlipSpacing.sm)
+                    .padding(.bottom, showFriendList ? 260 : BlipSpacing.sm)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(SpringConstants.accessiblePageEntrance, value: selectedFriend?.id)
     }
 
     // MARK: - User Pin
@@ -175,7 +191,7 @@ struct FriendFinderMapView: View {
 
             // Drop beacon
             mapButton(icon: "mappin.and.ellipse", label: "Drop beacon", isAccent: true) {
-                dropBeacon()
+                showBeaconConfirm = true
             }
 
             // Toggle friend list
@@ -392,6 +408,70 @@ struct FriendFinderMapView: View {
         }
     }
 
+    @ViewBuilder
+    private func friendDetailCard(for friend: FriendMapPin) -> some View {
+        GlassCard(thickness: .thick, cornerRadius: BlipCornerRadius.xl) {
+            HStack(spacing: BlipSpacing.md) {
+                AvatarView(
+                    imageData: friend.avatarData,
+                    name: friend.displayName,
+                    size: BlipSizing.avatarSmall,
+                    ringStyle: .friend,
+                    showOnlineIndicator: !friend.isOutOfRange
+                )
+
+                VStack(alignment: .leading, spacing: BlipSpacing.xs) {
+                    Text(friend.displayName)
+                        .font(theme.typography.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(theme.colors.text)
+
+                    HStack(spacing: BlipSpacing.xs) {
+                        Text(friend.lastSeenText)
+                            .font(theme.typography.caption)
+                            .foregroundStyle(theme.colors.mutedText)
+
+                        if let distance = friend.distanceText {
+                            Text("·")
+                                .foregroundStyle(theme.colors.mutedText)
+                            Text(distance)
+                                .font(theme.typography.caption)
+                                .foregroundStyle(theme.colors.mutedText)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                Button {
+                    let item = MKMapItem(placemark: MKPlacemark(coordinate: friend.coordinate))
+                    item.name = friend.displayName
+                    item.openInMaps(launchOptions: [
+                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
+                    ])
+                } label: {
+                    Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
+                        .background(Circle().fill(LinearGradient.blipAccent))
+                }
+                .accessibilityLabel("Navigate to \(friend.displayName)")
+
+                Button {
+                    selectedFriend = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(theme.colors.mutedText)
+                        .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
+                }
+                .accessibilityLabel("Close")
+            }
+            .padding(BlipSpacing.md)
+        }
+    }
+
     private func statusBanner(icon: String, title: String, tint: Color) -> some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: icon)
@@ -471,6 +551,10 @@ struct FriendFinderMapView: View {
     }
 
     private func toggleLocationSharing() {
+        if !isSharingLocation && resolvedUserLocation == nil {
+            return
+        }
+
         withAnimation(SpringConstants.accessiblePageEntrance) {
             isSharingLocation.toggle()
         }
@@ -483,7 +567,7 @@ struct FriendFinderMapView: View {
         }
     }
 
-    private func dropBeacon() {
+    private func performDropBeacon() {
         guard friendFinderViewModel != nil else {
             guard let resolvedUserLocation else { return }
             withAnimation(SpringConstants.accessiblePageEntrance) {
