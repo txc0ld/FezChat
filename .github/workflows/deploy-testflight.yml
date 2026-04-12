@@ -163,7 +163,7 @@ jobs:
             OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -strict-concurrency=minimal' \
             -quiet
 
-      - name: Export IPA
+      - name: Export and upload to TestFlight
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -176,27 +176,7 @@ jobs:
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            -quiet
-
-      - name: Upload to TestFlight
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-        run: |
-          set -euo pipefail
-          ipa_path=$(find "$EXPORT_PATH" -maxdepth 1 -name '*.ipa' -print -quit)
-          if [ -z "$ipa_path" ]; then
-            echo "::error::No IPA produced in $EXPORT_PATH"
-            exit 1
-          fi
-
-          xcrun altool \
-            --upload-app \
-            --type ios \
-            --file "$ipa_path" \
-            --apiKey "$ASC_KEY_ID" \
-            --apiIssuer "$ASC_ISSUER_ID"
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       - name: Cleanup signing material
         if: always()
