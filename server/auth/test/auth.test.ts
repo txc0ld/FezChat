@@ -9,6 +9,56 @@ vi.mock("@neondatabase/serverless", () => ({
     const users = ((globalThis as any).__blipAuthMockUsers ??= []) as MockUser[];
     const normalized = strings.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
 
+    if (normalized.includes("insert into users (email_hash, username, is_verified, created_at, noise_public_key, signing_public_key)")) {
+      const emailHash = values[0] as string;
+      const username = values[1] as string;
+      const createdAt = values[2] as string;
+      const noisePublicKey = values[3] as Uint8Array | null;
+      const signingPublicKey = values[4] as Uint8Array | null;
+
+      const existingUser = users.find((candidate) => candidate.email_hash === emailHash);
+      if (existingUser) {
+        existingUser.username = username;
+        existingUser.noise_public_key = noisePublicKey ?? existingUser.noise_public_key;
+        existingUser.signing_public_key = signingPublicKey ?? existingUser.signing_public_key;
+        existingUser.is_verified = false;
+        existingUser.updated_at = new Date().toISOString();
+        return [{ id: existingUser.id }];
+      }
+
+      const user: MockUser = {
+        id: crypto.randomUUID(),
+        email_hash: emailHash,
+        username,
+        is_verified: false,
+        message_balance: 0,
+        last_active_at: null,
+        created_at: createdAt,
+        updated_at: new Date().toISOString(),
+        noise_public_key: noisePublicKey,
+        signing_public_key: signingPublicKey,
+      };
+      users.push(user);
+      return [{ id: user.id }];
+    }
+
+    if (normalized.includes("update users set") && normalized.includes("where username =")) {
+      const emailHash = values[0] as string;
+      const noisePublicKey = values[1] as Uint8Array | null;
+      const signingPublicKey = values[2] as Uint8Array | null;
+      const username = values[3] as string;
+      const user = users.find((candidate) => candidate.username === username);
+      if (!user) {
+        return [];
+      }
+      user.email_hash = emailHash;
+      user.noise_public_key = noisePublicKey ?? user.noise_public_key;
+      user.signing_public_key = signingPublicKey ?? user.signing_public_key;
+      user.is_verified = false;
+      user.updated_at = new Date().toISOString();
+      return [{ id: user.id }];
+    }
+
     if (normalized.includes("select id, noise_public_key, signing_public_key from users where noise_public_key =")) {
       const requestedKey = values[0] as Uint8Array;
       return users
@@ -463,6 +513,16 @@ describe("POST /v1/auth/verify-code", () => {
 });
 
 describe("POST /v1/users/register challenge verification", () => {
+  it("rejects registration without required public keys", async () => {
+    const res = await request("POST", "/v1/users/register", {
+      emailHash: "a".repeat(64),
+      username: "alice",
+    });
+
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toContain("Missing noisePublicKey or signingPublicKey");
+  });
+
   it("rejects key registration without challenge and signature", async () => {
     const res = await request("POST", "/v1/users/register", {
       emailHash: "a".repeat(64),
@@ -517,6 +577,44 @@ describe("POST /v1/users/register challenge verification", () => {
 
     const storedChallenge = await env.CODES.get(`challenge:${challenge}`);
     expect(storedChallenge).toBeNull();
+  });
+
+  it("accepts a valid registration with keys, challenge, and signature", async () => {
+    (env as Record<string, unknown>).DATABASE_URL = "mock://db";
+
+    const challengeResponse = await request(
+      "POST",
+      "/v1/auth/challenge",
+      {},
+      { "CF-Connecting-IP": "203.0.113.41" }
+    );
+    const challengeBody = await json(challengeResponse);
+    const challenge = challengeBody.challenge as string;
+
+    const signingKeyPair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const signingPublicKey = new Uint8Array(await crypto.subtle.exportKey("raw", signingKeyPair.publicKey));
+    const noisePublicKey = crypto.getRandomValues(new Uint8Array(32));
+    const signature = await crypto.subtle.sign("Ed25519", signingKeyPair.privateKey, hexToBytes(challenge));
+
+    const res = await request("POST", "/v1/users/register", {
+      emailHash: "b".repeat(64),
+      username: "alice",
+      noisePublicKey: bytesToHex(noisePublicKey),
+      signingPublicKey: bytesToHex(signingPublicKey),
+      challenge,
+      signature: bytesToHex(signature),
+    });
+
+    expect(res.status).toBe(200);
+    expect(typeof (await json(res)).userId).toBe("string");
+    expect(mockUsers()).toContainEqual(
+      expect.objectContaining({
+        email_hash: "b".repeat(64),
+        username: "alice",
+        noise_public_key: noisePublicKey,
+        signing_public_key: signingPublicKey,
+      })
+    );
   });
 });
 
@@ -725,6 +823,34 @@ describe("input hardening", () => {
       challenge: "c".repeat(64),
       signature: "d".repeat(128),
     });
+  });
+
+  it("rejects registration payloads with usernames longer than 30 characters", async () => {
+    const res = await request("POST", "/v1/users/register", {
+      emailHash: "a".repeat(64),
+      username: "a".repeat(31),
+      noisePublicKey: "1".repeat(64),
+      signingPublicKey: "2".repeat(64),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects oversized request bodies", async () => {
+    const req = new Request("http://localhost/v1/users/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emailHash: "a".repeat(64),
+        username: "alice",
+        padding: "x".repeat(20_000),
+      }),
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(req, env as unknown as WorkerEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(res.status).toBe(400);
   });
 
   it("sanitizes sync payloads and ignores privileged fields", () => {

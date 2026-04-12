@@ -109,6 +109,8 @@ const DEFAULT_REFRESH_GRACE_SECONDS = 300;
 const TOKEN_TIMESTAMP_TOLERANCE_MS = 60_000;
 const NOISE_PUBLIC_KEY_LENGTH = 32;
 const ED25519_SIGNATURE_LENGTH = 64;
+const MAX_USERNAME_LENGTH = 30;
+const MAX_BODY_BYTES = 16_384;
 
 function corsHeaders(env: Env): Record<string, string> {
   return {
@@ -638,10 +640,13 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
   if (!body) {
     return json({ error: "Missing emailHash or username" }, 400, env);
   }
-  const noiseKey = body.noisePublicKey ? hexToBytes(body.noisePublicKey) : null;
-  const signingKey = body.signingPublicKey ? hexToBytes(body.signingPublicKey) : null;
+  if (!body.noisePublicKey || !body.signingPublicKey) {
+    return json({ error: "Missing noisePublicKey or signingPublicKey" }, 400, env);
+  }
+  const noiseKey = hexToBytes(body.noisePublicKey);
+  const signingKey = hexToBytes(body.signingPublicKey);
 
-  if (body.noisePublicKey && body.signingPublicKey) {
+  {
     if (!body.challenge || !body.signature) {
       return json({ error: "Missing challenge or signature" }, 400, env);
     }
@@ -1113,7 +1118,12 @@ export function sanitizeRegisterBody(
   const emailHash = body.emailHash.trim().toLowerCase();
   const username = body.username.trim();
 
-  if (!emailHash || !username || !isValidEmailHash(emailHash)) {
+  if (
+    !emailHash ||
+    !username ||
+    username.length > MAX_USERNAME_LENGTH ||
+    !isValidEmailHash(emailHash)
+  ) {
     return null;
   }
 
@@ -1147,8 +1157,20 @@ export function sanitizeSyncBody(
 }
 
 async function parseBody<T>(request: Request): Promise<T | null> {
+  const contentLengthHeader = request.headers.get("Content-Length");
+  if (contentLengthHeader !== null) {
+    const contentLength = Number.parseInt(contentLengthHeader, 10);
+    if (!Number.isNaN(contentLength) && contentLength > MAX_BODY_BYTES) {
+      return null;
+    }
+  }
+
   try {
-    return (await request.json()) as T;
+    const text = await request.text();
+    if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
+      return null;
+    }
+    return JSON.parse(text) as T;
   } catch {
     return null;
   }
