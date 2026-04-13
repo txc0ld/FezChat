@@ -33,3 +33,20 @@ CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- Push notification device tokens
+CREATE TABLE IF NOT EXISTS device_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token VARCHAR(200) NOT NULL,
+    platform VARCHAR(10) NOT NULL DEFAULT 'ios',
+    bundle_id VARCHAR(100) NOT NULL DEFAULT 'au.heyblip.Blip',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(token)
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens(user_id);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS peer_id_hex VARCHAR(16);
+CREATE INDEX IF NOT EXISTS idx_users_peer_id_hex ON users(peer_id_hex);
