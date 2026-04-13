@@ -136,19 +136,30 @@ extension MessageService {
         }
         try await sendPacket(packet)
 
-        // Create or update local Friend record for the remote peer
+        // Create or update local Friend record for the remote peer.
+        // This is best-effort — the packet is already sent/queued above,
+        // so a SwiftData failure here should NOT propagate to the caller.
         let peerData = peerID.bytes
-        if let peerInfo = peerStore.findPeer(byPeerIDBytes: peerData) {
-            let remoteUser = try resolveOrCreateUser(for: peerInfo, context: context)
-            try createOrUpdateFriend(
-                user: remoteUser,
-                status: .pending,
-                direction: .outgoing,
-                context: context
-            )
-        } else {
+        do {
+            if let peerInfo = peerStore.findPeer(byPeerIDBytes: peerData) {
+                let remoteUser = try resolveOrCreateUser(for: peerInfo, context: context)
+                try createOrUpdateFriend(
+                    user: remoteUser,
+                    status: .pending,
+                    direction: .outgoing,
+                    context: context
+                )
+            } else {
+                let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+                DebugLogger.shared.log("TX", "FRIEND_REQ: no PeerInfo for \(shortID) — Friend record not created locally")
+            }
+        } catch {
             let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
-            DebugLogger.shared.log("TX", "FRIEND_REQ: no PeerInfo for \(shortID) — Friend record not created locally")
+            DebugLogger.shared.log(
+                "DB",
+                "FRIEND_REQ: local Friend record creation failed for \(shortID): \(error.localizedDescription)",
+                isError: true
+            )
         }
 
         let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()

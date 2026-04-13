@@ -93,6 +93,14 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     /// Whether auto-reconnect is enabled.
     private var autoReconnect = false
 
+    /// Monotonic counter incremented each time a new WebSocket task is created.
+    /// Used to detect and silently drop stale receive callbacks from old tasks.
+    private var connectionGeneration: UInt64 = 0
+
+    /// Whether a reconnection is currently scheduled. Prevents duplicate
+    /// reconnections when both didCloseWith and receiveNextMessage fire.
+    private var isReconnectScheduled = false
+
     private let lock = NSLock()
     private let queue = DispatchQueue(label: "com.blip.websocket", qos: .userInitiated)
     private let logger = Logger(subsystem: "com.blip", category: "WebSocket")
@@ -145,6 +153,9 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
 
     public func stop() {
         autoReconnect = false
+        lock.withLock {
+            isReconnectScheduled = false
+        }
         disconnect()
         state = .stopped
     }
@@ -181,6 +192,9 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     // MARK: - Connection management
 
     private func connect() {
+        lock.withLock {
+            isReconnectScheduled = false
+        }
         state = .starting
         Task { [weak self] in
             guard let self else { return }
@@ -202,6 +216,16 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     private func openWebSocket(using token: String) {
         guard autoReconnect || state == .starting else { return }
 
+        // Cancel any old task to prevent ghost receive callbacks.
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+
+        // Increment the generation counter so stale callbacks from the old
+        // task are silently dropped.
+        lock.withLock {
+            connectionGeneration += 1
+        }
+
         var request = URLRequest(url: self.relayURL)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(localPeerID.description, forHTTPHeaderField: "X-Peer-ID")
@@ -210,7 +234,10 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
         webSocketTask = task
         task.resume()
 
-        receiveNextMessage()
+        // NOTE: receiveNextMessage() is NOT called here. It is started from
+        // handleConnectionEstablished() after the relay confirms registration.
+        // Calling it before the handshake completes causes a race where the
+        // receive callback fires with failure before the connection opens.
         logger.info("WebSocket connecting to \(self.relayURL)")
     }
 
@@ -224,14 +251,19 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     }
 
     private func handleConnectionEstablished() {
-        lock.withLock {
+        let generation: UInt64 = lock.withLock {
             isConnected = true
             reconnectAttempts = 0
             currentReconnectDelay = Self.minReconnectDelay
+            isReconnectScheduled = false
+            return connectionGeneration
         }
 
         state = .running
         delegate?.transport(self, didConnect: serverPeerID)
+
+        // Start the receive loop now that the relay has confirmed registration.
+        receiveNextMessage(generation: generation)
         logger.info("WebSocket connected")
     }
 
@@ -261,19 +293,23 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     private func handleExpiredToken() {
         logger.info("WebSocket token expired, requesting refresh")
 
+        // Cancel the old task to prevent ghost receive callbacks from
+        // triggering a parallel handleConnectionLost.
+        webSocketTask?.cancel(with: .normalClosure, reason: nil)
+        webSocketTask = nil
+
+        lock.withLock {
+            isConnected = false
+        }
+
         Task { [weak self] in
             guard let self else { return }
 
             do {
                 try await self.tokenRefreshHandler?()
+                self.logger.info("WebSocket token refresh succeeded")
             } catch {
                 self.logger.error("WebSocket token refresh failed: \(error.localizedDescription)")
-            }
-
-            self.lock.withLock {
-                self.reconnectAttempts = 0
-                self.currentReconnectDelay = Self.minReconnectDelay
-                self.isConnected = false
             }
 
             guard self.autoReconnect else {
@@ -281,27 +317,33 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
                 return
             }
 
-            self.queue.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                guard let self, self.autoReconnect else { return }
-                self.connect()
-            }
+            // Use the same exponential backoff as normal reconnections.
+            // Do NOT reset reconnectAttempts — only handleConnectionEstablished
+            // resets the backoff counter (when a connection actually succeeds).
+            self.scheduleReconnect()
         }
     }
 
     private func scheduleReconnect() {
         let (delay, shouldRetry): (TimeInterval, Bool) = lock.withLock {
+            // Prevent duplicate reconnections from racing callbacks.
+            guard !isReconnectScheduled else { return (0, false) }
             reconnectAttempts += 1
             guard reconnectAttempts <= Self.maxReconnectAttempts else {
                 return (0, false)
             }
+            isReconnectScheduled = true
             let d = currentReconnectDelay
             currentReconnectDelay = min(currentReconnectDelay * 2, Self.maxReconnectDelay)
             return (d, true)
         }
 
         guard shouldRetry else {
-            logger.error("WebSocket max reconnect attempts reached")
-            state = .failed("Max reconnect attempts reached")
+            let attempts = lock.withLock { reconnectAttempts }
+            if attempts > Self.maxReconnectAttempts {
+                logger.error("WebSocket max reconnect attempts reached")
+                state = .failed("Max reconnect attempts reached")
+            }
             return
         }
 
@@ -316,14 +358,18 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
 
     // MARK: - Message receiving
 
-    private func receiveNextMessage() {
+    private func receiveNextMessage(generation: UInt64) {
         webSocketTask?.receive { [weak self] result in
-            guard let self = self else { return }
+            guard let self else { return }
+
+            // Drop stale callbacks from old WebSocket tasks.
+            let current = self.lock.withLock { self.connectionGeneration }
+            guard generation == current else { return }
 
             switch result {
             case .success(let message):
                 self.handleMessage(message)
-                self.receiveNextMessage() // Continue receiving.
+                self.receiveNextMessage(generation: generation)
 
             case .failure(let error):
                 self.handleConnectionLost(error: error)
@@ -334,12 +380,6 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
         switch message {
         case .data(let data):
-            // First connection response confirms we're connected.
-            let connected: Bool = lock.withLock { isConnected }
-            if !connected {
-                handleConnectionEstablished()
-            }
-
             // Extract the actual sender PeerID from the packet header (bytes 16-23).
             // This ensures handshake sessions, sender binding, and response routing
             // use the real peer identity rather than the relay pseudo-peer.
@@ -354,9 +394,14 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
             delegate?.transport(self, didReceiveData: data, from: senderPeerID)
 
         case .string(let text):
-            // The relay may send text control messages.
+            // The relay sends "connected" after registering the peer in the
+            // Durable Object (relay-room.ts). This is the authoritative signal
+            // that the relay is ready to route packets.
             if text == "connected" {
-                handleConnectionEstablished()
+                let alreadyConnected: Bool = lock.withLock { isConnected }
+                if !alreadyConnected {
+                    handleConnectionEstablished()
+                }
             } else {
                 logger.debug("WebSocket text message: \(text)")
             }
@@ -517,7 +562,21 @@ extension WebSocketTransport: URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol protocol: String?
     ) {
-        handleConnectionEstablished()
+        // TLS handshake is complete but the relay Durable Object hasn't
+        // confirmed registration yet. Wait for the "connected" text frame
+        // as the authoritative signal. Fall back after 5 seconds in case
+        // the relay never sends it (e.g., server code change).
+        logger.info("WebSocket TLS handshake complete, waiting for relay registration")
+        let gen = lock.withLock { connectionGeneration }
+        queue.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            guard let self else { return }
+            let (currentGen, connected) = self.lock.withLock {
+                (self.connectionGeneration, self.isConnected)
+            }
+            guard gen == currentGen, !connected else { return }
+            self.logger.warning("No 'connected' frame after 5s — establishing via fallback")
+            self.handleConnectionEstablished()
+        }
     }
 
     public func urlSession(
