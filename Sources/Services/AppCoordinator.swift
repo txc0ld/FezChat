@@ -190,7 +190,7 @@ final class AppCoordinator {
 
         // Create and configure MessageService with TransportCoordinator
         // so messages route through the full BLE → WebSocket → local queue chain.
-        let msgService = MessageService(modelContainer: modelContainer, keyManager: keyManager)
+        let msgService = MessageService(modelContainer: modelContainer, keyManager: keyManager, notificationService: notificationService)
         msgService.configure(transport: coordinator, identity: identity)
 
         // Wire gossip relay middleware between transport and message service.

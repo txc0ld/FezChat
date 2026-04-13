@@ -84,6 +84,7 @@ final class MessageService: @unchecked Sendable {
     private let keyManager: KeyManager
     private let bloomFilter: MultiTierBloomFilter
     let peerStore: PeerStore
+    let notificationService: NotificationService
     weak var delegate: (any MessageServiceDelegate)?
     private var deliveryFailureObservation: NSObjectProtocol?
 
@@ -181,10 +182,11 @@ final class MessageService: @unchecked Sendable {
 
     // MARK: - Init
 
-    init(modelContainer: ModelContainer, keyManager: KeyManager = .shared, peerStore: PeerStore = .shared) {
+    init(modelContainer: ModelContainer, keyManager: KeyManager = .shared, peerStore: PeerStore = .shared, notificationService: NotificationService = NotificationService()) {
         self.modelContainer = modelContainer
         self.keyManager = keyManager
         self.peerStore = peerStore
+        self.notificationService = notificationService
         self.bloomFilter = MultiTierBloomFilter()
         self.deliveryFailureObservation = NotificationCenter.default.addObserver(
             forName: .didFailMessageDelivery,

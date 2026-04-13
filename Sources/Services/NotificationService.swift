@@ -321,6 +321,24 @@ final class NotificationService: NSObject, @unchecked Sendable {
         scheduleNotification(content: content, id: "friendreq_\(friendID.uuidString)")
     }
 
+    /// Show a notification when someone accepts your friend request.
+    func notifyFriendAccepted(friendName: String, friendID: UUID) {
+        guard notificationsEnabled else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Friend Request Accepted"
+        content.body = "\(friendName) accepted your friend request"
+        content.categoryIdentifier = BlipNotificationCategory.friendRequest.rawValue
+        content.sound = .default
+        content.userInfo = [
+            "friendID": friendID.uuidString,
+            "friendName": friendName,
+            "type": "friendAccepted"
+        ]
+
+        scheduleNotification(content: content, id: "friendaccept_\(friendID.uuidString)")
+    }
+
     // MARK: - Organizer Announcement
 
     /// Show a notification for an organizer announcement.

@@ -374,7 +374,7 @@ extension MessageService {
         let friendDesc2 = FetchDescriptor<Friend>(predicate: #Predicate { $0.user?.id == senderUserID })
         do {
             if let friendRecord = try context.fetch(friendDesc2).first {
-                NotificationService().notifyFriendRequest(
+                notificationService.notifyFriendRequest(
                     fromName: senderUser.resolvedDisplayName,
                     friendID: friendRecord.id
                 )
@@ -471,6 +471,20 @@ extension MessageService {
         try createDMChannel(with: resolvedUser, context: context)
 
         logger.info("Friend accept received from \(resolvedUser.username)")
+
+        // Send local push notification
+        let acceptUserID = resolvedUser.id
+        let acceptFriendDesc = FetchDescriptor<Friend>(predicate: #Predicate { $0.user?.id == acceptUserID })
+        do {
+            if let friendRecord = try context.fetch(acceptFriendDesc).first {
+                notificationService.notifyFriendAccepted(
+                    friendName: resolvedUser.resolvedDisplayName,
+                    friendID: friendRecord.id
+                )
+            }
+        } catch {
+            DebugLogger.shared.log("DB", "Failed to fetch friend for accept notification: \(error.localizedDescription)", isError: true)
+        }
 
         NotificationCenter.default.post(
             name: .didReceiveFriendAccept,
