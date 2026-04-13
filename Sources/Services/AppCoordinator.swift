@@ -184,6 +184,17 @@ final class AppCoordinator {
             webSocketTransport: ws
         )
 
+        // Notify app layer when a transport-level send fails so MessageRetryService
+        // can pick up persisted messages. The message is already enqueued in SwiftData
+        // by MessageService; this callback triggers an immediate retry scan.
+        coordinator.onSendFailed = { [weak self] data, targetPeer in
+            let peerHex = targetPeer?.bytes.prefix(4).map { String(format: "%02x", $0) }.joined() ?? "broadcast"
+            DebugLogger.emit("TX", "Transport send failed (\(data.count)B → \(peerHex)) — queued for retry")
+            Task { @MainActor [weak self] in
+                await self?.messageRetryService?.triggerScan()
+            }
+        }
+
         // Wire BLE transport events to DebugLogger
         ble.transportEventHandler = { category, message in
             Task { @MainActor in

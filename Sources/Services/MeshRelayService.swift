@@ -87,11 +87,9 @@ extension MeshRelayService: TransportDelegate {
             DebugLogger.emit("RELAY", "GossipRouter dedup: dropped \(data.count)B from \(peerHex)")
         }
 
-        // Update queue fill ratio for congestion-aware relay decisions.
-        if let coordinator = self.transport {
-            let fill = Double(coordinator.localQueueCount) / Double(TransportCoordinator.maxLocalQueueSize)
-            adaptiveRelay.queueFillRatio = fill
-        }
+        // Queue fill ratio: retry queue is now managed by SwiftData (MessageRetryService),
+        // so congestion tracking is no longer driven from the transport layer.
+        adaptiveRelay.queueFillRatio = 0.0
     }
 
     func transport(_ transport: any Transport, didConnect peerID: PeerID) {
