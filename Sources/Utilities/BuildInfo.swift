@@ -7,6 +7,8 @@ enum BuildInfo {
     static let gitBranch: String = Bundle.main.infoDictionary?["GitBranch"] as? String ?? "unknown"
     static let buildDate: String = Bundle.main.infoDictionary?["BuildDate"] as? String ?? "unknown"
 
+    static let isTestFlight: Bool = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+
     static var displayVersion: String {
         "\(version) (\(buildNumber)) [\(gitHash)]"
     }

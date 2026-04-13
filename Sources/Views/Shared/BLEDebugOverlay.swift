@@ -1,4 +1,3 @@
-#if DEBUG
 import SwiftUI
 import SwiftData
 import BlipMesh
@@ -596,18 +595,16 @@ struct BLEDebugTapModifier: ViewModifier {
 }
 
 extension View {
-    /// Adds a triple-tap gesture to show the BLE debug overlay (DEBUG builds only).
+    /// Adds a triple-tap gesture to show the BLE debug overlay in debug and TestFlight builds.
     func bleDebugOverlay() -> some View {
-        modifier(BLEDebugTapModifier())
+        if BuildInfo.isTestFlight {
+            modifier(BLEDebugTapModifier())
+        } else {
+            #if DEBUG
+            modifier(BLEDebugTapModifier())
+            #else
+            self
+            #endif
+        }
     }
 }
-#else
-import SwiftUI
-
-extension View {
-    /// No-op in Release builds.
-    func bleDebugOverlay() -> some View {
-        self
-    }
-}
-#endif

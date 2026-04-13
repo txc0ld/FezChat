@@ -293,6 +293,12 @@ extension MessageService {
                     signingPublicKey: fallbackSigningKey
                 )
                 context.insert(senderUser)
+                do {
+                    try context.save()
+                } catch {
+                    DebugLogger.shared.log("DB", "Failed to save new User for friend request from \(DebugLogger.redact(username)): \(error.localizedDescription)", isError: true)
+                    return
+                }
             }
         } else {
             logger.warning("Received friend request with no parseable sender info")
