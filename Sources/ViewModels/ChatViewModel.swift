@@ -55,6 +55,7 @@ final class ChatViewModel {
     // MARK: - Dependencies
 
     private let modelContainer: ModelContainer
+    private let context: ModelContext
     private let messageService: MessageService
     private let audioService: AudioService
     private let imageService: ImageService
@@ -74,6 +75,7 @@ final class ChatViewModel {
         notificationService: NotificationService = NotificationService()
     ) {
         self.modelContainer = modelContainer
+        self.context = ModelContext(modelContainer)
         self.messageService = messageService
         self.audioService = audioService
         self.imageService = imageService
@@ -96,7 +98,7 @@ final class ChatViewModel {
         isLoading = true
         defer { isLoading = false }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             channels = try context.fetch(FetchDescriptor<Channel>())
@@ -216,7 +218,7 @@ final class ChatViewModel {
 
     /// Create a new DM channel with a user.
     func createDMChannel(with user: User) async -> Channel? {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let userID = user.id
 
         let persistedUser: User
@@ -244,7 +246,7 @@ final class ChatViewModel {
 
     /// Create a new group channel.
     func createGroupChannel(name: String, members: [User]) async -> Channel? {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let channel = Channel(type: .group, name: name)
         context.insert(channel)
@@ -266,7 +268,7 @@ final class ChatViewModel {
 
     /// Delete a channel and all its messages.
     func deleteChannel(_ channel: Channel) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let channelID = channel.id
         context.delete(channel)
         do {
@@ -285,7 +287,7 @@ final class ChatViewModel {
 
     /// Toggle mute status for a channel.
     func toggleMute(for channel: Channel) {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         channel.muteStatus = channel.isMuted ? .unmuted : .mutedForever
         do {
             try context.save()
@@ -298,7 +300,7 @@ final class ChatViewModel {
 
     /// Toggle pin status for a channel.
     func togglePin(for channel: Channel) {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         channel.isPinned.toggle()
         do {
             try context.save()
@@ -316,7 +318,7 @@ final class ChatViewModel {
         replyTarget = nil
         composingText = ""
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             let conversationChannels = try conversationChannels(for: channel, context: context)
@@ -480,7 +482,7 @@ final class ChatViewModel {
 
         // Batch read receipts: send one per sender (with their latest message ID)
         // instead of one per unread message.
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             let conversationChannels = try conversationChannels(for: channel, context: context)
             var removedUnread = previousUnread
@@ -578,7 +580,7 @@ final class ChatViewModel {
 
     /// Mark a message as deleted locally and notify the remote peer.
     func deleteMessage(_ message: Message) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let messageID = message.id
         do {
             let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == messageID })
@@ -622,7 +624,7 @@ final class ChatViewModel {
     func applyEdit(newText: String) async {
         guard let editing = editingMessage else { return }
         let editID = editing.id
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == editID })
             guard let localMessage = try context.fetch(descriptor).first else { return }
@@ -659,7 +661,7 @@ final class ChatViewModel {
         activeMessages.removeAll { $0.id == message.id }
 
         // Delete the failed record
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let failedID = message.id
         do {
             let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == failedID })
@@ -692,9 +694,21 @@ final class ChatViewModel {
 }
 
 extension ChatViewModel: MessageServiceDelegate {
-    nonisolated func messageService(_ service: MessageService, didReceiveMessage message: Message, in channel: Channel) {
+    nonisolated func messageService(_ service: MessageService, didReceiveMessageID messageID: UUID, channelID: UUID) {
         Task { @MainActor in
-            self.handleReceivedMessage(message, in: channel)
+            let context = self.context
+            let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == messageID })
+            let channelDescriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
+            do {
+                guard let message = try context.fetch(descriptor).first,
+                      let channel = try context.fetch(channelDescriptor).first else {
+                    DebugLogger.shared.log("DM", "Delegate: could not fetch message \(messageID) or channel \(channelID)")
+                    return
+                }
+                self.handleReceivedMessage(message, in: channel)
+            } catch {
+                DebugLogger.shared.log("DM", "Delegate: fetch error: \(error.localizedDescription)")
+            }
         }
     }
 

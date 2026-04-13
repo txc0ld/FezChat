@@ -57,7 +57,7 @@ extension MessageService {
         peerStore.upsert(peer: peerInfo)
 
         // Create/update User record in SwiftData
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let targetUsername = remote.username
         let userDesc = FetchDescriptor<User>(predicate: #Predicate { $0.username == targetUsername })
         let user: User
@@ -108,7 +108,7 @@ extension MessageService {
             throw MessageServiceError.senderNotFound
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Get local user
         let userDescriptor = FetchDescriptor<User>(sortBy: [SortDescriptor(\.createdAt, order: .forward)])
@@ -180,7 +180,7 @@ extension MessageService {
             throw MessageServiceError.invalidRecipient
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Update friend status
         let friendID = friend.id
@@ -261,7 +261,7 @@ extension MessageService {
         let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         DebugLogger.shared.log("DM", "handleFriendRequest: \(data.count)B from \(peerHex)")
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Parse payload: username + 0x00 + displayName
         let (senderUsername, senderDisplayName) = MessagePayloadBuilder.parseFriendPayload(data)
@@ -424,7 +424,7 @@ extension MessageService {
         let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         DebugLogger.shared.log("DM", "handleFriendAccept: \(data.count)B from \(peerHex)")
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Parse payload: username
         let (senderUsername, _) = MessagePayloadBuilder.parseFriendPayload(data)
@@ -527,7 +527,7 @@ extension MessageService {
         guard let uuidString = String(data: data, encoding: .utf8),
               let messageID = UUID(uuidString: uuidString) else { return }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let targetID = messageID
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
         if let message = try context.fetch(descriptor).first {
@@ -548,7 +548,7 @@ extension MessageService {
 
         let newContent = Data(data.dropFirst(36))
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let targetID = messageID
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
         if let message = try context.fetch(descriptor).first {
@@ -569,7 +569,7 @@ extension MessageService {
             return
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
         guard let channel = try context.fetch(descriptor).first, channel.isGroup else {
             DebugLogger.shared.log("GROUP", "Dropped \(subType) from \(senderHex): group channel \(channelID) not found", isError: true)

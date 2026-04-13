@@ -127,6 +127,7 @@ final class LocationViewModel {
 
     private let logger = Logger(subsystem: "com.blip", category: "LocationViewModel")
     private let modelContainer: ModelContainer
+    private let context: ModelContext
     private let locationService: LocationService
     @ObservationIgnored nonisolated(unsafe) private var refreshTimer: Timer?
 
@@ -145,6 +146,7 @@ final class LocationViewModel {
 
     init(modelContainer: ModelContainer, locationService: LocationService) {
         self.modelContainer = modelContainer
+        self.context = ModelContext(modelContainer)
         self.locationService = locationService
     }
 
@@ -205,7 +207,7 @@ final class LocationViewModel {
 
     /// Toggle location sharing for a specific friend.
     func toggleSharingWithFriend(friendID: UUID) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             guard let friend = try context.fetch(FetchDescriptor<Friend>())
@@ -220,7 +222,7 @@ final class LocationViewModel {
 
     /// Update location precision for a friend.
     func setFriendPrecision(friendID: UUID, precision: LocationPrecision) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             guard let friend = try context.fetch(FetchDescriptor<Friend>())
@@ -253,7 +255,7 @@ final class LocationViewModel {
         activeBeacon = beacon
 
         // Create a meeting point in SwiftData
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let meetingPoint = MeetingPoint(
             coordinates: GeoPoint(
                 latitude: location.coordinate.latitude,
@@ -332,7 +334,7 @@ final class LocationViewModel {
     // MARK: - Private: Refresh
 
     private func refreshFriendLocations() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let locations: [FriendLocation]
         do {

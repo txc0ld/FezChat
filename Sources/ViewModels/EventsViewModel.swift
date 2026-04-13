@@ -164,6 +164,7 @@ final class EventsViewModel {
 
     private let logger = Logger(subsystem: "com.blip", category: "EventsViewModel")
     private let modelContainer: ModelContainer
+    private let context: ModelContext
     private let locationService: LocationService
     private let notificationService: NotificationService
     @ObservationIgnored nonisolated(unsafe) private var geofenceObservation: NSObjectProtocol?
@@ -188,6 +189,7 @@ final class EventsViewModel {
         notificationService: NotificationService
     ) {
         self.modelContainer = modelContainer
+        self.context = ModelContext(modelContainer)
         self.locationService = locationService
         self.notificationService = notificationService
 
@@ -293,7 +295,7 @@ final class EventsViewModel {
 
     /// Load events from local SwiftData store.
     func loadEvents() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             let events = try context.fetch(FetchDescriptor<Event>())
@@ -380,7 +382,7 @@ final class EventsViewModel {
 
     /// Load joined event IDs from SwiftData.
     private func loadJoinedEventIds() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let descriptor = FetchDescriptor<JoinedEvent>()
         do {
             let joined = try context.fetch(descriptor)
@@ -392,7 +394,7 @@ final class EventsViewModel {
 
     /// Join an event — persists to SwiftData.
     func joinEvent(_ eventId: String) {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let joinedEvent = JoinedEvent(eventId: eventId)
         context.insert(joinedEvent)
         do {
@@ -412,7 +414,7 @@ final class EventsViewModel {
 
     /// Leave an event — removes from SwiftData.
     func leaveEvent(_ eventId: String) {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             let matches = try context.fetch(FetchDescriptor<JoinedEvent>())
                 .filter { $0.eventId == eventId }
@@ -438,7 +440,7 @@ final class EventsViewModel {
 
     /// Start monitoring geofences for all upcoming and active events.
     func startGeofencing() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let descriptor = FetchDescriptor<Event>()
 
         let events: [Event]
@@ -468,7 +470,7 @@ final class EventsViewModel {
 
     /// Handle entering a event geofence.
     func handleEventEntry(eventID: UUID) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let event: Event
         do {
@@ -514,7 +516,7 @@ final class EventsViewModel {
     func handleEventExit(eventID: UUID) {
         if activeEvent?.id == eventID {
             isInsideEvent = false
-            let context = ModelContext(modelContainer)
+            let context = self.context
             updateLostAndFoundChannelJoinState(for: eventID.uuidString, isJoined: false, context: context)
             do {
                 try context.save()
@@ -574,7 +576,7 @@ final class EventsViewModel {
         }
 
         // Load saved set times
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             savedSetTimes = try context.fetch(FetchDescriptor<SetTime>())
                 .filter(\.savedByUser)
@@ -587,7 +589,7 @@ final class EventsViewModel {
 
     /// Save/unsave a set time.
     func toggleSaveSetTime(setTimeID: UUID) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let setTime: SetTime
         do {
@@ -622,7 +624,7 @@ final class EventsViewModel {
 
     /// Toggle reminder for a set time.
     func toggleReminder(setTimeID: UUID) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let setTime: SetTime
         do {
@@ -668,7 +670,7 @@ final class EventsViewModel {
 
     /// Load crowd pulse data from nearby peer observations.
     func loadCrowdPulse() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let pulses: [CrowdPulse]
         do {
@@ -703,7 +705,7 @@ final class EventsViewModel {
 
     /// Fetch organizer announcements from the stageChannel and transform to AnnouncementItems.
     private func refreshAnnouncements() {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             let descriptor = FetchDescriptor<Channel>(
                 predicate: #Predicate { $0.typeRaw == "stageChannel" }
@@ -905,7 +907,7 @@ final class EventsViewModel {
     }
 
     private func storeEvents(_ manifestEvents: [ManifestEvent]) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let dateFormatter = ISO8601DateFormatter()
 
         for mf in manifestEvents {

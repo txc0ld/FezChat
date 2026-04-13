@@ -25,7 +25,7 @@ enum MessageServiceError: Error, Sendable {
 // MARK: - Message Service Delegate
 
 protocol MessageServiceDelegate: AnyObject, Sendable {
-    func messageService(_ service: MessageService, didReceiveMessage message: Message, in channel: Channel)
+    func messageService(_ service: MessageService, didReceiveMessageID messageID: UUID, channelID: UUID)
     func messageService(_ service: MessageService, didUpdateStatus status: MessageStatus, for messageID: UUID)
     func messageService(_ service: MessageService, didReceiveTypingIndicatorFrom peerID: PeerID, in channelID: UUID)
     func messageService(_ service: MessageService, didReceiveDeliveryAck messageID: UUID)
@@ -81,6 +81,7 @@ final class MessageService: @unchecked Sendable {
     // MARK: - Dependencies
 
     let modelContainer: ModelContainer
+    let context: ModelContext
     private let keyManager: KeyManager
     private let bloomFilter: MultiTierBloomFilter
     let peerStore: PeerStore
@@ -184,6 +185,7 @@ final class MessageService: @unchecked Sendable {
 
     init(modelContainer: ModelContainer, keyManager: KeyManager = .shared, peerStore: PeerStore = .shared, notificationService: NotificationService = NotificationService()) {
         self.modelContainer = modelContainer
+        self.context = ModelContext(modelContainer)
         self.keyManager = keyManager
         self.peerStore = peerStore
         self.notificationService = notificationService
@@ -234,7 +236,7 @@ final class MessageService: @unchecked Sendable {
         let channelShort = String(channel.id.uuidString.prefix(8))
         DebugLogger.shared.log("DM", "sendTextMessage: text=\(content.utf8.count) channel=\(channelShort) type=\(channel.type)")
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Re-fetch Channel in this context to avoid cross-context insert crash
         let channelID = channel.id
@@ -323,7 +325,7 @@ final class MessageService: @unchecked Sendable {
             throw MessageServiceError.senderNotFound
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Re-fetch Channel in this context to avoid cross-context insert crash
         let channelID = channel.id
@@ -393,7 +395,7 @@ final class MessageService: @unchecked Sendable {
             throw MessageServiceError.serializationFailed("Public channel messages cannot be empty")
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let channelID = channel.id
         let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
         guard let localChannel = try context.fetch(channelDesc).first else {
@@ -457,7 +459,7 @@ final class MessageService: @unchecked Sendable {
             throw MessageServiceError.payloadTooLarge(imageData.count)
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Re-fetch Channel in this context to avoid cross-context insert crash
         let channelID = channel.id
@@ -524,7 +526,7 @@ final class MessageService: @unchecked Sendable {
         if shouldSkip { return }
 
         // Re-fetch channel in a fresh context to avoid cross-context crash
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let channelID = channel.id
         let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
         guard let localChannel = try context.fetch(channelDesc).first else {
@@ -603,7 +605,7 @@ final class MessageService: @unchecked Sendable {
             throw MessageServiceError.senderNotFound
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let userDescriptor = FetchDescriptor<User>(sortBy: [SortDescriptor(\.createdAt, order: .forward)])
         guard let localUser = try context.fetch(userDescriptor).first else {
             throw MessageServiceError.senderNotFound
@@ -1006,7 +1008,7 @@ final class MessageService: @unchecked Sendable {
             return
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Parse: username + 0x00 + displayName + 0x00 + noisePublicKey(32 bytes)
         let payload = packet.payload
@@ -1363,20 +1365,18 @@ final class MessageService: @unchecked Sendable {
         }
         let localNoiseKey = identity.noisePublicKey.rawRepresentation
 
-        // Fresh-fetch channel in a new context to avoid SwiftData lazy loading
-        // returning empty memberships from a stale context
-        let freshContext = ModelContext(modelContainer)
+        // Re-fetch channel in persistent context to ensure relationships are loaded
         let channelID = channel.id
         let channelDesc = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == channelID })
         let freshChannel: Channel?
         do {
-            freshChannel = try freshContext.fetch(channelDesc).first
+            freshChannel = try context.fetch(channelDesc).first
         } catch {
             DebugLogger.emit("DM", "resolveRecipient FAILED: fetch error for channel \(channelID): \(error)", isError: true)
             return nil
         }
         guard let freshChannel else {
-            DebugLogger.emit("DM", "resolveRecipient FAILED: channel \(channelID) not found in fresh context", isError: true)
+            DebugLogger.emit("DM", "resolveRecipient FAILED: channel \(channelID) not found", isError: true)
             return nil
         }
 
@@ -1432,7 +1432,7 @@ final class MessageService: @unchecked Sendable {
 
     @MainActor
     private func enqueueForRetry(messageID: UUID) async throws {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let targetID = messageID
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
         guard let message = try context.fetch(descriptor).first else { return }
@@ -1458,7 +1458,7 @@ final class MessageService: @unchecked Sendable {
             throw MessageServiceError.senderNotFound
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let targetID = messageID
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
         guard let message = try context.fetch(descriptor).first else {
@@ -1564,7 +1564,7 @@ final class MessageService: @unchecked Sendable {
             return
         }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let messageID = extractMessageID(fromFailedPacket: packet)
             ?? findBestEffortFailedMessageID(for: packet, targetPeerID: targetPeerID, context: context)
 

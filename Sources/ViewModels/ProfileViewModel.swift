@@ -239,6 +239,7 @@ final class ProfileViewModel {
 
     private let logger = Logger(subsystem: "com.blip", category: "ProfileViewModel")
     private let modelContainer: ModelContainer
+    private let context: ModelContext
     private let keyManager: KeyManager
     private let imageService: ImageService
     private let userSyncService: UserSyncService
@@ -257,6 +258,7 @@ final class ProfileViewModel {
         userSyncService: UserSyncService = UserSyncService()
     ) {
         self.modelContainer = modelContainer
+        self.context = ModelContext(modelContainer)
         self.keyManager = keyManager
         self.imageService = imageService
         self.userSyncService = userSyncService
@@ -269,7 +271,7 @@ final class ProfileViewModel {
         isLoading = true
         defer { isLoading = false }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             // Load user
@@ -309,7 +311,7 @@ final class ProfileViewModel {
         isSaving = true
         errorMessage = nil
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Validate
         let trimmedDisplayName = editingDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -350,7 +352,7 @@ final class ProfileViewModel {
         isUploadingAvatar = true
         errorMessage = nil
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             // Center-crop to square
@@ -389,7 +391,7 @@ final class ProfileViewModel {
     func removeAvatar() async {
         guard let user = currentUser else { return }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         user.avatarThumbnail = nil
         user.avatarFullRes = nil
 
@@ -406,7 +408,7 @@ final class ProfileViewModel {
 
     /// Accept a pending friend request.
     func acceptFriendRequest(_ friend: Friend) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         friend.status = .accepted
         do {
             try context.save()
@@ -421,7 +423,7 @@ final class ProfileViewModel {
 
     /// Decline a pending friend request.
     func declineFriendRequest(_ friend: Friend) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         context.delete(friend)
         do {
             try context.save()
@@ -433,7 +435,7 @@ final class ProfileViewModel {
 
     /// Block a user.
     func blockUser(_ friend: Friend) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         friend.status = .blocked
         do {
             try context.save()
@@ -447,7 +449,7 @@ final class ProfileViewModel {
 
     /// Unblock a user.
     func unblockUser(_ friend: Friend) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         friend.status = .accepted
         do {
             try context.save()
@@ -461,7 +463,7 @@ final class ProfileViewModel {
 
     /// Remove a friend entirely.
     func removeFriend(_ friend: Friend) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         context.delete(friend)
         do {
             try context.save()
@@ -474,7 +476,7 @@ final class ProfileViewModel {
 
     /// Update the location sharing settings for a friend.
     func updateLocationSharing(for friend: Friend, enabled: Bool, precision: LocationPrecision) {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         friend.locationSharingEnabled = enabled
         friend.locationPrecision = precision
         do {
@@ -487,7 +489,7 @@ final class ProfileViewModel {
 
     /// Set a nickname for a friend.
     func setNickname(for friend: Friend, nickname: String?) {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         friend.nickname = nickname?.isEmpty == true ? nil : nickname
         do {
             try context.save()
@@ -529,7 +531,7 @@ final class ProfileViewModel {
     ) {
         guard let prefs = preferences else { return }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         if let theme { prefs.theme = theme }
         if let sharing = defaultLocationSharing { prefs.defaultLocationSharing = sharing }
@@ -561,7 +563,7 @@ final class ProfileViewModel {
 
     func exportAccountData() async throws -> AccountExportFile {
         DebugLogger.shared.log("ACCOUNT", "Starting account data export")
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         do {
             let users = try context.fetch(FetchDescriptor<User>())
