@@ -93,6 +93,7 @@ targets:
     entitlements:
       path: App/Entitlements/Blip.entitlements
       properties:
+        aps-environment: production
         keychain-access-groups:
           - "$(AppIdentifierPrefix)au.heyblip.Blip"
 

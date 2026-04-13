@@ -10,7 +10,7 @@ MAX_SENDS_PER_HOUR = "3"
 JWT_EXPIRY_SECONDS = "3600"
 JWT_REFRESH_GRACE_SECONDS = "300"
 # Set to "true" only for local development to skip Resend and accept code 000000.
-DEV_BYPASS = "true"
+DEV_BYPASS = "false"
 
 # Set RESEND_API_KEY via `wrangler secret put RESEND_API_KEY`
 # Set DATABASE_URL via `wrangler secret put DATABASE_URL`
