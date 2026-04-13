@@ -175,4 +175,96 @@ struct SignerTests {
             _ = try Signer.sign(packetData: shortData, secretKey: secretKey)
         }
     }
+
+    // MARK: - Detached Signature Verification
+
+    @Test("verifyDetached succeeds with correct signature")
+    func testVerifyDetachedValid() throws {
+        let sodium = Sodium()
+        let kp = sodium.sign.keyPair()!
+        let message = Data("manifest payload".utf8)
+
+        guard let signature = sodium.sign.signature(
+            message: Bytes(message),
+            secretKey: kp.secretKey
+        ) else {
+            Issue.record("Failed to produce test signature")
+            return
+        }
+
+        let isValid = try Signer.verifyDetached(
+            message: message,
+            signature: Data(signature),
+            publicKey: Data(kp.publicKey)
+        )
+        #expect(isValid)
+    }
+
+    @Test("verifyDetached fails with tampered message")
+    func testVerifyDetachedTampered() throws {
+        let sodium = Sodium()
+        let kp = sodium.sign.keyPair()!
+        let message = Data("original".utf8)
+
+        guard let signature = sodium.sign.signature(
+            message: Bytes(message),
+            secretKey: kp.secretKey
+        ) else {
+            Issue.record("Failed to produce test signature")
+            return
+        }
+
+        let tampered = Data("tampered".utf8)
+        let isValid = try Signer.verifyDetached(
+            message: tampered,
+            signature: Data(signature),
+            publicKey: Data(kp.publicKey)
+        )
+        #expect(!isValid)
+    }
+
+    @Test("verifyDetached fails with wrong public key")
+    func testVerifyDetachedWrongKey() throws {
+        let sodium = Sodium()
+        let kp = sodium.sign.keyPair()!
+        let wrongKp = sodium.sign.keyPair()!
+        let message = Data("test message".utf8)
+
+        guard let signature = sodium.sign.signature(
+            message: Bytes(message),
+            secretKey: kp.secretKey
+        ) else {
+            Issue.record("Failed to produce test signature")
+            return
+        }
+
+        let isValid = try Signer.verifyDetached(
+            message: message,
+            signature: Data(signature),
+            publicKey: Data(wrongKp.publicKey)
+        )
+        #expect(!isValid)
+    }
+
+    @Test("verifyDetached throws on invalid signature length")
+    func testVerifyDetachedBadSignatureLength() {
+        let (_, publicKey) = makeEd25519Keypair()
+        let message = Data("test".utf8)
+        let badSig = Data(repeating: 0, count: 32)
+
+        #expect(throws: SignerError.self) {
+            _ = try Signer.verifyDetached(message: message, signature: badSig, publicKey: publicKey)
+        }
+    }
+
+    @Test("verifyDetached throws on invalid public key length")
+    func testVerifyDetachedBadKeyLength() {
+        let message = Data("test".utf8)
+        let sig = Data(repeating: 0, count: 64)
+        let badKey = Data(repeating: 0, count: 16)
+
+        #expect(throws: SignerError.self) {
+            _ = try Signer.verifyDetached(message: message, signature: sig, publicKey: badKey)
+        }
+    }
 }

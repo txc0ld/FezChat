@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import CoreLocation
 import os.log
+import BlipCrypto
 
 // MARK: - Event Discovery State
 
@@ -901,9 +902,49 @@ final class EventsViewModel {
     }
 
     private func verifyManifestSignature(_ manifest: EventManifest) -> Bool {
-        // In production: verify Ed25519 signature of the manifest data
-        // For now, accept all manifests (signature infrastructure TBD)
-        return true
+        guard let signatureBase64 = manifest.signature,
+              let signatureData = Data(base64Encoded: signatureBase64) else {
+            DebugLogger.shared.log("EVENT", "Manifest has no signature or invalid base64", isError: true)
+            return false
+        }
+
+        guard let firstEvent = manifest.events.first else {
+            DebugLogger.shared.log("EVENT", "Manifest has no events — cannot verify", isError: true)
+            return false
+        }
+
+        guard let publicKey = Data(base64Encoded: firstEvent.organizerSigningKey) else {
+            DebugLogger.shared.log("EVENT", "Invalid base64 organizer signing key", isError: true)
+            return false
+        }
+
+        let canonicalMessage: Data
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            canonicalMessage = try encoder.encode(manifest.events)
+        } catch {
+            DebugLogger.shared.log("EVENT", "Failed to encode manifest events for verification: \(error)", isError: true)
+            return false
+        }
+
+        do {
+            let isValid = try Signer.verifyDetached(
+                message: canonicalMessage,
+                signature: signatureData,
+                publicKey: publicKey
+            )
+            if !isValid {
+                DebugLogger.shared.log("EVENT", "Manifest Ed25519 signature is invalid", isError: true)
+            } else {
+                DebugLogger.shared.log("EVENT", "Manifest signature verified successfully")
+            }
+            return isValid
+        } catch {
+            DebugLogger.shared.log("EVENT", "Manifest signature verification error: \(error)", isError: true)
+            return false
+        }
     }
 
     private func storeEvents(_ manifestEvents: [ManifestEvent]) async {
