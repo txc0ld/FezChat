@@ -512,7 +512,9 @@ final class UserSyncService: Sendable {
         }
 
         guard httpResponse.statusCode == 200 else {
-            throw SyncError.serverError("Failed to get challenge")
+            let serverMessage = parseError(data) ?? String(data: data, encoding: .utf8) ?? "<no body>"
+            DebugLogger.emit("AUTH", "Challenge request failed: HTTP \(httpResponse.statusCode) — \(serverMessage)", isError: true)
+            throw SyncError.serverError("Challenge failed (\(httpResponse.statusCode)): \(serverMessage)")
         }
 
         let json: [String: Any]
