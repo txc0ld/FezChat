@@ -377,7 +377,10 @@ final class AppCoordinator {
         }
 
         teardownRuntimeState()
-        clearLocalStore(in: container)
+        guard clearLocalStore(in: container) else {
+            initError = "Failed to erase local data from this device."
+            return false
+        }
 
         UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
         resetToOnboarding()
@@ -752,7 +755,7 @@ final class AppCoordinator {
         )
     }
 
-    private func clearLocalStore(in modelContainer: ModelContainer) {
+    private func clearLocalStore(in modelContainer: ModelContainer) -> Bool {
         let context = ModelContext(modelContainer)
 
         do {
@@ -772,12 +775,15 @@ final class AppCoordinator {
             try deleteAll(SetTime.self, in: context)
             try deleteAll(Stage.self, in: context)
             try deleteAll(Event.self, in: context)
+            try deleteAll(JoinedEvent.self, in: context)
             try deleteAll(BreadcrumbPoint.self, in: context)
             try deleteAll(UserPreferences.self, in: context)
             try deleteAll(User.self, in: context)
             try context.save()
+            return true
         } catch {
             logger.error("Failed to erase local store during sign out: \(error.localizedDescription)")
+            return false
         }
     }
 

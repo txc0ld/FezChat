@@ -6,57 +6,98 @@ import SwiftUI
 struct AccountSettings: View {
 
     @Binding var showSignOutConfirm: Bool
+    let isExporting: Bool
+    let isDeleting: Bool
+    let onExportData: () -> Void
+    let onDeleteAccount: () -> Void
 
     @Environment(\.theme) private var theme
 
     var body: some View {
         SettingsComponents.settingsGroup(title: "Account", icon: "person.crop.circle", theme: theme) {
             VStack(alignment: .leading, spacing: BlipSpacing.md) {
-                // Working action — Sign Out stays prominent.
-                Button(action: { showSignOutConfirm = true }) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-                            Text("Sign Out")
-                                .font(theme.typography.body)
-                                .foregroundStyle(theme.colors.text)
-
-                            Text("Clear local session and return to setup")
-                                .font(theme.typography.caption)
-                                .foregroundStyle(theme.colors.mutedText)
-                        }
-                        Spacer()
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 14))
-                            .foregroundStyle(theme.colors.mutedText)
-                    }
-                    .frame(minHeight: BlipSizing.minTapTarget)
+                actionRow(
+                    title: "Sign Out",
+                    subtitle: "Clear local session and return to setup",
+                    icon: "rectangle.portrait.and.arrow.right"
+                ) {
+                    showSignOutConfirm = true
                 }
-                .buttonStyle(.plain)
                 .accessibilityLabel("Sign out")
 
-                // Unavailable actions grouped under a de-emphasized heading so
-                // working features read as shipped. TODO: BDEV-136 — wire
-                // account data export (JSON) and remote account deletion.
-                SettingsComponents.comingSoonHeader(theme: theme)
+                Divider()
+                    .opacity(0.15)
 
-                VStack(alignment: .leading, spacing: BlipSpacing.sm) {
-                    SettingsComponents.settingsDisabledRow(
-                        title: "Export My Data",
-                        subtitle: "Unavailable in this build until account export is wired",
-                        icon: "square.and.arrow.up",
-                        theme: theme
-                    )
+                actionRow(
+                    title: "Export My Data",
+                    subtitle: isExporting
+                        ? "Preparing your JSON export..."
+                        : "Create a JSON archive of profile, messages, friends, and saved events",
+                    icon: "square.and.arrow.up",
+                    showsProgress: isExporting,
+                    isDisabled: isExporting || isDeleting,
+                    action: onExportData
+                )
+                .accessibilityLabel("Export my data")
 
-                    SettingsComponents.settingsDisabledRow(
-                        title: "Delete Account & Data",
-                        subtitle: "Unavailable until remote deletion is wired end to end",
-                        icon: "trash",
-                        theme: theme,
-                        isDestructive: true
-                    )
-                }
+                actionRow(
+                    title: "Delete Account & Data",
+                    subtitle: isDeleting
+                        ? "Deleting your account..."
+                        : "Permanently remove your Blip account from the server and this device",
+                    icon: "trash",
+                    isDestructive: true,
+                    showsProgress: isDeleting,
+                    isDisabled: isExporting || isDeleting,
+                    action: onDeleteAccount
+                )
+                .accessibilityLabel("Delete account and data")
             }
         }
+    }
+
+    private func actionRow(
+        title: String,
+        subtitle: String,
+        icon: String,
+        isDestructive: Bool = false,
+        showsProgress: Bool = false,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: BlipSpacing.sm) {
+                VStack(alignment: .leading, spacing: BlipSpacing.xs) {
+                    Text(title)
+                        .font(theme.typography.body)
+                        .foregroundStyle(
+                            isDestructive ? theme.colors.statusRed : theme.colors.text
+                        )
+
+                    Text(subtitle)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.mutedText)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+
+                if showsProgress {
+                    ProgressView()
+                        .tint(isDestructive ? theme.colors.statusRed : .blipAccentPurple)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 14))
+                        .foregroundStyle(
+                            isDestructive ? theme.colors.statusRed : theme.colors.mutedText
+                        )
+                }
+            }
+            .frame(minHeight: BlipSizing.minTapTarget)
+            .opacity(isDisabled ? 0.5 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
     }
 }
 
@@ -66,7 +107,13 @@ struct AccountSettings: View {
     ZStack {
         GradientBackground()
 
-        AccountSettings(showSignOutConfirm: .constant(false))
+        AccountSettings(
+            showSignOutConfirm: .constant(false),
+            isExporting: false,
+            isDeleting: false,
+            onExportData: {},
+            onDeleteAccount: {}
+        )
             .padding()
     }
     .preferredColorScheme(.dark)

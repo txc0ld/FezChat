@@ -5,6 +5,7 @@
  * POST /v1/auth/send-code   — generate 6-digit code, send via Resend, store in KV
  * POST /v1/auth/verify-code — validate code against KV
  * GET  /v1/auth/health      — liveness check
+ * DELETE /v1/users/self     — delete the authenticated user account
  */
 import { Resend } from "resend";
 
@@ -128,7 +129,7 @@ function corsHeaders(env?: Env): Record<string, string> {
   }
 
   headers["Access-Control-Allow-Origin"] = corsOrigin;
-  headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS";
+  headers["Access-Control-Allow-Methods"] = "POST, GET, DELETE, OPTIONS";
   headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
   return headers;
 }
@@ -152,6 +153,9 @@ export default {
       }
       if (request.method === "GET" && url.pathname.startsWith("/v1/users/")) {
           return handleGetUser(request, url, env);
+      }
+      if (request.method === "DELETE" && url.pathname === "/v1/users/self") {
+        return handleDeleteCurrentUser(request, env);
       }
 
       if (request.method !== "POST") {
@@ -961,6 +965,38 @@ async function handleGetUser(request: Request, url: URL, env: Env): Promise<Resp
     }
     console.error("[auth] handleGetUser error:", error);
     return json({ error: "Lookup failed" }, 500, env);
+  }
+}
+
+async function handleDeleteCurrentUser(request: Request, env: Env): Promise<Response> {
+  const sql = await getDb(env);
+  if (!sql) {
+    return json({ error: "Database not configured" }, 503, env);
+  }
+
+  try {
+    const auth = await authenticateRequest(request, env);
+    const result = await sql`
+      DELETE FROM users
+      WHERE noise_public_key = ${auth.noisePublicKey}
+      RETURNING id, username
+    `;
+
+    if (result.length === 0) {
+      return json({ error: "User not found" }, 404, env);
+    }
+
+    return json({
+      deleted: true,
+      userId: result[0]?.id,
+      username: result[0]?.username,
+    }, 200, env);
+  } catch (error: any) {
+    if (error instanceof HTTPError) {
+      return json({ error: error.message }, error.status, env);
+    }
+    console.error("[auth] handleDeleteCurrentUser error:", error);
+    return json({ error: "Account deletion failed" }, 500, env);
   }
 }
 

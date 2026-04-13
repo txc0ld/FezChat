@@ -27,6 +27,7 @@ final class UserSyncService: Sendable {
         case userNotFound
         case databaseNotConfigured
         case unauthorized
+        case missingLocalUser
 
         var errorDescription: String? {
             switch self {
@@ -44,6 +45,8 @@ final class UserSyncService: Sendable {
                 return "Backend database is not yet configured."
             case .unauthorized:
                 return "Authentication required."
+            case .missingLocalUser:
+                return "Local account details are unavailable."
             }
         }
     }
@@ -349,6 +352,39 @@ final class UserSyncService: Sendable {
             throw SyncError.userNotFound
         case 401:
             throw SyncError.unauthorized
+        case 503:
+            throw SyncError.databaseNotConfigured
+        default:
+            let message = parseError(data) ?? "Status \(http.statusCode)"
+            throw SyncError.serverError(message)
+        }
+    }
+
+    // MARK: - Delete Account
+
+    /// Delete the authenticated user account from the auth backend.
+    func deleteCurrentUser() async throws {
+        guard let url = URL(string: "\(Self.baseURL)/users/self") else {
+            throw SyncError.networkError("Invalid URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 15
+
+        let (data, response) = try await performAuthenticatedRequest(request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw SyncError.networkError("Invalid response")
+        }
+
+        switch http.statusCode {
+        case 200:
+            logger.info("Account deleted on server")
+        case 401:
+            throw SyncError.unauthorized
+        case 404:
+            throw SyncError.userNotFound
         case 503:
             throw SyncError.databaseNotConfigured
         default:

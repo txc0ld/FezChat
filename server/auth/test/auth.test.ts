@@ -160,6 +160,23 @@ vi.mock("@neondatabase/serverless", () => ({
         }] : [];
       }
 
+      if (normalized.includes("delete from users where noise_public_key =")) {
+        const noisePublicKey = values[0] as Uint8Array;
+        const index = users.findIndex((candidate) =>
+          candidate.noise_public_key && bytesEqual(candidate.noise_public_key, noisePublicKey)
+        );
+
+        if (index == -1) {
+          return [];
+        }
+
+        const [deletedUser] = users.splice(index, 1);
+        return [{
+          id: deletedUser.id,
+          username: deletedUser.username,
+        }];
+      }
+
       throw new Error(`Unhandled mock SQL query: ${normalized}`);
     };
 
@@ -827,6 +844,31 @@ describe("protected endpoints", () => {
     });
 
     expect(res.status).toBe(401);
+  });
+
+  it("deletes the authenticated user account", async () => {
+    (env as Record<string, unknown>).DATABASE_URL = "mock://db";
+    const { user, noisePublicKey, signingPrivateKey } = await seedAuthUser();
+    const timestamp = new Date().toISOString();
+    const signature = await issueTimestampSignature(signingPrivateKey, timestamp);
+    const tokenResponse = await request("POST", "/v1/auth/token", {
+      noisePublicKey: base64Encode(noisePublicKey),
+      timestamp,
+      signature,
+    });
+    const token = (await json(tokenResponse)).token as string;
+
+    const res = await request("DELETE", "/v1/users/self", undefined, {
+      Authorization: `Bearer ${token}`,
+    });
+
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({
+      deleted: true,
+      userId: user.id,
+      username: user.username,
+    });
+    expect(mockUsers()).toHaveLength(0);
   });
 });
 

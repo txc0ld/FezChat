@@ -10,7 +10,7 @@ struct ProfileView: View {
 
     var profileViewModel: ProfileViewModel? = nil
     var storeViewModel: StoreViewModel? = nil
-    var onSignOut: (() -> Void)? = nil
+    var onSignOut: (() -> Bool)? = nil
 
     @Query private var users: [User]
 
