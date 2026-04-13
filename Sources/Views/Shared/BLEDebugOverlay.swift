@@ -579,13 +579,22 @@ private struct ShareSheet: UIViewControllerRepresentable {
 
 // MARK: - Debug Overlay Modifier
 
-/// Triple-tap gesture to show BLE debug overlay.
+/// Triple-tap gesture to show BLE debug overlay in debug and TestFlight builds.
 struct BLEDebugTapModifier: ViewModifier {
     @State private var showDebug = false
+
+    private var isEnabled: Bool {
+        #if DEBUG
+        return true
+        #else
+        return BuildInfo.isTestFlight
+        #endif
+    }
 
     func body(content: Content) -> some View {
         content
             .onTapGesture(count: 3) {
+                guard isEnabled else { return }
                 showDebug = true
             }
             .sheet(isPresented: $showDebug) {
@@ -597,14 +606,6 @@ struct BLEDebugTapModifier: ViewModifier {
 extension View {
     /// Adds a triple-tap gesture to show the BLE debug overlay in debug and TestFlight builds.
     func bleDebugOverlay() -> some View {
-        if BuildInfo.isTestFlight {
-            modifier(BLEDebugTapModifier())
-        } else {
-            #if DEBUG
-            modifier(BLEDebugTapModifier())
-            #else
-            self
-            #endif
-        }
+        modifier(BLEDebugTapModifier())
     }
 }
