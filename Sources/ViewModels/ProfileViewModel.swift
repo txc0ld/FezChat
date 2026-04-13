@@ -44,6 +44,7 @@ final class ProfileViewModel {
         let signingPublicKey: Data
         let avatarThumbnail: Data?
         let avatarFullRes: Data?
+        let avatarURL: String?
         let bio: String?
         let isVerified: Bool
         let createdAt: Date
@@ -57,6 +58,7 @@ final class ProfileViewModel {
             signingPublicKey = user.signingPublicKey
             avatarThumbnail = user.avatarThumbnail
             avatarFullRes = user.avatarFullRes
+            avatarURL = user.avatarURL
             bio = user.bio
             isVerified = user.isVerified
             createdAt = user.createdAt
@@ -378,6 +380,23 @@ final class ProfileViewModel {
             // Cache the avatar
             imageService.cacheImage(fullResData, forKey: "avatar_\(user.id.uuidString)")
 
+            // Upload to CDN in background — don't block local save
+            let userId = user.id.uuidString
+            let uploadData = fullResData
+            let syncService = userSyncService
+            Task {
+                do {
+                    let avatarURL = try await syncService.uploadAvatar(imageData: uploadData, userId: userId)
+                    await MainActor.run {
+                        user.avatarURL = avatarURL
+                        try? context.save()
+                    }
+                    DebugLogger.shared.log("PROFILE", "Avatar uploaded to CDN: \(DebugLogger.redact(avatarURL))")
+                } catch {
+                    DebugLogger.shared.log("PROFILE", "Avatar CDN upload failed: \(error.localizedDescription)", isError: true)
+                }
+            }
+
             successMessage = "Avatar updated"
 
         } catch {
@@ -394,6 +413,7 @@ final class ProfileViewModel {
         let context = self.context
         user.avatarThumbnail = nil
         user.avatarFullRes = nil
+        user.avatarURL = nil
 
         do {
             try context.save()

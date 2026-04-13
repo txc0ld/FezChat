@@ -393,6 +393,58 @@ final class UserSyncService: Sendable {
         }
     }
 
+    // MARK: - Avatar Upload
+
+    /// Upload avatar image to the CDN. Returns the public URL of the uploaded avatar.
+    func uploadAvatar(imageData: Data, userId: String) async throws -> String {
+        let urlString = "\(ServerConfig.cdnBaseURL)/avatars/upload"
+        guard let url = URL(string: urlString) else {
+            throw SyncError.networkError("Invalid URL")
+        }
+
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        var body = Data()
+        // userId field
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"userId\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(userId)\r\n".data(using: .utf8)!)
+        // avatar file field
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"avatar\"; filename=\"avatar.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        let (data, response) = try await performAuthenticatedRequest(request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw SyncError.networkError("Invalid response")
+        }
+
+        switch http.statusCode {
+        case 200, 201:
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let avatarURL = json["url"] as? String else {
+                throw SyncError.serverError("Invalid upload response")
+            }
+            DebugLogger.emit("PROFILE", "Avatar uploaded for \(DebugLogger.redact(userId))")
+            return avatarURL
+        case 401:
+            throw SyncError.unauthorized
+        case 413:
+            throw SyncError.badRequest("Image too large (max 2MB)")
+        default:
+            let message = parseError(data) ?? "Status \(http.statusCode)"
+            throw SyncError.serverError(message)
+        }
+    }
+
     // MARK: - Lookup by Username
 
     /// Look up a user by username via the auth server.
