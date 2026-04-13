@@ -8,6 +8,7 @@
  * DELETE /v1/users/self     — delete the authenticated user account
  */
 import { Resend } from "resend";
+import { sendPush } from "./apns";
 
 export interface Env {
   CODES: KVNamespace;
@@ -25,6 +26,11 @@ export interface Env {
   DEV_BYPASS?: string;
   /** Neon Postgres connection string. Set via `wrangler secret put DATABASE_URL`. */
   DATABASE_URL?: string;
+  APNS_KEY_ID: string;
+  APNS_TEAM_ID: string;
+  APNS_PRIVATE_KEY: string;
+  APNS_ENVIRONMENT: string;
+  INTERNAL_API_KEY: string;
 }
 
 /** KV value stored alongside each code. */
@@ -181,6 +187,12 @@ export default {
         return handleKeys(request, env);
       case "/v1/receipts/verify":
         return handleReceiptVerify(request, env);
+      case "/v1/devices/register":
+        return handleDeviceRegister(request, env);
+      case "/v1/devices/unregister":
+        return handleDeviceUnregister(request, env);
+      case "/v1/internal/push":
+        return handleInternalPush(request, env);
         default:
           return json({ error: "Not found" }, 404, env);
       }
@@ -724,6 +736,8 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
     return json({ error: "Database not configured" }, 503, env);
   }
 
+  const peerIdHex = await derivePeerIdHex(noiseKey);
+
   // Registration upsert handles two re-registration scenarios:
   //
   // 1. Same device (same email_hash, same or updated username):
@@ -747,7 +761,11 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
         updated_at = NOW()
       RETURNING id
     `;
-    return json({ userId: result[0]?.id }, 200, env);
+    const userId = result[0]?.id;
+    await sql`UPDATE users SET peer_id_hex = ${peerIdHex} WHERE id = ${userId}`.catch((e: any) =>
+      console.error("[auth] handleRegister peer_id_hex update error:", e)
+    );
+    return json({ userId }, 200, env);
   } catch (error: any) {
     const msg = error?.message ?? String(error);
     const code = error?.code ?? "";
@@ -769,7 +787,11 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
         if (result.length === 0) {
           return json({ error: "Registration failed" }, 500, env);
         }
-        return json({ userId: result[0]?.id }, 200, env);
+        const userId = result[0]?.id;
+        await sql`UPDATE users SET peer_id_hex = ${peerIdHex} WHERE id = ${userId}`.catch((e: any) =>
+          console.error("[auth] handleRegister (username conflict) peer_id_hex update error:", e)
+        );
+        return json({ userId }, 200, env);
       } catch (updateError: any) {
         console.error("[auth] handleRegister (username conflict update) error:", updateError);
         return json({ error: "Registration failed" }, 500, env);
@@ -814,7 +836,7 @@ async function handleIssueToken(request: Request, env: Env): Promise<Response> {
 
   try {
     const result = await sql`
-      SELECT id, noise_public_key, signing_public_key
+      SELECT id, noise_public_key, signing_public_key, peer_id_hex
       FROM users
       WHERE noise_public_key = ${noisePublicKey}
     `;
@@ -839,6 +861,13 @@ async function handleIssueToken(request: Request, env: Env): Promise<Response> {
     const isValid = await crypto.subtle.verify("Ed25519", key, signature, utf8ToBytes(body.timestamp));
     if (!isValid) {
       return json({ error: "Invalid signature" }, 401, env);
+    }
+
+    if (!user.peer_id_hex) {
+      const peerIdHex = await derivePeerIdHex(noisePublicKey);
+      await sql`UPDATE users SET peer_id_hex = ${peerIdHex} WHERE id = ${user.id}`.catch((e: any) =>
+        console.error("[auth] handleIssueToken peer_id_hex backfill error:", e)
+      );
     }
 
     const session = await issueJWTForUser(noisePublicKey, env);
@@ -1154,6 +1183,151 @@ async function handleKeys(request: Request, env: Env): Promise<Response> {
     }
     console.error("[auth] handleKeys error:", error);
     return json({ error: "Key update failed" }, 500, env);
+  }
+}
+
+// ─── Device Token Registration ───────────────────────────────
+
+interface DeviceRegisterBody {
+  token?: string;
+  platform?: string;
+  bundleId?: string;
+}
+
+async function handleDeviceRegister(request: Request, env: Env): Promise<Response> {
+  const sql = await getDb(env);
+  if (!sql) {
+    return json({ error: "Database not configured" }, 503, env);
+  }
+
+  try {
+    const auth = await authenticateRequest(request, env);
+    const body = await parseBody<DeviceRegisterBody>(request);
+    if (!body?.token) {
+      return json({ error: "Missing token" }, 400, env);
+    }
+
+    const platform = body.platform ?? "ios";
+    const bundleId = body.bundleId ?? "au.heyblip.Blip";
+
+    const userResult = await sql`
+      SELECT id FROM users WHERE noise_public_key = ${auth.noisePublicKey}
+    `;
+    if (userResult.length === 0) {
+      return json({ error: "User not found" }, 404, env);
+    }
+    const userId = userResult[0].id;
+
+    await sql`
+      INSERT INTO device_tokens (user_id, token, platform, bundle_id)
+      VALUES (${userId}, ${body.token}, ${platform}, ${bundleId})
+      ON CONFLICT (token) DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        updated_at = NOW()
+    `;
+
+    return json({ success: true }, 200, env);
+  } catch (error: any) {
+    if (error instanceof HTTPError) {
+      return json({ error: error.message }, error.status, env);
+    }
+    console.error("[auth] handleDeviceRegister error:", error);
+    return json({ error: "Device registration failed" }, 500, env);
+  }
+}
+
+async function handleDeviceUnregister(request: Request, env: Env): Promise<Response> {
+  const sql = await getDb(env);
+  if (!sql) {
+    return json({ error: "Database not configured" }, 503, env);
+  }
+
+  try {
+    const auth = await authenticateRequest(request, env);
+    const body = await parseBody<{ token?: string }>(request);
+    if (!body?.token) {
+      return json({ error: "Missing token" }, 400, env);
+    }
+
+    const userResult = await sql`
+      SELECT id FROM users WHERE noise_public_key = ${auth.noisePublicKey}
+    `;
+    if (userResult.length === 0) {
+      return json({ error: "User not found" }, 404, env);
+    }
+    const userId = userResult[0].id;
+
+    await sql`
+      DELETE FROM device_tokens WHERE token = ${body.token} AND user_id = ${userId}
+    `;
+
+    return json({ success: true }, 200, env);
+  } catch (error: any) {
+    if (error instanceof HTTPError) {
+      return json({ error: error.message }, error.status, env);
+    }
+    console.error("[auth] handleDeviceUnregister error:", error);
+    return json({ error: "Device unregistration failed" }, 500, env);
+  }
+}
+
+// ─── Internal Push ───────────────────────────────────────────
+
+interface InternalPushBody {
+  recipientPeerIdHex?: string;
+  senderPeerIdHex?: string;
+}
+
+async function handleInternalPush(request: Request, env: Env): Promise<Response> {
+  const internalKey = request.headers.get("X-Internal-Key");
+  if (!internalKey || internalKey !== env.INTERNAL_API_KEY) {
+    return json({ error: "Unauthorized" }, 401, env);
+  }
+
+  const body = await parseBody<InternalPushBody>(request);
+  if (!body?.recipientPeerIdHex || !body.senderPeerIdHex) {
+    return json({ error: "Missing recipientPeerIdHex or senderPeerIdHex" }, 400, env);
+  }
+
+  const sql = await getDb(env);
+  if (!sql) {
+    return json({ error: "Database not configured" }, 503, env);
+  }
+
+  try {
+    const [tokenRows, senderRows] = await Promise.all([
+      sql`
+        SELECT dt.token FROM device_tokens dt
+        JOIN users u ON dt.user_id = u.id
+        WHERE u.peer_id_hex = ${body.recipientPeerIdHex}
+      `,
+      sql`
+        SELECT username FROM users WHERE peer_id_hex = ${body.senderPeerIdHex}
+      `,
+    ]);
+
+    if (tokenRows.length === 0) {
+      return json({ sent: 0, failed: 0 }, 200, env);
+    }
+
+    const senderName: string = senderRows[0]?.username ?? "Someone";
+    const conversationId = body.senderPeerIdHex;
+
+    let sent = 0;
+    let failed = 0;
+
+    await Promise.all(tokenRows.map(async (row: Record<string, any>) => {
+      const ok = await sendPush(String(row.token), senderName, conversationId, 1, env);
+      if (ok) { sent++; } else { failed++; }
+    }));
+
+    return json({ sent, failed }, 200, env);
+  } catch (error: any) {
+    if (error instanceof HTTPError) {
+      return json({ error: error.message }, error.status, env);
+    }
+    console.error("[auth] handleInternalPush error:", error);
+    return json({ error: "Push failed" }, 500, env);
   }
 }
 
