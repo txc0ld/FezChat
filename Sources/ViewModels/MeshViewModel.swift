@@ -144,6 +144,7 @@ final class MeshViewModel {
 
     private let logger = Logger(subsystem: "com.blip", category: "MeshViewModel")
     private let modelContainer: ModelContainer
+    private let context: ModelContext
     private let peerStore: PeerStore
     @ObservationIgnored nonisolated(unsafe) private var refreshTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) private var peerObservation: NSObjectProtocol?
@@ -165,6 +166,7 @@ final class MeshViewModel {
 
     init(modelContainer: ModelContainer, peerStore: PeerStore = .shared) {
         self.modelContainer = modelContainer
+        self.context = ModelContext(modelContainer)
         self.peerStore = peerStore
         setupObservers()
     }
@@ -227,7 +229,7 @@ final class MeshViewModel {
         // Detect bridge node status
         isBridgeNode = connected.count >= 6
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         // Refresh nearby friends and all peers
         await refreshNearbyFriends(peers: connected, context: context)
@@ -401,7 +403,7 @@ final class MeshViewModel {
 
     /// Request to join a location channel.
     func joinLocationChannel(_ channelInfo: LocationChannelInfo) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             if let channel = try context.fetch(FetchDescriptor<Channel>())
                 .first(where: { $0.id == channelInfo.id }) {
@@ -418,7 +420,7 @@ final class MeshViewModel {
 
     /// Leave a location channel.
     func leaveLocationChannel(_ channelInfo: LocationChannelInfo) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             if let channel = try context.fetch(FetchDescriptor<Channel>())
                 .first(where: { $0.id == channelInfo.id }) {

@@ -119,6 +119,7 @@ final class SOSViewModel {
     // MARK: - Dependencies
 
     private let modelContainer: ModelContainer
+    private let context: ModelContext
     private let locationService: LocationService
     private let messageService: MessageService
     private let notificationService: NotificationService
@@ -149,6 +150,7 @@ final class SOSViewModel {
         notificationService: NotificationService
     ) {
         self.modelContainer = modelContainer
+        self.context = ModelContext(modelContainer)
         self.locationService = locationService
         self.messageService = messageService
         self.notificationService = notificationService
@@ -234,7 +236,7 @@ final class SOSViewModel {
         // Create alert
         flowState = .broadcasting
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let alert = SOSAlert(
             severity: severity,
             preciseLocation: GeoPoint(
@@ -279,7 +281,7 @@ final class SOSViewModel {
     func cancelActiveAlert() async {
         guard let alert = activeAlert else { return }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         alert.status = .resolved
         alert.resolution = .cancelled
         alert.resolvedAt = Date()
@@ -301,7 +303,7 @@ final class SOSViewModel {
     func markFalseAlarm() async {
         guard let alert = activeAlert else { return }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         alert.status = .resolved
         alert.resolution = .falseAlarm
         alert.resolvedAt = Date()
@@ -325,7 +327,7 @@ final class SOSViewModel {
 
     /// Load the user's medical responder status.
     func loadResponderStatus() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let descriptor = FetchDescriptor<MedicalResponder>()
 
         let responders: [MedicalResponder]
@@ -345,7 +347,7 @@ final class SOSViewModel {
 
     /// Toggle responder on-duty status.
     func toggleOnDuty() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let descriptor = FetchDescriptor<MedicalResponder>()
 
         let responder: MedicalResponder
@@ -369,7 +371,7 @@ final class SOSViewModel {
 
     /// Accept an SOS alert as a medical responder.
     func acceptAlert(_ alertInfo: SOSAlertInfo) async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let alert: SOSAlert
         do {
@@ -422,7 +424,7 @@ final class SOSViewModel {
     func resolveAlert(resolution: SOSResolution) async {
         guard let alert = acceptedAlert else { return }
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         alert.status = .resolved
         alert.resolution = resolution
         alert.resolvedAt = Date()
@@ -458,7 +460,7 @@ final class SOSViewModel {
 
     /// Refresh visible SOS alerts from SwiftData.
     func refreshVisibleAlerts() async {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let alerts: [SOSAlert]
         do {
@@ -773,7 +775,7 @@ final class SOSViewModel {
 
         // If this is our alert, update state
         if activeAlert?.id == alertID {
-            let context = ModelContext(modelContainer)
+            let context = self.context
             if let alert = activeAlert {
                 alert.status = .accepted
                 do {
@@ -827,7 +829,7 @@ final class SOSViewModel {
             longitude: Double(bitPattern: longitudeBits)
         )
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
         do {
             if let storedAlert = try context.fetch(FetchDescriptor<SOSAlert>())
                 .first(where: { $0.id == alertID }) {

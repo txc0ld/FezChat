@@ -320,7 +320,7 @@ extension MessageService {
 
     /// Update a message's status in SwiftData.
     func updateMessageStatus(messageID: UUID, to status: MessageStatus) {
-        let context = ModelContext(modelContainer)
+        let context = self.context
         let targetID = messageID
         let desc = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
         do {
@@ -486,7 +486,7 @@ extension MessageService {
         let senderHex = senderPeerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         DebugLogger.shared.log("DM", "handleIncomingMessage: \(data.count)B from \(senderHex) subType=\(subType)")
 
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let messageID: UUID
         let content: Data
@@ -577,7 +577,7 @@ extension MessageService {
         }
 
         // Notify delegate and post notification for any active ChatViewModel
-        delegate?.messageService(self, didReceiveMessage: message, in: channel)
+        delegate?.messageService(self, didReceiveMessageID: message.id, channelID: channel.id)
         NotificationCenter.default.post(
             name: .didReceiveBlipMessage,
             object: nil,
@@ -608,7 +608,7 @@ extension MessageService {
         senderPeerID: PeerID,
         timestamp: Date
     ) async throws {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         guard data.count >= 16 else { return }
 
@@ -650,12 +650,12 @@ extension MessageService {
         channel.lastActivityAt = Date()
         try context.save()
 
-        delegate?.messageService(self, didReceiveMessage: message, in: channel)
+        delegate?.messageService(self, didReceiveMessageID: message.id, channelID: channel.id)
     }
 
     @MainActor
     func handleBroadcastMessage(_ packet: Packet) async throws {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let parsedPayload = MessagePayloadBuilder.parsePublicChannelTextPayload(packet.payload)
         if let channelID = parsedPayload.channelID {
@@ -690,7 +690,7 @@ extension MessageService {
             channel.lastActivityAt = Date()
             try context.save()
 
-            delegate?.messageService(self, didReceiveMessage: message, in: channel)
+            delegate?.messageService(self, didReceiveMessageID: message.id, channelID: channel.id)
             NotificationCenter.default.post(
                 name: .didReceiveBlipMessage,
                 object: nil,
@@ -744,7 +744,7 @@ extension MessageService {
         channel.lastActivityAt = Date()
         try context.save()
 
-        delegate?.messageService(self, didReceiveMessage: message, in: channel)
+        delegate?.messageService(self, didReceiveMessageID: message.id, channelID: channel.id)
     }
 
     @MainActor
@@ -801,7 +801,7 @@ extension MessageService {
 
     @MainActor
     func handleOrgAnnouncement(_ packet: Packet) async throws {
-        let context = ModelContext(modelContainer)
+        let context = self.context
 
         let channel: Channel
         let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "stageChannel" })
@@ -824,7 +824,7 @@ extension MessageService {
         channel.lastActivityAt = Date()
         try context.save()
 
-        delegate?.messageService(self, didReceiveMessage: message, in: channel)
+        delegate?.messageService(self, didReceiveMessageID: message.id, channelID: channel.id)
     }
 
 
