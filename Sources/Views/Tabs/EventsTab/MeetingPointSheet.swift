@@ -1,6 +1,30 @@
 import SwiftUI
 import MapKit
 
+private enum MeetingPointL10n {
+    static let title = String(localized: "events.meeting_point.title", defaultValue: "Drop Meeting Point")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let adjustPin = String(localized: "events.meeting_point.adjust_pin", defaultValue: "Drag to adjust pin location")
+    static let annotation = String(localized: "events.meeting_point.annotation", defaultValue: "Meeting Point")
+    static let label = String(localized: "events.meeting_point.label", defaultValue: "Label")
+    static let labelPlaceholder = String(localized: "events.meeting_point.label.placeholder", defaultValue: "e.g. Meet at the big tree")
+    static let labelAccessibility = String(localized: "events.meeting_point.label.accessibility_label", defaultValue: "Meeting point label")
+    static let expiresAfter = String(localized: "events.meeting_point.expires_after", defaultValue: "Expires after")
+    static let shareWith = String(localized: "events.meeting_point.share_with", defaultValue: "Share with")
+    static let friends = String(localized: "common.friends", defaultValue: "Friends")
+    static let group = String(localized: "common.group", defaultValue: "Group")
+    static let everyone = String(localized: "common.everyone", defaultValue: "Everyone")
+    static let dropPin = String(localized: "events.meeting_point.drop_pin", defaultValue: "Drop Pin")
+
+    static func expireAfter(_ option: String) -> String {
+        String(format: String(localized: "events.meeting_point.expire_after_accessibility_label", defaultValue: "Expire after %@"), locale: Locale.current, option)
+    }
+
+    static func shareWith(_ label: String) -> String {
+        String(format: String(localized: "events.meeting_point.share_with_accessibility_label", defaultValue: "Share with %@"), locale: Locale.current, label)
+    }
+}
+
 // MARK: - MeetingPointSheet
 
 /// Sheet for creating a meeting point: drop pin, add label, set expiry, share to group.
@@ -54,11 +78,11 @@ struct MeetingPointSheet: View {
                     .padding(BlipSpacing.md)
                 }
             }
-            .navigationTitle("Drop Meeting Point")
+            .navigationTitle(MeetingPointL10n.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isPresented = false }
+                    Button(MeetingPointL10n.cancel) { isPresented = false }
                         .foregroundStyle(theme.colors.mutedText)
                 }
             }
@@ -70,12 +94,12 @@ struct MeetingPointSheet: View {
     private var mapPinSection: some View {
         GlassCard(thickness: .regular) {
             VStack(spacing: BlipSpacing.sm) {
-                Text("Drag to adjust pin location")
+                Text(MeetingPointL10n.adjustPin)
                     .font(theme.typography.caption)
                     .foregroundStyle(theme.colors.mutedText)
 
                 Map(position: $cameraPosition) {
-                    Annotation("Meeting Point", coordinate: pinCoordinate) {
+                    Annotation(MeetingPointL10n.annotation, coordinate: pinCoordinate) {
                         VStack(spacing: 0) {
                             Image(systemName: "mappin.circle.fill")
                                 .font(.system(size: 30))
@@ -105,12 +129,12 @@ struct MeetingPointSheet: View {
     private var labelSection: some View {
         GlassCard(thickness: .regular) {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
-                Text("Label")
+                Text(MeetingPointL10n.label)
                     .font(theme.typography.secondary)
                     .fontWeight(.medium)
                     .foregroundStyle(theme.colors.text)
 
-                TextField("e.g. Meet at the big tree", text: $label)
+                TextField(MeetingPointL10n.labelPlaceholder, text: $label)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.text)
                     .padding(BlipSpacing.md)
@@ -127,7 +151,7 @@ struct MeetingPointSheet: View {
                     )
                     .focused($isLabelFocused)
                     .submitLabel(.done)
-                    .accessibilityLabel("Meeting point label")
+                    .accessibilityLabel(MeetingPointL10n.labelAccessibility)
 
                 Text("\(label.count)/50")
                     .font(theme.typography.caption)
@@ -142,7 +166,7 @@ struct MeetingPointSheet: View {
     private var expirySection: some View {
         GlassCard(thickness: .regular) {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
-                Text("Expires after")
+                Text(MeetingPointL10n.expiresAfter)
                     .font(theme.typography.secondary)
                     .fontWeight(.medium)
                     .foregroundStyle(theme.colors.text)
@@ -173,7 +197,7 @@ struct MeetingPointSheet: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel("Expire after \(option.displayString)")
+        .accessibilityLabel(MeetingPointL10n.expireAfter(option.displayString))
         .accessibilityAddTraits(selectedExpiry == option ? .isSelected : [])
     }
 
@@ -182,15 +206,15 @@ struct MeetingPointSheet: View {
     private var shareSection: some View {
         GlassCard(thickness: .regular) {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
-                Text("Share with")
+                Text(MeetingPointL10n.shareWith)
                     .font(theme.typography.secondary)
                     .fontWeight(.medium)
                     .foregroundStyle(theme.colors.text)
 
                 HStack(spacing: BlipSpacing.sm) {
-                    shareOption(.friends, icon: "person.2.fill", label: "Friends")
-                    shareOption(.group, icon: "person.3.fill", label: "Group")
-                    shareOption(.everyone, icon: "globe", label: "Everyone")
+                    shareOption(.friends, icon: "person.2.fill", label: MeetingPointL10n.friends)
+                    shareOption(.group, icon: "person.3.fill", label: MeetingPointL10n.group)
+                    shareOption(.everyone, icon: "globe", label: MeetingPointL10n.everyone)
                 }
             }
         }
@@ -223,17 +247,17 @@ struct MeetingPointSheet: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel("Share with \(label)")
+        .accessibilityLabel(MeetingPointL10n.shareWith(label))
         .accessibilityAddTraits(shareTarget == target ? .isSelected : [])
     }
 
     // MARK: - Confirm Button
 
     private var confirmButton: some View {
-        GlassButton("Drop Pin", icon: "mappin.and.ellipse") {
+        GlassButton(MeetingPointL10n.dropPin, icon: "mappin.and.ellipse") {
             let data = MeetingPointData(
                 coordinate: pinCoordinate,
-                label: label.isEmpty ? "Meeting Point" : label,
+                label: label.isEmpty ? MeetingPointL10n.annotation : label,
                 expiry: selectedExpiry,
                 shareTarget: shareTarget
             )

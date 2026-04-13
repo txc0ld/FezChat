@@ -1,5 +1,18 @@
 import SwiftUI
 
+private enum MainTabViewL10n {
+    static let nearbyTitle = String(localized: "main_tab.placeholder.nearby.title", defaultValue: "Nearby")
+    static let nearbySubtitle = String(localized: "main_tab.placeholder.nearby.subtitle", defaultValue: "Discover people and channels nearby.")
+    static let eventTitle = String(localized: "main_tab.placeholder.event.title", defaultValue: "Event")
+    static let eventSubtitle = String(localized: "main_tab.placeholder.event.subtitle", defaultValue: "Stage map, schedule, and announcements.")
+    static let profileTitle = String(localized: "main_tab.placeholder.profile.title", defaultValue: "Profile")
+    static let profileSubtitle = String(localized: "main_tab.placeholder.profile.subtitle", defaultValue: "Your profile, friends, and settings.")
+    static let chatsTab = String(localized: "main_tab.tab.chats", defaultValue: "Chats")
+    static let nearbyTab = String(localized: "main_tab.tab.nearby", defaultValue: "Nearby")
+    static let eventTab = String(localized: "main_tab.tab.event", defaultValue: "Event")
+    static let profileTab = String(localized: "main_tab.tab.profile", defaultValue: "Profile")
+}
+
 // MARK: - MainTabView
 
 /// Root tab navigation with a custom floating glass tab bar.
@@ -168,10 +181,10 @@ struct MainTabView: View {
             Image(systemName: "antenna.radiowaves.left.and.right")
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText)
-            Text("Nearby")
+            Text(MainTabViewL10n.nearbyTitle)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
-            Text("Discover people and channels nearby.")
+            Text(MainTabViewL10n.nearbySubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
         }
@@ -183,10 +196,10 @@ struct MainTabView: View {
             Image(systemName: "music.note.house.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText)
-            Text("Event")
+            Text(MainTabViewL10n.eventTitle)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
-            Text("Stage map, schedule, and announcements.")
+            Text(MainTabViewL10n.eventSubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
         }
@@ -198,10 +211,10 @@ struct MainTabView: View {
             Image(systemName: "person.circle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText)
-            Text("Profile")
+            Text(MainTabViewL10n.profileTitle)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
-            Text("Your profile, friends, and settings.")
+            Text(MainTabViewL10n.profileSubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
         }
@@ -221,10 +234,10 @@ extension MainTabView {
 
         var title: String {
             switch self {
-            case .chats: return "Chats"
-            case .nearby: return "Nearby"
-            case .event: return "Event"
-            case .profile: return "Profile"
+            case .chats: return MainTabViewL10n.chatsTab
+            case .nearby: return MainTabViewL10n.nearbyTab
+            case .event: return MainTabViewL10n.eventTab
+            case .profile: return MainTabViewL10n.profileTab
             }
         }
 

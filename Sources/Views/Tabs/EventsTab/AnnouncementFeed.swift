@@ -1,5 +1,34 @@
 import SwiftUI
 
+private enum AnnouncementFeedL10n {
+    static let title = String(localized: "events.announcements.feed.title", defaultValue: "Announcements")
+    static let emptyTitle = String(localized: "events.announcements.feed.empty.title", defaultValue: "No announcements")
+    static let emptySubtitle = String(localized: "events.announcements.feed.empty.subtitle", defaultValue: "Event updates will appear here")
+    static let info = String(localized: "events.announcements.severity.info", defaultValue: "Info")
+    static let warning = String(localized: "events.announcements.severity.warning", defaultValue: "Warning")
+    static let urgent = String(localized: "events.announcements.severity.urgent", defaultValue: "Urgent")
+    static let emergency = String(localized: "events.announcements.severity.emergency", defaultValue: "Emergency")
+    static let previewWeatherWarning = String(localized: "events.announcements.preview.weather_warning", defaultValue: "WEATHER WARNING")
+    static let previewWeatherMessage = String(localized: "events.announcements.preview.weather_message", defaultValue: "Heavy rain expected from 8pm. Seek shelter in covered areas. Waterproofs recommended.")
+    static let previewEventSafety = String(localized: "events.announcements.preview.event_safety", defaultValue: "Event Safety")
+    static let previewScheduleChange = String(localized: "events.announcements.preview.schedule_change", defaultValue: "Schedule Change")
+    static let previewScheduleMessage = String(localized: "events.announcements.preview.schedule_message", defaultValue: "Fred Again.. moved from 9pm to 10pm on Pyramid Stage due to technical setup.")
+    static let previewProgrammeTeam = String(localized: "events.announcements.preview.programme_team", defaultValue: "Programme Team")
+    static let previewFoodVillage = String(localized: "events.announcements.preview.food_village", defaultValue: "Food Village Extended")
+    static let previewFoodVillageMessage = String(localized: "events.announcements.preview.food_village_message", defaultValue: "Food vendors in the Green Field area will remain open until 2am tonight.")
+    static let previewEventInfo = String(localized: "events.announcements.preview.event_info", defaultValue: "Event Info")
+
+    static func accessibilityLabel(severity: String, title: String, message: String) -> String {
+        String(
+            format: String(localized: "events.announcements.card.accessibility", defaultValue: "%1$@ announcement: %2$@. %3$@"),
+            locale: Locale.current,
+            severity,
+            title,
+            message
+        )
+    }
+}
+
 // MARK: - AnnouncementFeed
 
 /// Priority announcements from event organizers.
@@ -33,7 +62,7 @@ struct AnnouncementFeed: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.blipAccentPurple)
 
-            Text("Announcements")
+            Text(AnnouncementFeedL10n.title)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
@@ -85,11 +114,11 @@ struct AnnouncementFeed: View {
                     .font(.system(size: 28))
                     .foregroundStyle(theme.colors.mutedText)
 
-                Text("No announcements")
+                Text(AnnouncementFeedL10n.emptyTitle)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText)
 
-                Text("Event updates will appear here")
+                Text(AnnouncementFeedL10n.emptySubtitle)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText.opacity(0.7))
             }
@@ -171,7 +200,13 @@ private struct AnnouncementCard: View {
                 )
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(announcement.severity.accessibilityLabel) announcement: \(announcement.title). \(announcement.message)")
+        .accessibilityLabel(
+            AnnouncementFeedL10n.accessibilityLabel(
+                severity: announcement.severity.accessibilityLabel,
+                title: announcement.title,
+                message: announcement.message
+            )
+        )
     }
 
     private var severityBadge: some View {
@@ -226,10 +261,10 @@ enum AnnouncementSeverity {
 
     var accessibilityLabel: String {
         switch self {
-        case .info: return "Info"
-        case .warning: return "Warning"
-        case .urgent: return "Urgent"
-        case .emergency: return "Emergency"
+        case .info: return AnnouncementFeedL10n.info
+        case .warning: return AnnouncementFeedL10n.warning
+        case .urgent: return AnnouncementFeedL10n.urgent
+        case .emergency: return AnnouncementFeedL10n.emergency
         }
     }
 }
@@ -238,9 +273,9 @@ enum AnnouncementSeverity {
 
 #Preview("Announcement Feed") {
     let announcements: [AnnouncementItem] = [
-        AnnouncementItem(id: UUID(), title: "WEATHER WARNING", message: "Heavy rain expected from 8pm. Seek shelter in covered areas. Waterproofs recommended.", severity: .emergency, timestamp: Date().addingTimeInterval(-300), source: "Event Safety", isPinned: true),
-        AnnouncementItem(id: UUID(), title: "Schedule Change", message: "Fred Again.. moved from 9pm to 10pm on Pyramid Stage due to technical setup.", severity: .warning, timestamp: Date().addingTimeInterval(-1800), source: "Programme Team", isPinned: false),
-        AnnouncementItem(id: UUID(), title: "Food Village Extended", message: "Food vendors in the Green Field area will remain open until 2am tonight.", severity: .info, timestamp: Date().addingTimeInterval(-3600), source: "Event Info", isPinned: false),
+        AnnouncementItem(id: UUID(), title: AnnouncementFeedL10n.previewWeatherWarning, message: AnnouncementFeedL10n.previewWeatherMessage, severity: .emergency, timestamp: Date().addingTimeInterval(-300), source: AnnouncementFeedL10n.previewEventSafety, isPinned: true),
+        AnnouncementItem(id: UUID(), title: AnnouncementFeedL10n.previewScheduleChange, message: AnnouncementFeedL10n.previewScheduleMessage, severity: .warning, timestamp: Date().addingTimeInterval(-1800), source: AnnouncementFeedL10n.previewProgrammeTeam, isPinned: false),
+        AnnouncementItem(id: UUID(), title: AnnouncementFeedL10n.previewFoodVillage, message: AnnouncementFeedL10n.previewFoodVillageMessage, severity: .info, timestamp: Date().addingTimeInterval(-3600), source: AnnouncementFeedL10n.previewEventInfo, isPinned: false),
     ]
 
     ZStack {

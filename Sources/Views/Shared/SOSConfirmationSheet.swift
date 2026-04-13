@@ -1,5 +1,39 @@
 import SwiftUI
 
+private enum SOSConfirmationL10n {
+    static let title = String(localized: "sos.confirmation.title", defaultValue: "Request Help")
+    static let subtitle = String(localized: "sos.confirmation.subtitle", defaultValue: "Select the severity of your situation")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let greenConfirm = String(localized: "sos.confirmation.green_confirm", defaultValue: "Confirm - Request Help")
+    static let amberSlide = String(localized: "sos.confirmation.amber_slide", defaultValue: "Slide to confirm")
+    static let amberAccessibility = String(localized: "sos.confirmation.amber_accessibility_label", defaultValue: "Slide to confirm urgent help request")
+    static let redHolding = String(localized: "sos.confirmation.red_holding", defaultValue: "Keep holding...")
+    static let redPrompt = String(localized: "sos.confirmation.red_prompt", defaultValue: "Hold for 3 seconds")
+    static let redAccessibility = String(localized: "sos.confirmation.red_accessibility_label", defaultValue: "Hold for 3 seconds to send critical help request")
+    static let helpRequested = String(localized: "sos.confirmation.sent.title", defaultValue: "Help Requested")
+    static let helpRequestedSubtitle = String(localized: "sos.confirmation.sent.subtitle", defaultValue: "Medical responders have been alerted. Stay where you are.")
+    static let cancelSOS = String(localized: "sos.confirmation.sent.cancel", defaultValue: "Cancel SOS")
+    static let pickUpPhone = String(localized: "sos.confirmation.proximity.title", defaultValue: "Pick Up Your Phone")
+    static let pickUpPhoneSubtitle = String(localized: "sos.confirmation.proximity.subtitle", defaultValue: "Your phone appears to be face-down or in a pocket. Pick it up to confirm your SOS request.")
+    static let captchaTitle = String(localized: "sos.confirmation.captcha.title", defaultValue: "Confirm This is Real")
+    static let captchaSubtitle = String(localized: "sos.confirmation.captcha.subtitle", defaultValue: "You've sent multiple alerts recently. Please drag the slider to confirm this is a real emergency.")
+    static let captchaDrag = String(localized: "sos.confirmation.captcha.drag", defaultValue: "Drag to confirm")
+    static let nonUrgent = String(localized: "sos.severity.non_urgent", defaultValue: "Non-Urgent")
+    static let urgent = String(localized: "sos.severity.urgent", defaultValue: "Urgent")
+    static let criticalEmergency = String(localized: "sos.severity.critical_emergency", defaultValue: "Critical Emergency")
+    static let greenDescription = String(localized: "sos.severity.green_description", defaultValue: "I need help but I'm not in immediate danger")
+    static let amberDescription = String(localized: "sos.severity.amber_description", defaultValue: "I need help soon - feeling unwell or unsafe")
+    static let redDescription = String(localized: "sos.severity.red_description", defaultValue: "Life-threatening emergency - I need help NOW")
+
+    static func cancelIn(_ seconds: Int) -> String {
+        String(
+            format: String(localized: "sos.confirmation.sent.cancel_countdown", defaultValue: "Cancel in %ds"),
+            locale: Locale.current,
+            seconds
+        )
+    }
+}
+
 // MARK: - SOSConfirmationSheet
 
 /// SOS confirmation sheet with 3 severity tiers:
@@ -103,11 +137,11 @@ struct SOSConfirmationSheet: View {
                     .font(.system(size: 40))
                     .foregroundStyle(.red)
 
-                Text("Request Help")
+                Text(SOSConfirmationL10n.title)
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
-                Text("Select the severity of your situation")
+                Text(SOSConfirmationL10n.subtitle)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
                     .multilineTextAlignment(.center)
@@ -132,7 +166,7 @@ struct SOSConfirmationSheet: View {
 
             // Cancel button
             Button(action: { isPresented = false }) {
-                Text("Cancel")
+                Text(SOSConfirmationL10n.cancel)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText)
                     .frame(minHeight: BlipSizing.minTapTarget)
@@ -202,7 +236,7 @@ struct SOSConfirmationSheet: View {
 
     // Green: Tap to confirm
     private var greenConfirmation: some View {
-        GlassButton("Confirm - Request Help", icon: "checkmark.circle") {
+        GlassButton(SOSConfirmationL10n.greenConfirm, icon: "checkmark.circle") {
             sendSOS(.green)
         }
         .fullWidth()
@@ -216,7 +250,7 @@ struct SOSConfirmationSheet: View {
                 .fill(BlipColors.darkColors.statusAmber.opacity(0.15))
                 .frame(height: 56)
                 .overlay(
-                    Text("Slide to confirm")
+                    Text(SOSConfirmationL10n.amberSlide)
                         .font(theme.typography.secondary)
                         .foregroundStyle(theme.colors.mutedText)
                 )
@@ -258,7 +292,7 @@ struct SOSConfirmationSheet: View {
                 )
         }
         .frame(height: 56)
-        .accessibilityLabel("Slide to confirm urgent help request")
+        .accessibilityLabel(SOSConfirmationL10n.amberAccessibility)
         .accessibilityAddTraits(.allowsDirectInteraction)
     }
 
@@ -307,11 +341,11 @@ struct SOSConfirmationSheet: View {
                 sendSOS(.red)
             }
 
-            Text(redIsHolding ? "Keep holding..." : "Hold for 3 seconds")
+            Text(redIsHolding ? SOSConfirmationL10n.redHolding : SOSConfirmationL10n.redPrompt)
                 .font(theme.typography.secondary)
                 .foregroundStyle(BlipColors.darkColors.statusRed)
         }
-        .accessibilityLabel("Hold for 3 seconds to send critical help request")
+        .accessibilityLabel(SOSConfirmationL10n.redAccessibility)
     }
 
     // MARK: - Sent Confirmation
@@ -322,11 +356,11 @@ struct SOSConfirmationSheet: View {
                 .font(.system(size: 60))
                 .foregroundStyle(severityColor(selectedSeverity))
 
-            Text("Help Requested")
+            Text(SOSConfirmationL10n.helpRequested)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
-            Text("Medical responders have been alerted. Stay where you are.")
+            Text(SOSConfirmationL10n.helpRequestedSubtitle)
                 .font(theme.typography.body)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -334,7 +368,7 @@ struct SOSConfirmationSheet: View {
             // Cancel banner
             GlassCard(thickness: .regular) {
                 HStack(spacing: BlipSpacing.md) {
-                    Text("Cancel in \(cancelCountdown)s")
+                    Text(SOSConfirmationL10n.cancelIn(cancelCountdown))
                         .font(theme.typography.body)
                         .fontWeight(.medium)
                         .foregroundStyle(theme.colors.text)
@@ -344,7 +378,7 @@ struct SOSConfirmationSheet: View {
                     Spacer()
 
                     Button(action: cancelSOS) {
-                        Text("Cancel SOS")
+                        Text(SOSConfirmationL10n.cancelSOS)
                             .font(theme.typography.body)
                             .fontWeight(.semibold)
                             .foregroundStyle(BlipColors.darkColors.statusRed)
@@ -369,11 +403,11 @@ struct SOSConfirmationSheet: View {
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText)
 
-            Text("Pick Up Your Phone")
+            Text(SOSConfirmationL10n.pickUpPhone)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
-            Text("Your phone appears to be face-down or in a pocket. Pick it up to confirm your SOS request.")
+            Text(SOSConfirmationL10n.pickUpPhoneSubtitle)
                 .font(theme.typography.body)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -388,11 +422,11 @@ struct SOSConfirmationSheet: View {
                 .font(.system(size: 40))
                 .foregroundStyle(BlipColors.darkColors.statusAmber)
 
-            Text("Confirm This is Real")
+            Text(SOSConfirmationL10n.captchaTitle)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
-            Text("You've sent multiple alerts recently. Please drag the slider to confirm this is a real emergency.")
+            Text(SOSConfirmationL10n.captchaSubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -403,7 +437,7 @@ struct SOSConfirmationSheet: View {
                     .fill(theme.colors.hover)
                     .frame(height: 56)
                     .overlay(
-                        Text("Drag to confirm")
+                        Text(SOSConfirmationL10n.captchaDrag)
                             .font(theme.typography.secondary)
                             .foregroundStyle(theme.colors.mutedText)
                     )
@@ -566,17 +600,17 @@ struct SOSConfirmationSheet: View {
 
     private func severityTitle(_ severity: SOSSeverity) -> String {
         switch severity {
-        case .green: return "Non-Urgent"
-        case .amber: return "Urgent"
-        case .red: return "Critical Emergency"
+        case .green: return SOSConfirmationL10n.nonUrgent
+        case .amber: return SOSConfirmationL10n.urgent
+        case .red: return SOSConfirmationL10n.criticalEmergency
         }
     }
 
     private func severityDescription(_ severity: SOSSeverity) -> String {
         switch severity {
-        case .green: return "I need help but I'm not in immediate danger"
-        case .amber: return "I need help soon - feeling unwell or unsafe"
-        case .red: return "Life-threatening emergency - I need help NOW"
+        case .green: return SOSConfirmationL10n.greenDescription
+        case .amber: return SOSConfirmationL10n.amberDescription
+        case .red: return SOSConfirmationL10n.redDescription
         }
     }
 }

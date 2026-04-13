@@ -1,5 +1,18 @@
 import SwiftUI
 
+private enum VoiceNotePlayerL10n {
+    static let pauseHint = String(localized: "chat.voice_note.pause_hint", defaultValue: "Double tap to pause")
+    static let playHint = String(localized: "chat.voice_note.play_hint", defaultValue: "Double tap to play")
+
+    static func accessibilityLabel(_ duration: String) -> String {
+        String(
+            format: String(localized: "chat.voice_note.accessibility", defaultValue: "Voice note, %@"),
+            locale: Locale.current,
+            duration
+        )
+    }
+}
+
 // MARK: - VoiceNotePlayer
 
 /// Inline voice note player with waveform visualization, play/pause, duration, and speed toggle.
@@ -63,8 +76,8 @@ struct VoiceNotePlayer: View {
             speedToggle
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Voice note, \(formattedDuration(duration))")
-        .accessibilityHint(isPlaying ? "Double tap to pause" : "Double tap to play")
+        .accessibilityLabel(VoiceNotePlayerL10n.accessibilityLabel(formattedDuration(duration)))
+        .accessibilityHint(isPlaying ? VoiceNotePlayerL10n.pauseHint : VoiceNotePlayerL10n.playHint)
         .onDisappear {
             playbackTimer?.invalidate()
             playbackTimer = nil

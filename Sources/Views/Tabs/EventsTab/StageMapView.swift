@@ -1,6 +1,26 @@
 import SwiftUI
 import MapKit
 
+private enum StageMapViewL10n {
+    static let recenter = String(localized: "events.map.recenter", defaultValue: "Recenter map on event")
+    static let openStageChannel = String(localized: "events.map.stage.open_channel", defaultValue: "Tap to open stage channel")
+    static let previewPyramid = String(localized: "events.map.preview.stage.pyramid", defaultValue: "Pyramid")
+    static let previewBicep = String(localized: "events.map.preview.artist.bicep", defaultValue: "Bicep")
+    static let previewOther = String(localized: "events.map.preview.stage.other", defaultValue: "Other")
+    static let previewWestHolts = String(localized: "events.map.preview.stage.west_holts", defaultValue: "West Holts")
+    static let previewFloatingPoints = String(localized: "events.map.preview.artist.floating_points", defaultValue: "Floating Points")
+    static let previewMeetingPoint = String(localized: "events.map.preview.meeting_point", defaultValue: "Meet at tent")
+    static let previewSarah = String(localized: "events.map.preview.created_by.sarah", defaultValue: "Sarah")
+
+    static func meetingPoint(_ label: String) -> String {
+        String(
+            format: String(localized: "events.map.meeting_point.accessibility", defaultValue: "Meeting point: %@"),
+            locale: Locale.current,
+            label
+        )
+    }
+}
+
 // MARK: - StageMapView
 
 /// Interactive MapKit view rendering event grounds with stage hotspots,
@@ -47,7 +67,7 @@ struct StageMapView: View {
                     )
             }
             .padding(BlipSpacing.md)
-            .accessibilityLabel("Recenter map on event")
+            .accessibilityLabel(StageMapViewL10n.recenter)
         }
         .onAppear { recenter() }
     }
@@ -112,7 +132,7 @@ struct StageMapView: View {
                         .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Meeting point: \(point.label)")
+                    .accessibilityLabel(StageMapViewL10n.meetingPoint(point.label))
                 }
             }
         }
@@ -181,7 +201,7 @@ private struct StageHotspotView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(stage.name) stage")
-        .accessibilityHint("Tap to open stage channel")
+        .accessibilityHint(StageMapViewL10n.openStageChannel)
     }
 }
 
@@ -207,16 +227,16 @@ struct MeetingPointMapItem: Identifiable {
 
 #Preview("Stage Map") {
     let stages: [StageMapItem] = [
-        StageMapItem(id: UUID(), name: "Pyramid", coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), isLive: true, currentArtist: "Bicep"),
-        StageMapItem(id: UUID(), name: "Other", coordinate: CLLocationCoordinate2D(latitude: 51.0055, longitude: -2.5845), isLive: false, currentArtist: nil),
-        StageMapItem(id: UUID(), name: "West Holts", coordinate: CLLocationCoordinate2D(latitude: 51.0038, longitude: -2.5870), isLive: true, currentArtist: "Floating Points"),
+        StageMapItem(id: UUID(), name: StageMapViewL10n.previewPyramid, coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), isLive: true, currentArtist: StageMapViewL10n.previewBicep),
+        StageMapItem(id: UUID(), name: StageMapViewL10n.previewOther, coordinate: CLLocationCoordinate2D(latitude: 51.0055, longitude: -2.5845), isLive: false, currentArtist: nil),
+        StageMapItem(id: UUID(), name: StageMapViewL10n.previewWestHolts, coordinate: CLLocationCoordinate2D(latitude: 51.0038, longitude: -2.5870), isLive: true, currentArtist: StageMapViewL10n.previewFloatingPoints),
     ]
 
     StageMapView(
         stages: stages,
         friends: NearbyView.sampleFriendPins,
         meetingPoints: [
-            MeetingPointMapItem(id: UUID(), label: "Meet at tent", coordinate: CLLocationCoordinate2D(latitude: 51.0042, longitude: -2.5855), createdBy: "Sarah", expiresAt: Date().addingTimeInterval(1800)),
+            MeetingPointMapItem(id: UUID(), label: StageMapViewL10n.previewMeetingPoint, coordinate: CLLocationCoordinate2D(latitude: 51.0042, longitude: -2.5855), createdBy: StageMapViewL10n.previewSarah, expiresAt: Date().addingTimeInterval(1800)),
         ],
         eventCenter: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
         eventRadiusMeters: 3000

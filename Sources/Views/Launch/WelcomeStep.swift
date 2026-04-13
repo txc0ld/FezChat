@@ -1,5 +1,16 @@
 import SwiftUI
 
+private enum WelcomeStepL10n {
+    static let title = String(localized: "onboarding.welcome.title", defaultValue: "Chat at events,\neven without signal.")
+    static let subtitle = String(localized: "onboarding.welcome.subtitle", defaultValue: "Blip uses Bluetooth to connect you with people nearby. No WiFi or cell signal needed.")
+    static let continueButton = String(localized: "common.continue", defaultValue: "Continue")
+    static let devBypass = String(localized: "onboarding.welcome.dev_bypass.title", defaultValue: "Dev Bypass")
+    static let code = String(localized: "common.code", defaultValue: "Code")
+    static let submit = String(localized: "common.submit", defaultValue: "Submit")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let bypassMessage = String(localized: "onboarding.welcome.dev_bypass.message", defaultValue: "Enter bypass code to skip onboarding")
+}
+
 // MARK: - WelcomeStep
 
 /// Onboarding step 1: "Chat at events, even without signal."
@@ -37,13 +48,13 @@ struct WelcomeStep: View {
 
             // Text content
             VStack(spacing: BlipSpacing.md) {
-                Text("Chat at events,\neven without signal.")
+                Text(WelcomeStepL10n.title)
                     .font(theme.typography.largeTitle)
                     .foregroundStyle(theme.colors.text)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Blip uses Bluetooth to connect you with people nearby. No WiFi or cell signal needed.")
+                Text(WelcomeStepL10n.subtitle)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText)
                     .multilineTextAlignment(.center)
@@ -56,7 +67,7 @@ struct WelcomeStep: View {
             Spacer()
 
             // Continue button
-            GlassButton("Continue", icon: "arrow.right") {
+            GlassButton(WelcomeStepL10n.continueButton, icon: "arrow.right") {
                 onContinue()
             }
             .fullWidth()
@@ -68,19 +79,19 @@ struct WelcomeStep: View {
         .onAppear {
             animateEntrance()
         }
-        .alert("Dev Bypass", isPresented: $showBypass) {
-            TextField("Code", text: $bypassCode)
+        .alert(WelcomeStepL10n.devBypass, isPresented: $showBypass) {
+            TextField(WelcomeStepL10n.code, text: $bypassCode)
                 .keyboardType(.numberPad)
-            Button("Submit") {
+            Button(WelcomeStepL10n.submit) {
                 if bypassCode == "000000" {
                     bypassCode = ""
                     onBypass()
                 }
                 bypassCode = ""
             }
-            Button("Cancel", role: .cancel) { bypassCode = "" }
+            Button(WelcomeStepL10n.cancel, role: .cancel) { bypassCode = "" }
         } message: {
-            Text("Enter bypass code to skip onboarding")
+            Text(WelcomeStepL10n.bypassMessage)
         }
     }
 

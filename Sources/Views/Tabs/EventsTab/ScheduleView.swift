@@ -1,5 +1,26 @@
 import SwiftUI
 
+private enum ScheduleViewL10n {
+    static let collapse = String(localized: "events.schedule.accessibility.collapse", defaultValue: "Collapse")
+    static let expand = String(localized: "events.schedule.accessibility.expand", defaultValue: "Expand")
+    static let noSavedActs = String(localized: "events.schedule.empty.saved", defaultValue: "No saved acts yet")
+    static let noActsPlaying = String(localized: "events.schedule.empty.live_now", defaultValue: "No acts playing right now")
+    static let noActsScheduled = String(localized: "events.schedule.empty.all", defaultValue: "No acts scheduled")
+    static let all = String(localized: "common.all", defaultValue: "All")
+    static let saved = String(localized: "common.saved", defaultValue: "Saved")
+    static let liveNow = String(localized: "events.schedule.filter.live_now", defaultValue: "Live Now")
+    static let previewPyramidStage = String(localized: "events.schedule.preview.pyramid_stage", defaultValue: "Pyramid Stage")
+    static let previewBicep = String(localized: "events.schedule.preview.bicep", defaultValue: "Bicep")
+    static let previewHeadliner = String(localized: "events.schedule.preview.headliner", defaultValue: "Headliner TBA")
+    static let previewWestHolts = String(localized: "events.schedule.preview.west_holts", defaultValue: "West Holts")
+    static let previewFloatingPoints = String(localized: "events.schedule.preview.floating_points", defaultValue: "Floating Points")
+    static let previewBonobo = String(localized: "events.schedule.preview.bonobo", defaultValue: "Bonobo")
+
+    static func stageAccessibility(_ name: String, _ count: Int) -> String {
+        String(format: String(localized: "events.schedule.stage.accessibility_label", defaultValue: "%@, %d acts"), locale: Locale.current, name, count)
+    }
+}
+
 // MARK: - ScheduleView
 
 /// Scrollable schedule grouped by stage with save and reminder toggles.
@@ -134,8 +155,8 @@ struct ScheduleView: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel("\(stage.name), \(stage.acts.count) acts")
-        .accessibilityHint(expandedStages.contains(stage.id) ? "Collapse" : "Expand")
+        .accessibilityLabel(ScheduleViewL10n.stageAccessibility(stage.name, stage.acts.count))
+        .accessibilityHint(expandedStages.contains(stage.id) ? ScheduleViewL10n.collapse : ScheduleViewL10n.expand)
     }
 
     @ViewBuilder
@@ -170,10 +191,10 @@ struct ScheduleView: View {
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(filter == .saved
-                     ? "No saved acts yet"
+                     ? ScheduleViewL10n.noSavedActs
                      : filter == .liveNow
-                     ? "No acts playing right now"
-                     : "No acts scheduled")
+                     ? ScheduleViewL10n.noActsPlaying
+                     : ScheduleViewL10n.noActsScheduled)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText)
                     .multilineTextAlignment(.center)
@@ -214,9 +235,9 @@ enum ScheduleFilter: CaseIterable {
 
     var displayName: String {
         switch self {
-        case .all: return "All"
-        case .saved: return "Saved"
-        case .liveNow: return "Live Now"
+        case .all: return ScheduleViewL10n.all
+        case .saved: return ScheduleViewL10n.saved
+        case .liveNow: return ScheduleViewL10n.liveNow
         }
     }
 
@@ -250,14 +271,14 @@ struct ScheduleAct: Identifiable {
 #Preview("Schedule View") {
     let now = Date()
     let stages: [ScheduleStage] = [
-        ScheduleStage(id: UUID(), name: "Pyramid Stage", acts: [
-            ScheduleAct(id: UUID(), artistName: "Bicep", startTime: now.addingTimeInterval(-1800), endTime: now.addingTimeInterval(3600), isLive: true, isSaved: true, hasReminder: true),
+        ScheduleStage(id: UUID(), name: ScheduleViewL10n.previewPyramidStage, acts: [
+            ScheduleAct(id: UUID(), artistName: ScheduleViewL10n.previewBicep, startTime: now.addingTimeInterval(-1800), endTime: now.addingTimeInterval(3600), isLive: true, isSaved: true, hasReminder: true),
             ScheduleAct(id: UUID(), artistName: "Fred Again..", startTime: now.addingTimeInterval(3600), endTime: now.addingTimeInterval(9000), isLive: false, isSaved: false, hasReminder: false),
-            ScheduleAct(id: UUID(), artistName: "Headliner TBA", startTime: now.addingTimeInterval(14400), endTime: now.addingTimeInterval(19800), isLive: false, isSaved: true, hasReminder: false),
+            ScheduleAct(id: UUID(), artistName: ScheduleViewL10n.previewHeadliner, startTime: now.addingTimeInterval(14400), endTime: now.addingTimeInterval(19800), isLive: false, isSaved: true, hasReminder: false),
         ]),
-        ScheduleStage(id: UUID(), name: "West Holts", acts: [
-            ScheduleAct(id: UUID(), artistName: "Floating Points", startTime: now.addingTimeInterval(7200), endTime: now.addingTimeInterval(12600), isLive: false, isSaved: false, hasReminder: false),
-            ScheduleAct(id: UUID(), artistName: "Bonobo", startTime: now.addingTimeInterval(14400), endTime: now.addingTimeInterval(18000), isLive: false, isSaved: true, hasReminder: true),
+        ScheduleStage(id: UUID(), name: ScheduleViewL10n.previewWestHolts, acts: [
+            ScheduleAct(id: UUID(), artistName: ScheduleViewL10n.previewFloatingPoints, startTime: now.addingTimeInterval(7200), endTime: now.addingTimeInterval(12600), isLive: false, isSaved: false, hasReminder: false),
+            ScheduleAct(id: UUID(), artistName: ScheduleViewL10n.previewBonobo, startTime: now.addingTimeInterval(14400), endTime: now.addingTimeInterval(18000), isLive: false, isSaved: true, hasReminder: true),
         ]),
     ]
 

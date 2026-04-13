@@ -1,6 +1,21 @@
 import SwiftUI
 import MapKit
 
+private enum CrowdPulseL10n {
+    static let quiet = String(localized: "events.crowd.legend.quiet", defaultValue: "Quiet")
+    static let moderate = String(localized: "events.crowd.legend.moderate", defaultValue: "Moderate")
+    static let busy = String(localized: "events.crowd.legend.busy", defaultValue: "Busy")
+    static let packed = String(localized: "events.crowd.legend.packed", defaultValue: "Packed")
+
+    static func density(_ label: String) -> String {
+        String(
+            format: String(localized: "events.crowd.legend.accessibility", defaultValue: "%@ crowd density"),
+            locale: Locale.current,
+            label
+        )
+    }
+}
+
 // MARK: - CrowdPulseOverlay
 
 /// Heatmap overlay rendered on top of the stage map.
@@ -122,10 +137,10 @@ struct CrowdPulseLegend: View {
     var body: some View {
         GlassCard(thickness: .ultraThin, cornerRadius: BlipCornerRadius.md, padding: .blipContent) {
             HStack(spacing: BlipSpacing.md) {
-                legendItem(color: Color(red: 0.2, green: 0.4, blue: 1.0), label: "Quiet")
-                legendItem(color: Color(red: 0.2, green: 0.8, blue: 0.3), label: "Moderate")
-                legendItem(color: Color(red: 1.0, green: 0.6, blue: 0.1), label: "Busy")
-                legendItem(color: Color(red: 1.0, green: 0.2, blue: 0.2), label: "Packed")
+                legendItem(color: Color(red: 0.2, green: 0.4, blue: 1.0), label: CrowdPulseL10n.quiet)
+                legendItem(color: Color(red: 0.2, green: 0.8, blue: 0.3), label: CrowdPulseL10n.moderate)
+                legendItem(color: Color(red: 1.0, green: 0.6, blue: 0.1), label: CrowdPulseL10n.busy)
+                legendItem(color: Color(red: 1.0, green: 0.2, blue: 0.2), label: CrowdPulseL10n.packed)
             }
         }
     }
@@ -141,7 +156,7 @@ struct CrowdPulseLegend: View {
                 .foregroundStyle(theme.colors.mutedText)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label) crowd density")
+        .accessibilityLabel(CrowdPulseL10n.density(label))
     }
 }
 

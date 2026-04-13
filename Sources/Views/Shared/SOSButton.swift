@@ -1,5 +1,12 @@
 import SwiftUI
 
+private enum SOSButtonL10n {
+    static let emergency = String(localized: "sos.button.accessibility_label", defaultValue: "Emergency")
+    static let emergencyHint = String(localized: "sos.button.accessibility_hint", defaultValue: "Double tap to open emergency options")
+    static let title = String(localized: "sos.button.card.title", defaultValue: "Emergency SOS")
+    static let subtitle = String(localized: "sos.button.card.subtitle", defaultValue: "Request help from nearby responders")
+}
+
 // MARK: - SOSButton
 
 /// Icon-only SOS button — red medical cross on glass.
@@ -77,8 +84,8 @@ struct SOSButton: View {
         )
         .frame(minWidth: buttonSize, minHeight: buttonSize)
         .contentShape(Circle())
-        .accessibilityLabel("Emergency")
-        .accessibilityHint("Double tap to open emergency options")
+        .accessibilityLabel(SOSButtonL10n.emergency)
+        .accessibilityHint(SOSButtonL10n.emergencyHint)
         .accessibilityAddTraits(.isButton)
         .accessibilitySortPriority(1)
         .fullScreenCover(isPresented: $showSOSSheet) {
@@ -122,12 +129,12 @@ extension SOSButton {
                             .foregroundStyle(Color.blipWarmCoral)
 
                         VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-                            Text("Emergency SOS")
+                            Text(SOSButtonL10n.title)
                                 .font(theme.typography.body)
                                 .fontWeight(.semibold)
                                 .foregroundStyle(theme.colors.text)
 
-                            Text("Request help from nearby responders")
+                            Text(SOSButtonL10n.subtitle)
                                 .font(theme.typography.caption)
                                 .foregroundStyle(theme.colors.mutedText)
                         }
@@ -142,8 +149,8 @@ extension SOSButton {
             }
             .buttonStyle(.plain)
             .frame(minHeight: BlipSizing.minTapTarget + BlipSpacing.md)
-            .accessibilityLabel("Emergency SOS")
-            .accessibilityHint("Double tap to open emergency options")
+            .accessibilityLabel(SOSButtonL10n.title)
+            .accessibilityHint(SOSButtonL10n.emergencyHint)
             .fullScreenCover(isPresented: $showSOSSheet) {
                 SOSConfirmationSheet(
                     isPresented: $showSOSSheet,

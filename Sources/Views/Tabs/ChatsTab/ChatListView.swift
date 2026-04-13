@@ -1,6 +1,33 @@
 import SwiftUI
 import SwiftData
 
+private enum ChatListL10n {
+    static let chats = String(localized: "chat.list.mode.chats", defaultValue: "Chats")
+    static let friends = String(localized: "chat.list.mode.friends", defaultValue: "Friends")
+    static let searchPrompt = String(localized: "chat.list.search.prompt", defaultValue: "Search conversations")
+    static let searchMessages = String(localized: "chat.list.search_messages", defaultValue: "Search messages")
+    static let addFriend = String(localized: "common.add_friend", defaultValue: "Add friend")
+    static let emptyTitle = String(localized: "chat.list.empty.title", defaultValue: "No conversations yet")
+    static let emptySubtitle = String(localized: "chat.list.empty.subtitle", defaultValue: "Add a friend to start chatting.")
+    static let searchEmptySubtitle = String(localized: "chat.list.empty.search_subtitle", defaultValue: "Try a different search term.")
+    static let newMessage = String(localized: "chat.list.new_message", defaultValue: "New message")
+    static let newMessageTitle = String(localized: "chat.list.new_message.title", defaultValue: "New Message")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let noFriendsTitle = String(localized: "chat.list.new_message.empty.title", defaultValue: "No friends ready to message")
+    static let noFriendsSubtitle = String(localized: "chat.list.new_message.empty.subtitle", defaultValue: "Accept a friend request first, then start the chat from here.")
+    static let manageFriends = String(localized: "chat.list.new_message.manage_friends", defaultValue: "Manage Friends")
+    static let errorTitle = String(localized: "common.error.title", defaultValue: "Something went wrong")
+    static let retry = String(localized: "common.retry", defaultValue: "Retry")
+    static let fallbackFriendName = String(localized: "chat.list.friend.fallback_name", defaultValue: "Friend")
+    static let fallbackUnknownUsername = String(localized: "chat.list.friend.fallback_username", defaultValue: "unknown")
+    static let fallbackConversationName = String(localized: "chat.list.conversation.fallback_name", defaultValue: "Chat")
+    static let title = String(localized: "chat.list.title", defaultValue: "Chats")
+
+    static func noResults(_ query: String) -> String {
+        String(format: String(localized: "chat.list.empty.search_title", defaultValue: "No results for \"%@\""), locale: Locale.current, query)
+    }
+}
+
 // MARK: - ChatListView
 
 /// Chat list with NavigationStack, search, sorted by lastActivityAt.
@@ -9,8 +36,15 @@ import SwiftData
 struct ChatListView: View {
 
     enum ChatListMode: String, CaseIterable {
-        case chats = "Chats"
-        case friends = "Friends"
+        case chats
+        case friends
+
+        var displayName: String {
+            switch self {
+            case .chats: return ChatListL10n.chats
+            case .friends: return ChatListL10n.friends
+            }
+        }
     }
 
     var chatViewModel: ChatViewModel? = nil
@@ -63,13 +97,13 @@ struct ChatListView: View {
                     newMessageFAB
                 }
             }
-            .navigationTitle("Chats")
+            .navigationTitle(ChatListL10n.chats)
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.hidden, for: .navigationBar)
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: "Search conversations"
+                prompt: ChatListL10n.searchPrompt
             )
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -80,7 +114,7 @@ struct ChatListView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.blipAccentPurple)
                     }
-                    .accessibilityLabel("Search messages")
+                    .accessibilityLabel(ChatListL10n.searchMessages)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -90,7 +124,7 @@ struct ChatListView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.blipAccentPurple)
                     }
-                    .accessibilityLabel("Add friend")
+                    .accessibilityLabel(ChatListL10n.addFriend)
                 }
             }
             .sheet(isPresented: $showAddFriend) {
@@ -132,7 +166,7 @@ struct ChatListView: View {
                         listMode = mode
                     }
                 } label: {
-                    Text(mode.rawValue)
+                    Text(mode.displayName)
                         .font(theme.typography.body)
                         .fontWeight(listMode == mode ? .semibold : .regular)
                         .foregroundStyle(listMode == mode ? .white : theme.colors.text)
@@ -210,24 +244,24 @@ struct ChatListView: View {
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
 
             if searchText.isEmpty {
-                Text("No conversations yet")
+                Text(ChatListL10n.emptyTitle)
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
-                Text("Add a friend to start chatting.")
+                Text(ChatListL10n.emptySubtitle)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
                     .multilineTextAlignment(.center)
 
-                GlassButton("Add Friend", icon: "person.badge.plus") {
+                GlassButton(ChatListL10n.addFriend, icon: "person.badge.plus") {
                     showAddFriend = true
                 }
             } else {
-                Text("No results for \"\(searchText)\"")
+                Text(ChatListL10n.noResults(searchText))
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
-                Text("Try a different search term.")
+                Text(ChatListL10n.searchEmptySubtitle)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -255,7 +289,7 @@ struct ChatListView: View {
         .buttonStyle(.plain)
         .padding(.trailing, BlipSpacing.lg)
         .padding(.bottom, BlipSpacing.sm)
-        .accessibilityLabel("New message")
+        .accessibilityLabel(ChatListL10n.newMessage)
         .accessibilityAddTraits(.isButton)
     }
 
@@ -273,11 +307,11 @@ struct ChatListView: View {
                             .font(.system(size: 48))
                             .foregroundStyle(theme.colors.mutedText)
 
-                        Text("No friends ready to message")
+                        Text(ChatListL10n.noFriendsTitle)
                             .font(theme.typography.headline)
                             .foregroundStyle(theme.colors.text)
 
-                        Text("Accept a friend request first, then start the chat from here.")
+                        Text(ChatListL10n.noFriendsSubtitle)
                             .font(theme.typography.secondary)
                             .foregroundStyle(theme.colors.mutedText)
                             .multilineTextAlignment(.center)
@@ -287,7 +321,7 @@ struct ChatListView: View {
                         } label: {
                             HStack(spacing: BlipSpacing.sm) {
                                 Image(systemName: "person.2.fill")
-                                Text("Manage Friends")
+                                Text(ChatListL10n.manageFriends)
                             }
                             .font(theme.typography.secondary)
                             .foregroundStyle(.white)
@@ -308,18 +342,18 @@ struct ChatListView: View {
                                     HStack(spacing: BlipSpacing.md) {
                                         AvatarView(
                                             imageData: friend.user?.avatarThumbnail,
-                                            name: friend.user?.resolvedDisplayName ?? friend.user?.username ?? "Friend",
+                                            name: friend.user?.resolvedDisplayName ?? friend.user?.username ?? ChatListL10n.fallbackFriendName,
                                             size: BlipSizing.avatarSmall,
                                             ringStyle: .friend,
                                             showOnlineIndicator: friend.lastSeenAt?.timeIntervalSinceNow ?? -.infinity > -300
                                         )
 
                                         VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-                                            Text(friend.user?.resolvedDisplayName ?? friend.user?.username ?? "Friend")
+                                            Text(friend.user?.resolvedDisplayName ?? friend.user?.username ?? ChatListL10n.fallbackFriendName)
                                                 .font(theme.typography.body)
                                                 .foregroundStyle(theme.colors.text)
 
-                                            Text("@\(friend.user?.username ?? "unknown")")
+                                            Text("@\(friend.user?.username ?? ChatListL10n.fallbackUnknownUsername)")
                                                 .font(theme.typography.caption)
                                                 .foregroundStyle(theme.colors.mutedText)
                                         }
@@ -343,11 +377,11 @@ struct ChatListView: View {
                     }
                 }
             }
-            .navigationTitle("New Message")
+            .navigationTitle(ChatListL10n.newMessageTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(ChatListL10n.cancel) {
                         showNewMessage = false
                     }
                     .foregroundStyle(Color.blipAccentPurple)
@@ -367,7 +401,7 @@ struct ChatListView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
 
-            Text("Something went wrong")
+            Text(ChatListL10n.errorTitle)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
@@ -376,7 +410,7 @@ struct ChatListView: View {
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
 
-            GlassButton("Retry", icon: "arrow.clockwise") {
+            GlassButton(ChatListL10n.retry, icon: "arrow.clockwise") {
                 Task { await chatViewModel?.loadChannels() }
             }
         }
@@ -481,7 +515,7 @@ struct ChatListView: View {
             return ConversationIdentity(displayName: name, avatarData: nil)
         }
 
-        return ConversationIdentity(displayName: "Chat", avatarData: nil)
+        return ConversationIdentity(displayName: ChatListL10n.fallbackConversationName, avatarData: nil)
     }
 
     private var filteredConversations: [ConversationPreview] {
@@ -674,12 +708,12 @@ extension ConversationPreview: Hashable {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.system(size: 48))
                             .foregroundStyle(Color.white.opacity(0.3))
-                        Text("No conversations yet")
+                        Text(ChatListL10n.emptyTitle)
                             .font(Theme.shared.typography.headline)
                             .foregroundStyle(.white)
                     }
                 }
-                .navigationTitle("Chats")
+                .navigationTitle(ChatListL10n.title)
             }
         }
     }

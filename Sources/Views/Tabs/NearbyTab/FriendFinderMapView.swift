@@ -1,6 +1,53 @@
 import SwiftUI
 import MapKit
 
+private enum FriendFinderMapViewL10n {
+    static let title = String(localized: "nearby.friend_finder.title", defaultValue: "Friend Finder")
+    static let dropBeaconTitle = String(localized: "nearby.friend_finder.drop_beacon.title", defaultValue: "Drop Beacon")
+    static let dropHere = String(localized: "nearby.friend_finder.drop_beacon.confirm", defaultValue: "Drop Here")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let dropBeaconMessage = String(localized: "nearby.friend_finder.drop_beacon.message", defaultValue: "Share your current location as a beacon. It will expire in 30 minutes.")
+    static let you = String(localized: "common.you", defaultValue: "You")
+    static let userLocationSharing = String(localized: "nearby.friend_finder.user_location.sharing", defaultValue: "Your location, sharing active")
+    static let userLocation = String(localized: "nearby.friend_finder.user_location", defaultValue: "Your location")
+    static let recenter = String(localized: "nearby.friend_finder.control.recenter", defaultValue: "Recenter")
+    static let stopSharing = String(localized: "nearby.friend_finder.control.stop_sharing", defaultValue: "Stop sharing")
+    static let shareLocation = String(localized: "nearby.friend_finder.control.share_location", defaultValue: "Share location")
+    static let dropBeacon = String(localized: "nearby.friend_finder.control.drop_beacon", defaultValue: "Drop beacon")
+    static let hideList = String(localized: "nearby.friend_finder.control.hide_list", defaultValue: "Hide list")
+    static let showList = String(localized: "nearby.friend_finder.control.show_list", defaultValue: "Show list")
+    static let friends = String(localized: "common.friends", defaultValue: "Friends")
+    static let noLocations = String(localized: "nearby.friend_finder.empty.title", defaultValue: "No shared friend locations yet")
+    static let noLocationsSubtitle = String(localized: "nearby.friend_finder.empty.subtitle", defaultValue: "Only friends who actively share location over the mesh appear here.")
+    static let outOfRange = String(localized: "nearby.friend_finder.friend.out_of_range", defaultValue: "Out of range")
+    static let locationPermissionNeeded = String(localized: "nearby.friend_finder.banner.location_needed", defaultValue: "Location permission or a fresh GPS fix is still needed.")
+    static let waitingForFriends = String(localized: "nearby.friend_finder.banner.waiting", defaultValue: "Waiting for friends to share their live location over the mesh.")
+    static let liveSharingActive = String(localized: "nearby.friend_finder.banner.active", defaultValue: "Live location sharing is active for this session.")
+    static let close = String(localized: "common.close", defaultValue: "Close")
+    static let imHere = String(localized: "nearby.friend_finder.beacon.default_label", defaultValue: "I'm here!")
+    static let previewSarahChen = String(localized: "nearby.friend_finder.preview.sarah_chen", defaultValue: "Sarah Chen")
+    static let previewJakeMorrison = String(localized: "nearby.friend_finder.preview.jake_morrison", defaultValue: "Jake Morrison")
+    static let previewPriyaPatel = String(localized: "nearby.friend_finder.preview.priya_patel", defaultValue: "Priya Patel")
+    static let previewAlexRivera = String(localized: "nearby.friend_finder.preview.alex_rivera", defaultValue: "Alex Rivera")
+    static let previewMiaKim = String(localized: "nearby.friend_finder.preview.mia_kim", defaultValue: "Mia Kim")
+
+    static func nearbyCount(_ count: Int) -> String {
+        String(format: String(localized: "nearby.friend_finder.count_nearby", defaultValue: "%d nearby"), locale: Locale.current, count)
+    }
+
+    static func navigateTo(_ name: String) -> String {
+        String(format: String(localized: "nearby.friend_finder.navigate_accessibility_label", defaultValue: "Navigate to %@"), locale: Locale.current, name)
+    }
+
+    static func friendRowAccessibility(name: String, detail: String) -> String {
+        String(format: String(localized: "nearby.friend_finder.friend_row.accessibility_label", defaultValue: "%@, %@"), locale: Locale.current, name, detail)
+    }
+
+    static func beacon(_ label: String) -> String {
+        String(format: String(localized: "nearby.friend_finder.beacon_accessibility_label", defaultValue: "Beacon: %@"), locale: Locale.current, label)
+    }
+}
+
 // MARK: - FriendFinderMapView
 
 /// Full-screen friend finder with map, "I'm Here" beacon toggle,
@@ -57,7 +104,7 @@ struct FriendFinderMapView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .navigationTitle("Friend Finder")
+        .navigationTitle(FriendFinderMapViewL10n.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .task {
@@ -66,11 +113,11 @@ struct FriendFinderMapView: View {
         .onDisappear {
             stopLocationRefresh()
         }
-        .alert("Drop Beacon", isPresented: $showBeaconConfirm) {
-            Button("Drop Here") { performDropBeacon() }
-            Button("Cancel", role: .cancel) {}
+        .alert(FriendFinderMapViewL10n.dropBeaconTitle, isPresented: $showBeaconConfirm) {
+            Button(FriendFinderMapViewL10n.dropHere) { performDropBeacon() }
+            Button(FriendFinderMapViewL10n.cancel, role: .cancel) {}
         } message: {
-            Text("Share your current location as a beacon. It will expire in 30 minutes.")
+            Text(FriendFinderMapViewL10n.dropBeaconMessage)
         }
     }
 
@@ -80,7 +127,7 @@ struct FriendFinderMapView: View {
         Map(position: $cameraPosition) {
             // User location with "I'm Here" pulse
             if let resolvedUserLocation {
-                Annotation("You", coordinate: resolvedUserLocation) {
+                Annotation(FriendFinderMapViewL10n.you, coordinate: resolvedUserLocation) {
                     userPinView
                 }
             }
@@ -161,7 +208,7 @@ struct FriendFinderMapView: View {
                 sharingPulse = false
             }
         }
-        .accessibilityLabel(isSharingLocation ? "Your location, sharing active" : "Your location")
+        .accessibilityLabel(isSharingLocation ? FriendFinderMapViewL10n.userLocationSharing : FriendFinderMapViewL10n.userLocation)
     }
 
     private func startSharingPulse() {
@@ -176,28 +223,28 @@ struct FriendFinderMapView: View {
     private var controlButtons: some View {
         VStack(spacing: BlipSpacing.sm) {
             // Recenter
-            mapButton(icon: "location.fill", label: "Recenter") {
+            mapButton(icon: "location.fill", label: FriendFinderMapViewL10n.recenter) {
                 withAnimation { cameraPosition = .automatic }
             }
 
             // Toggle location sharing
             mapButton(
                 icon: isSharingLocation ? "location.fill.viewfinder" : "location.viewfinder",
-                label: isSharingLocation ? "Stop sharing" : "Share location",
+                label: isSharingLocation ? FriendFinderMapViewL10n.stopSharing : FriendFinderMapViewL10n.shareLocation,
                 isActive: isSharingLocation
             ) {
                 toggleLocationSharing()
             }
 
             // Drop beacon
-            mapButton(icon: "mappin.and.ellipse", label: "Drop beacon", isAccent: true) {
+            mapButton(icon: "mappin.and.ellipse", label: FriendFinderMapViewL10n.dropBeacon, isAccent: true) {
                 showBeaconConfirm = true
             }
 
             // Toggle friend list
             mapButton(
                 icon: showFriendList ? "list.bullet.circle.fill" : "list.bullet.circle",
-                label: showFriendList ? "Hide list" : "Show list"
+                label: showFriendList ? FriendFinderMapViewL10n.hideList : FriendFinderMapViewL10n.showList
             ) {
                 withAnimation(SpringConstants.accessiblePageEntrance) {
                     showFriendList.toggle()
@@ -247,13 +294,13 @@ struct FriendFinderMapView: View {
 
             // Header
             HStack {
-                Text("Friends")
+                Text(FriendFinderMapViewL10n.friends)
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
                 Spacer()
 
-                Text("\(displayFriends.filter { !$0.isOutOfRange }.count) nearby")
+                Text(FriendFinderMapViewL10n.nearbyCount(displayFriends.filter { !$0.isOutOfRange }.count))
                     .font(theme.typography.caption)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -296,11 +343,11 @@ struct FriendFinderMapView: View {
                 .font(.system(size: 24))
                 .foregroundStyle(theme.colors.mutedText)
 
-            Text("No shared friend locations yet")
+            Text(FriendFinderMapViewL10n.noLocations)
                 .font(theme.typography.body)
                 .foregroundStyle(theme.colors.text)
 
-            Text("Only friends who actively share location over the mesh appear here.")
+            Text(FriendFinderMapViewL10n.noLocationsSubtitle)
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -338,7 +385,7 @@ struct FriendFinderMapView: View {
                         .foregroundStyle(theme.colors.text)
 
                     if friend.isOutOfRange {
-                        Text("Out of range")
+                        Text(FriendFinderMapViewL10n.outOfRange)
                             .font(theme.typography.caption)
                             .foregroundStyle(theme.colors.statusRed)
                     } else {
@@ -381,7 +428,7 @@ struct FriendFinderMapView: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel("\(friend.displayName), \(friend.isOutOfRange ? "out of range" : friend.lastSeenText)")
+        .accessibilityLabel(FriendFinderMapViewL10n.friendRowAccessibility(name: friend.displayName, detail: friend.isOutOfRange ? FriendFinderMapViewL10n.outOfRange.lowercased() : friend.lastSeenText))
     }
 
     private var availabilityBanner: some View {
@@ -389,19 +436,19 @@ struct FriendFinderMapView: View {
             if resolvedUserLocation == nil {
                 statusBanner(
                     icon: "location.slash.fill",
-                    title: "Location permission or a fresh GPS fix is still needed.",
+                    title: FriendFinderMapViewL10n.locationPermissionNeeded,
                     tint: theme.colors.statusAmber
                 )
             } else if displayFriends.isEmpty {
                 statusBanner(
                     icon: "dot.radiowaves.left.and.right",
-                    title: "Waiting for friends to share their live location over the mesh.",
+                    title: FriendFinderMapViewL10n.waitingForFriends,
                     tint: theme.colors.mutedText
                 )
             } else {
                 statusBanner(
                     icon: "location.fill.viewfinder",
-                    title: "Live location sharing is active for this session.",
+                    title: FriendFinderMapViewL10n.liveSharingActive,
                     tint: theme.colors.statusGreen
                 )
             }
@@ -456,7 +503,7 @@ struct FriendFinderMapView: View {
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                         .background(Circle().fill(LinearGradient.blipAccent))
                 }
-                .accessibilityLabel("Navigate to \(friend.displayName)")
+                .accessibilityLabel(FriendFinderMapViewL10n.navigateTo(friend.displayName))
 
                 Button {
                     selectedFriend = nil
@@ -466,7 +513,7 @@ struct FriendFinderMapView: View {
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 }
-                .accessibilityLabel("Close")
+                .accessibilityLabel(FriendFinderMapViewL10n.close)
             }
             .padding(BlipSpacing.md)
         }
@@ -574,9 +621,9 @@ struct FriendFinderMapView: View {
                 fallbackBeacons.append(
                     BeaconPin(
                         id: UUID(),
-                        label: "I'm here!",
+                        label: FriendFinderMapViewL10n.imHere,
                         coordinate: resolvedUserLocation,
-                        createdBy: "You",
+                        createdBy: FriendFinderMapViewL10n.you,
                         expiresAt: Date().addingTimeInterval(1800)
                     )
                 )
@@ -661,7 +708,7 @@ private struct FriendFinderPinView: View {
             .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(friend.displayName), \(friend.lastSeenText)")
+        .accessibilityLabel(FriendFinderMapViewL10n.friendRowAccessibility(name: friend.displayName, detail: friend.lastSeenText))
         .onAppear {
             guard !SpringConstants.isReduceMotionEnabled, friend.accuracyMeters > 0 else { return }
             withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
@@ -712,7 +759,7 @@ private struct BeaconAnnotationView: View {
                 isPulsing = true
             }
         }
-        .accessibilityLabel("Beacon: \(beacon.label)")
+        .accessibilityLabel(FriendFinderMapViewL10n.beacon(beacon.label))
     }
 }
 
@@ -734,28 +781,28 @@ extension FriendFinderMapView {
 
     static let sampleFriends: [FriendMapPin] = [
         FriendMapPin(
-            id: UUID(), displayName: "Sarah Chen",
+            id: UUID(), displayName: FriendFinderMapViewL10n.previewSarahChen,
             coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862),
             precision: .precise, color: .blue,
             lastUpdated: Date().addingTimeInterval(-120),
             accuracyMeters: 5, distanceFromUser: 45
         ),
         FriendMapPin(
-            id: UUID(), displayName: "Jake Morrison",
+            id: UUID(), displayName: FriendFinderMapViewL10n.previewJakeMorrison,
             coordinate: CLLocationCoordinate2D(latitude: 51.0052, longitude: -2.5850),
             precision: .precise, color: .green,
             lastUpdated: Date().addingTimeInterval(-30),
             accuracyMeters: 8, distanceFromUser: 120
         ),
         FriendMapPin(
-            id: UUID(), displayName: "Priya Patel",
+            id: UUID(), displayName: FriendFinderMapViewL10n.previewPriyaPatel,
             coordinate: CLLocationCoordinate2D(latitude: 51.0040, longitude: -2.5870),
             precision: .fuzzy, color: .orange,
             lastUpdated: Date().addingTimeInterval(-600),
             accuracyMeters: 40, distanceFromUser: 280
         ),
         FriendMapPin(
-            id: UUID(), displayName: "Alex Rivera",
+            id: UUID(), displayName: FriendFinderMapViewL10n.previewAlexRivera,
             coordinate: CLLocationCoordinate2D(latitude: 51.0055, longitude: -2.5845),
             precision: .precise, color: .purple,
             lastUpdated: Date().addingTimeInterval(-3600),
@@ -763,7 +810,7 @@ extension FriendFinderMapView {
             isOutOfRange: true
         ),
         FriendMapPin(
-            id: UUID(), displayName: "Mia Kim",
+            id: UUID(), displayName: FriendFinderMapViewL10n.previewMiaKim,
             coordinate: CLLocationCoordinate2D(latitude: 51.0035, longitude: -2.5860),
             precision: .off, color: .gray,
             lastUpdated: Date().addingTimeInterval(-7200),

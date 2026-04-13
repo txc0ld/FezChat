@@ -1,5 +1,11 @@
 import SwiftUI
 
+private enum ImageViewerL10n {
+    static let unavailable = String(localized: "chat.image_viewer.unavailable", defaultValue: "Image unavailable")
+    static let close = String(localized: "common.close", defaultValue: "Close")
+    static let share = String(localized: "chat.image_viewer.share", defaultValue: "Share image")
+}
+
 // MARK: - ImageViewer
 
 /// Full-screen image viewer with pinch-to-zoom and swipe-down-to-dismiss.
@@ -48,7 +54,7 @@ struct ImageViewer: View {
                     Image(systemName: "photo.fill")
                         .font(.system(size: 48))
                         .foregroundStyle(.white.opacity(0.3))
-                    Text("Image unavailable")
+                    Text(ImageViewerL10n.unavailable)
                         .font(theme.typography.secondary)
                         .foregroundStyle(.white.opacity(0.5))
                 }
@@ -86,7 +92,7 @@ struct ImageViewer: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Close")
+        .accessibilityLabel(ImageViewerL10n.close)
     }
 
     // MARK: - Share Button
@@ -110,7 +116,7 @@ struct ImageViewer: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Share image")
+        .accessibilityLabel(ImageViewerL10n.share)
     }
 
     // MARK: - Gestures

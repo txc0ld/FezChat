@@ -1,5 +1,30 @@
 import SwiftUI
 
+private enum ChatListCellL10n {
+    static let archive = String(localized: "chat.list_cell.archive", defaultValue: "Archive")
+    static let unmute = String(localized: "chat.list_cell.unmute", defaultValue: "Unmute")
+    static let mute = String(localized: "chat.list_cell.mute", defaultValue: "Mute")
+    static let unpin = String(localized: "chat.list_cell.unpin", defaultValue: "Unpin")
+    static let pin = String(localized: "chat.list_cell.pin", defaultValue: "Pin")
+    static let yesterday = String(localized: "common.time.yesterday", defaultValue: "Yesterday")
+    static let previewAlice = String(localized: "chat.list_cell.preview.alice", defaultValue: "Alice")
+    static let previewPyramidQuestion = String(localized: "chat.list_cell.preview.pyramid_question", defaultValue: "Are you at the Pyramid Stage?")
+    static let previewEventSquad = String(localized: "chat.list_cell.preview.event_squad", defaultValue: "Event Squad")
+    static let previewVoiceNote = String(localized: "chat.list_cell.preview.voice_note", defaultValue: "Voice note")
+    static let previewBob = String(localized: "chat.list_cell.preview.bob", defaultValue: "Bob")
+    static let previewPhoto = String(localized: "chat.list_cell.preview.photo", defaultValue: "Photo")
+    static let previewCharlie = String(localized: "chat.list_cell.preview.charlie", defaultValue: "Charlie")
+    static let previewFoodCourt = String(localized: "chat.list_cell.preview.food_court", defaultValue: "Let's meet at the food court")
+
+    static func unreadCount(_ count: Int) -> String {
+        String(format: String(localized: "chat.list_cell.unread_count", defaultValue: "%d unread messages"), locale: Locale.current, count)
+    }
+
+    static func unreadSummary(_ count: Int) -> String {
+        String(format: String(localized: "chat.list_cell.unread_summary", defaultValue: "%d unread"), locale: Locale.current, count)
+    }
+}
+
 // MARK: - ChatListCell
 
 /// A single conversation row in the chat list.
@@ -122,7 +147,7 @@ struct ChatListCell: View {
             // Archive (destructive position)
             if let onArchive {
                 Button(role: .destructive, action: onArchive) {
-                    Label("Archive", systemImage: "archivebox.fill")
+                    Label(ChatListCellL10n.archive, systemImage: "archivebox.fill")
                 }
                 .tint(theme.colors.statusAmber)
             }
@@ -131,7 +156,7 @@ struct ChatListCell: View {
             if let onToggleMute {
                 Button(action: onToggleMute) {
                     Label(
-                        conversation.isMuted ? "Unmute" : "Mute",
+                        conversation.isMuted ? ChatListCellL10n.unmute : ChatListCellL10n.mute,
                         systemImage: conversation.isMuted ? "bell.fill" : "bell.slash.fill"
                     )
                 }
@@ -142,7 +167,7 @@ struct ChatListCell: View {
             if let onTogglePin {
                 Button(action: onTogglePin) {
                     Label(
-                        conversation.isPinned ? "Unpin" : "Pin",
+                        conversation.isPinned ? ChatListCellL10n.unpin : ChatListCellL10n.pin,
                         systemImage: conversation.isPinned ? "pin.slash.fill" : "pin.fill"
                     )
                 }
@@ -166,7 +191,7 @@ struct ChatListCell: View {
                     .fill(Color.blipAccentPurple)
             )
             .contentTransition(.numericText())
-            .accessibilityLabel("\(conversation.unreadCount) unread message\(conversation.unreadCount == 1 ? "" : "s")")
+            .accessibilityLabel(ChatListCellL10n.unreadCount(conversation.unreadCount))
     }
 
     // MARK: - Background
@@ -182,7 +207,7 @@ struct ChatListCell: View {
     private var accessibilityDescription: String {
         var parts = [conversation.displayName]
         if conversation.unreadCount > 0 {
-            parts.append("\(conversation.unreadCount) unread")
+            parts.append(ChatListCellL10n.unreadSummary(conversation.unreadCount))
         }
         parts.append(conversation.lastMessagePreview)
         parts.append(conversation.formattedTimestamp)
@@ -212,15 +237,11 @@ struct ConversationPreview: Identifiable, Sendable {
     var formattedTimestamp: String {
         let calendar = Calendar.current
         if calendar.isDateInToday(timestamp) {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "h:mm a"
-            return formatter.string(from: timestamp)
+            return timestamp.formatted(date: .omitted, time: .shortened)
         } else if calendar.isDateInYesterday(timestamp) {
-            return "Yesterday"
+            return ChatListCellL10n.yesterday
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: timestamp)
+            return timestamp.formatted(date: .abbreviated, time: .omitted)
         }
     }
 
@@ -241,9 +262,9 @@ extension ConversationPreview {
         ConversationPreview(
             id: UUID(),
             relatedChannelIDs: [],
-            displayName: "Alice",
+            displayName: ChatListCellL10n.previewAlice,
             avatarData: nil,
-            lastMessagePreview: "Are you at the Pyramid Stage?",
+            lastMessagePreview: ChatListCellL10n.previewPyramidQuestion,
             timestamp: Date().addingTimeInterval(-120),
             unreadCount: 3,
             isOnline: true,
@@ -257,9 +278,9 @@ extension ConversationPreview {
         ConversationPreview(
             id: UUID(),
             relatedChannelIDs: [],
-            displayName: "Event Squad",
+            displayName: ChatListCellL10n.previewEventSquad,
             avatarData: nil,
-            lastMessagePreview: "Voice note",
+            lastMessagePreview: ChatListCellL10n.previewVoiceNote,
             timestamp: Date().addingTimeInterval(-3600),
             unreadCount: 0,
             isOnline: false,
@@ -273,9 +294,9 @@ extension ConversationPreview {
         ConversationPreview(
             id: UUID(),
             relatedChannelIDs: [],
-            displayName: "Bob",
+            displayName: ChatListCellL10n.previewBob,
             avatarData: nil,
-            lastMessagePreview: "Photo",
+            lastMessagePreview: ChatListCellL10n.previewPhoto,
             timestamp: Date().addingTimeInterval(-86400),
             unreadCount: 1,
             isOnline: false,
@@ -289,9 +310,9 @@ extension ConversationPreview {
         ConversationPreview(
             id: UUID(),
             relatedChannelIDs: [],
-            displayName: "Charlie",
+            displayName: ChatListCellL10n.previewCharlie,
             avatarData: nil,
-            lastMessagePreview: "Let's meet at the food court",
+            lastMessagePreview: ChatListCellL10n.previewFoodCourt,
             timestamp: Date().addingTimeInterval(-172800),
             unreadCount: 0,
             isOnline: false,

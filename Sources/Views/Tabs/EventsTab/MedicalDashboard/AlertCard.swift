@@ -1,5 +1,53 @@
 import SwiftUI
 
+private enum AlertCardL10n {
+    static let elapsed = String(localized: "medical.alert_card.elapsed", defaultValue: "elapsed")
+    static let accept = String(localized: "common.accept", defaultValue: "Accept")
+    static let navigate = String(localized: "common.navigate", defaultValue: "Navigate")
+    static let resolve = String(localized: "common.resolve", defaultValue: "Resolve")
+    static let nonUrgent = String(localized: "medical.alert.non_urgent.uppercase", defaultValue: "NON-URGENT")
+    static let urgent = String(localized: "medical.alert.urgent.uppercase", defaultValue: "URGENT")
+    static let critical = String(localized: "medical.alert.critical.uppercase", defaultValue: "CRITICAL")
+    static let gpsLock = String(localized: "medical.alert.accuracy.gps_lock", defaultValue: "GPS Lock")
+    static let estimated = String(localized: "medical.alert.accuracy.estimated", defaultValue: "Estimated")
+    static let lastKnown = String(localized: "medical.alert.accuracy.last_known", defaultValue: "Last Known")
+    static let acceptAccessibility = String(localized: "medical.alert_card.accept_accessibility_label", defaultValue: "Accept this alert")
+    static let navigateAccessibility = String(localized: "medical.alert_card.navigate_accessibility_label", defaultValue: "Navigate to alert location")
+    static let resolveAccessibility = String(localized: "medical.alert_card.resolve_accessibility_label", defaultValue: "Resolve this alert")
+    static let previewNearPyramid = String(localized: "medical.alert_card.preview.near_pyramid", defaultValue: "Near Pyramid Stage, Section B")
+    static let previewCampingArea = String(localized: "medical.alert_card.preview.camping_area_b", defaultValue: "Camping Area B, near showers")
+    static let previewDizzy = String(localized: "medical.alert_card.preview.dizzy", defaultValue: "Feeling very dizzy and nauseous")
+    static let previewMedic5 = String(localized: "medical.alert_card.preview.medic_5", defaultValue: "Medic-5")
+    static let previewWestHolts = String(localized: "medical.alert_card.preview.west_holts", defaultValue: "West Holts area")
+    static let previewMinorCut = String(localized: "medical.alert_card.preview.minor_cut", defaultValue: "Minor cut, need first aid")
+
+    static func alertID(_ shortID: String) -> String {
+        String(
+            format: String(localized: "medical.alert.identifier", defaultValue: "Alert #%@"),
+            locale: Locale.current,
+            shortID
+        )
+    }
+
+    static func acceptedBy(_ callsign: String) -> String {
+        String(
+            format: String(localized: "medical.alert_card.accepted_by", defaultValue: "Accepted by %@"),
+            locale: Locale.current,
+            callsign
+        )
+    }
+
+    static func accessibilityDescription(severity: String, elapsed: String, location: String) -> String {
+        String(
+            format: String(localized: "medical.alert_card.accessibility_label", defaultValue: "%@ alert, %@ elapsed, %@"),
+            locale: Locale.current,
+            severity,
+            elapsed,
+            location
+        )
+    }
+}
+
 // MARK: - AlertCard
 
 /// Glass card for a single SOS alert in the medical dashboard.
@@ -86,7 +134,7 @@ struct AlertCard: View {
                     .fontWeight(.bold)
                     .foregroundStyle(severityColor)
 
-                Text("Alert #\(alert.shortID)")
+                Text(AlertCardL10n.alertID(alert.shortID))
                     .font(theme.typography.caption)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -101,7 +149,7 @@ struct AlertCard: View {
                     .foregroundStyle(theme.colors.text)
                     .monospacedDigit()
 
-                Text("elapsed")
+                Text(AlertCardL10n.elapsed)
                     .font(theme.typography.caption)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -150,7 +198,7 @@ struct AlertCard: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.blipAccentPurple)
 
-            Text("Accepted by \(callsign)")
+            Text(AlertCardL10n.acceptedBy(callsign))
                 .font(theme.typography.caption)
                 .fontWeight(.medium)
                 .foregroundStyle(.blipAccentPurple)
@@ -169,7 +217,7 @@ struct AlertCard: View {
         HStack(spacing: BlipSpacing.sm) {
             if alert.acceptedBy == nil {
                 Button(action: { onAccept?() }) {
-                    Label("Accept", systemImage: "checkmark.circle.fill")
+                    Label(AlertCardL10n.accept, systemImage: "checkmark.circle.fill")
                         .font(theme.typography.secondary)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
@@ -181,11 +229,11 @@ struct AlertCard: View {
                         )
                 }
                 .frame(minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Accept this alert")
+                .accessibilityLabel(AlertCardL10n.acceptAccessibility)
             }
 
             Button(action: { onNavigate?() }) {
-                Label("Navigate", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                Label(AlertCardL10n.navigate, systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                     .font(theme.typography.secondary)
                     .fontWeight(.medium)
                     .foregroundStyle(.blipAccentPurple)
@@ -197,13 +245,13 @@ struct AlertCard: View {
                     )
             }
             .frame(minHeight: BlipSizing.minTapTarget)
-            .accessibilityLabel("Navigate to alert location")
+            .accessibilityLabel(AlertCardL10n.navigateAccessibility)
 
             Spacer()
 
             if alert.acceptedBy != nil {
                 Button(action: { onResolve?() }) {
-                    Label("Resolve", systemImage: "checkmark.seal.fill")
+                    Label(AlertCardL10n.resolve, systemImage: "checkmark.seal.fill")
                         .font(theme.typography.secondary)
                         .fontWeight(.medium)
                         .foregroundStyle(BlipColors.darkColors.statusGreen)
@@ -215,7 +263,7 @@ struct AlertCard: View {
                         )
                 }
                 .frame(minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Resolve this alert")
+                .accessibilityLabel(AlertCardL10n.resolveAccessibility)
             }
         }
     }
@@ -232,9 +280,9 @@ struct AlertCard: View {
 
     private var severityLabel: String {
         switch alert.severity {
-        case .green: return "NON-URGENT"
-        case .amber: return "URGENT"
-        case .red: return "CRITICAL"
+        case .green: return AlertCardL10n.nonUrgent
+        case .amber: return AlertCardL10n.urgent
+        case .red: return AlertCardL10n.critical
         }
     }
 
@@ -253,7 +301,7 @@ struct AlertCard: View {
     }
 
     private var accessibilityDescription: String {
-        "\(severityLabel) alert, \(elapsedText) elapsed, \(alert.locationDescription)"
+        AlertCardL10n.accessibilityDescription(severity: severityLabel, elapsed: elapsedText, location: alert.locationDescription)
     }
 }
 
@@ -286,9 +334,9 @@ enum LocationAccuracy {
 
     var label: String {
         switch self {
-        case .precise: return "GPS Lock"
-        case .estimated: return "Estimated"
-        case .lastKnown: return "Last Known"
+        case .precise: return AlertCardL10n.gpsLock
+        case .estimated: return AlertCardL10n.estimated
+        case .lastKnown: return AlertCardL10n.lastKnown
         }
     }
 
@@ -312,7 +360,7 @@ enum LocationAccuracy {
                     id: UUID(),
                     shortID: "A7F3",
                     severity: .red,
-                    locationDescription: "Near Pyramid Stage, Section B",
+                    locationDescription: AlertCardL10n.previewNearPyramid,
                     description: nil,
                     accuracy: .precise,
                     acceptedBy: nil,
@@ -323,10 +371,10 @@ enum LocationAccuracy {
                     id: UUID(),
                     shortID: "B2E1",
                     severity: .amber,
-                    locationDescription: "Camping Area B, near showers",
-                    description: "Feeling very dizzy and nauseous",
+                    locationDescription: AlertCardL10n.previewCampingArea,
+                    description: AlertCardL10n.previewDizzy,
                     accuracy: .estimated,
-                    acceptedBy: "Medic-5",
+                    acceptedBy: AlertCardL10n.previewMedic5,
                     createdAt: Date().addingTimeInterval(-420)
                 ))
 
@@ -334,8 +382,8 @@ enum LocationAccuracy {
                     id: UUID(),
                     shortID: "C9D4",
                     severity: .green,
-                    locationDescription: "West Holts area",
-                    description: "Minor cut, need first aid",
+                    locationDescription: AlertCardL10n.previewWestHolts,
+                    description: AlertCardL10n.previewMinorCut,
                     accuracy: .lastKnown,
                     acceptedBy: nil,
                     createdAt: Date().addingTimeInterval(-60)

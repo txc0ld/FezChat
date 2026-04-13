@@ -1,6 +1,34 @@
 import SwiftUI
 import MapKit
 
+private enum FriendFinderMapL10n {
+    static let you = String(localized: "nearby.friend_finder.map.you", defaultValue: "You")
+    static let yourLocation = String(localized: "nearby.friend_finder.map.your_location", defaultValue: "Your location")
+    static let recenterMap = String(localized: "nearby.friend_finder.map.recenter", defaultValue: "Recenter map")
+    static let dropBeaconAccessibility = String(localized: "nearby.friend_finder.map.drop_beacon_accessibility_label", defaultValue: "Drop I'm Here beacon")
+    static let dropBeaconTitle = String(localized: "nearby.friend_finder.map.drop_beacon.title", defaultValue: "Drop Beacon")
+    static let dropHere = String(localized: "nearby.friend_finder.map.drop_beacon.confirm", defaultValue: "Drop Here")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let dropBeaconMessage = String(localized: "nearby.friend_finder.map.drop_beacon.message", defaultValue: "Share your current location as a beacon. It will expire in 30 minutes.")
+    static let preciseLocation = String(localized: "nearby.friend_finder.precision.precise", defaultValue: "Precise location")
+    static let approximateArea = String(localized: "nearby.friend_finder.precision.fuzzy", defaultValue: "Approximate area")
+    static let locationHidden = String(localized: "nearby.friend_finder.precision.off", defaultValue: "Location hidden")
+    static let justNow = String(localized: "common.time.just_now", defaultValue: "Just now")
+    static let overDayAgo = String(localized: "common.time.over_day_ago", defaultValue: "Over a day ago")
+    static let close = String(localized: "common.close", defaultValue: "Close")
+    static let previewSarah = String(localized: "nearby.friend_finder.map.preview.sarah", defaultValue: "Sarah")
+    static let previewJake = String(localized: "nearby.friend_finder.map.preview.jake", defaultValue: "Jake")
+    static let previewMeetHere = String(localized: "nearby.friend_finder.map.preview.meet_here", defaultValue: "Meet here!")
+
+    static func navigateToFriend(_ name: String) -> String {
+        String(format: String(localized: "nearby.friend_finder.map.navigate_accessibility_label", defaultValue: "Navigate to %@"), locale: Locale.current, name)
+    }
+
+    static func beacon(_ label: String) -> String {
+        String(format: String(localized: "nearby.friend_finder.map.beacon_accessibility_label", defaultValue: "Beacon: %@"), locale: Locale.current, label)
+    }
+}
+
 // MARK: - FriendFinderMap
 
 /// MapKit view showing friend locations on the event map.
@@ -48,7 +76,7 @@ struct FriendFinderMap: View {
         Map(position: $cameraPosition, selection: $selectedFriend) {
             // User location
             if let userLocation {
-                Annotation("You", coordinate: userLocation) {
+                Annotation(FriendFinderMapL10n.you, coordinate: userLocation) {
                     ZStack {
                         Circle()
                             .fill(.blipAccentPurple.opacity(0.2))
@@ -62,7 +90,7 @@ struct FriendFinderMap: View {
                             .stroke(.white, lineWidth: 2)
                             .frame(width: 14, height: 14)
                     }
-                    .accessibilityLabel("Your location")
+                    .accessibilityLabel(FriendFinderMapL10n.yourLocation)
                 }
             }
 
@@ -159,7 +187,7 @@ struct FriendFinderMap: View {
                                 .fill(LinearGradient.blipAccent)
                         )
                 }
-                .accessibilityLabel("Navigate to \(friend.displayName)")
+                .accessibilityLabel(FriendFinderMapL10n.navigateToFriend(friend.displayName))
 
                 // Dismiss
                 Button(action: { selectedFriend = nil }) {
@@ -168,7 +196,7 @@ struct FriendFinderMap: View {
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 }
-                .accessibilityLabel("Close")
+                .accessibilityLabel(FriendFinderMapL10n.close)
             }
         }
     }
@@ -197,7 +225,7 @@ struct FriendFinderMap: View {
                         )
                 )
         }
-        .accessibilityLabel("Recenter map")
+        .accessibilityLabel(FriendFinderMapL10n.recenterMap)
     }
 
     private var dropBeaconButton: some View {
@@ -211,16 +239,16 @@ struct FriendFinderMap: View {
                         .fill(LinearGradient.blipAccent)
                 )
         }
-        .accessibilityLabel("Drop I'm Here beacon")
-        .alert("Drop Beacon", isPresented: $showBeaconConfirm) {
-            Button("Drop Here") {
+        .accessibilityLabel(FriendFinderMapL10n.dropBeaconAccessibility)
+        .alert(FriendFinderMapL10n.dropBeaconTitle, isPresented: $showBeaconConfirm) {
+            Button(FriendFinderMapL10n.dropHere) {
                 if let userLocation {
                     onDropBeacon?(userLocation)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(FriendFinderMapL10n.cancel, role: .cancel) {}
         } message: {
-            Text("Share your current location as a beacon. It will expire in 30 minutes.")
+            Text(FriendFinderMapL10n.dropBeaconMessage)
         }
     }
 }
@@ -352,7 +380,7 @@ private struct BeaconPinView: View {
                 isPulsing = true
             }
         }
-        .accessibilityLabel("Beacon: \(beacon.label)")
+        .accessibilityLabel(FriendFinderMapL10n.beacon(beacon.label))
     }
 }
 
@@ -374,18 +402,18 @@ struct FriendMapPin: Identifiable, Hashable {
 
     var precisionDescription: String {
         switch precision {
-        case .precise: return "Precise location"
-        case .fuzzy: return "Approximate area"
-        case .off: return "Location hidden"
+        case .precise: return FriendFinderMapL10n.preciseLocation
+        case .fuzzy: return FriendFinderMapL10n.approximateArea
+        case .off: return FriendFinderMapL10n.locationHidden
         }
     }
 
     var lastSeenText: String {
         let interval = Date().timeIntervalSince(lastUpdated)
-        if interval < 60 { return "Just now" }
+        if interval < 60 { return FriendFinderMapL10n.justNow }
         if interval < 3600 { return "\(Int(interval / 60))m ago" }
         if interval < 86400 { return "\(Int(interval / 3600))h ago" }
-        return "Over a day ago"
+        return FriendFinderMapL10n.overDayAgo
     }
 
     var distanceText: String? {
@@ -431,7 +459,7 @@ struct BeaconPin: Identifiable {
     let friends: [FriendMapPin] = [
         FriendMapPin(
             id: UUID(),
-            displayName: "Sarah",
+            displayName: FriendFinderMapL10n.previewSarah,
             coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862),
             precision: .precise,
             color: .blue,
@@ -441,7 +469,7 @@ struct BeaconPin: Identifiable {
         ),
         FriendMapPin(
             id: UUID(),
-            displayName: "Jake",
+            displayName: FriendFinderMapL10n.previewJake,
             coordinate: CLLocationCoordinate2D(latitude: 51.0052, longitude: -2.5850),
             precision: .fuzzy,
             color: .green,
@@ -454,7 +482,7 @@ struct BeaconPin: Identifiable {
     let beacons: [BeaconPin] = [
         BeaconPin(
             id: UUID(),
-            label: "Meet here!",
+            label: FriendFinderMapL10n.previewMeetHere,
             coordinate: CLLocationCoordinate2D(latitude: 51.0045, longitude: -2.5858),
             createdBy: "You",
             expiresAt: Date().addingTimeInterval(1800)

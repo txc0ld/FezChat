@@ -1,5 +1,32 @@
 import SwiftUI
 
+private enum AvatarViewL10n {
+    static let onlineSuffix = String(localized: "common.avatar.online_suffix", defaultValue: "online")
+    static let previewAlice = String(localized: "common.avatar.preview.alice", defaultValue: "Alice")
+    static let previewBobSmith = String(localized: "common.avatar.preview.bob_smith", defaultValue: "Bob Smith")
+    static let previewCharlie = String(localized: "common.avatar.preview.charlie", defaultValue: "Charlie")
+    static let previewDana = String(localized: "common.avatar.preview.dana", defaultValue: "Dana")
+    static let previewJake = String(localized: "common.avatar.preview.jake", defaultValue: "Jake")
+    static let previewBob = String(localized: "common.avatar.preview.bob", defaultValue: "Bob")
+
+    static func accessibilityLabel(name: String, isOnline: Bool) -> String {
+        if isOnline {
+            return String(
+                format: String(localized: "common.avatar.accessibility_label_online", defaultValue: "%@ avatar, %@"),
+                locale: Locale.current,
+                name,
+                onlineSuffix
+            )
+        }
+
+        return String(
+            format: String(localized: "common.avatar.accessibility_label", defaultValue: "%@ avatar"),
+            locale: Locale.current,
+            name
+        )
+    }
+}
+
 // MARK: - AvatarView
 
 /// Circular avatar with gradient ring border.
@@ -74,7 +101,7 @@ struct AvatarView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(name) avatar\(showOnlineIndicator ? ", online" : "")")
+        .accessibilityLabel(AvatarViewL10n.accessibilityLabel(name: name, isOnline: showOnlineIndicator))
     }
 
     // MARK: - Avatar Image / Initials
@@ -228,10 +255,10 @@ struct AvatarView: View {
 
 #Preview("Avatar - No Image") {
     HStack(spacing: 16) {
-        AvatarView(name: "Alice", size: 40, ringStyle: .none)
-        AvatarView(name: "Bob Smith", size: 56, ringStyle: .friend)
-        AvatarView(name: "Charlie", size: 56, ringStyle: .nearby)
-        AvatarView(name: "Dana", size: 56, ringStyle: .subscriber)
+        AvatarView(name: AvatarViewL10n.previewAlice, size: 40, ringStyle: .none)
+        AvatarView(name: AvatarViewL10n.previewBobSmith, size: 56, ringStyle: .friend)
+        AvatarView(name: AvatarViewL10n.previewCharlie, size: 56, ringStyle: .nearby)
+        AvatarView(name: AvatarViewL10n.previewDana, size: 56, ringStyle: .subscriber)
     }
     .padding()
     .background(GradientBackground())
@@ -239,7 +266,7 @@ struct AvatarView: View {
 
 #Preview("Avatar - With Online") {
     AvatarView(
-        name: "Jake",
+        name: AvatarViewL10n.previewJake,
         size: 80,
         ringStyle: .friend,
         showOnlineIndicator: true
@@ -250,9 +277,9 @@ struct AvatarView: View {
 
 #Preview("Avatar - Light") {
     HStack(spacing: 16) {
-        AvatarView(name: "Alice", size: 40, ringStyle: .none)
-        AvatarView(name: "Bob", size: 56, ringStyle: .friend)
-        AvatarView(name: "Charlie", size: 56, ringStyle: .nearby, showOnlineIndicator: true)
+        AvatarView(name: AvatarViewL10n.previewAlice, size: 40, ringStyle: .none)
+        AvatarView(name: AvatarViewL10n.previewBob, size: 56, ringStyle: .friend)
+        AvatarView(name: AvatarViewL10n.previewCharlie, size: 56, ringStyle: .nearby, showOnlineIndicator: true)
     }
     .padding()
     .background(Color.white)

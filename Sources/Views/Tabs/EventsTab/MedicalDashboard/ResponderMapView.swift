@@ -1,6 +1,37 @@
 import SwiftUI
 import MapKit
 
+private enum ResponderMapL10n {
+    static let sos = String(localized: "medical.responder_map.sos", defaultValue: "SOS")
+    static let navigateToAlert = String(localized: "medical.responder_map.navigate_accessibility_label", defaultValue: "Navigate to alert")
+    static let dismiss = String(localized: "common.dismiss", defaultValue: "Dismiss")
+    static let recenterMap = String(localized: "medical.responder_map.recenter", defaultValue: "Recenter map")
+    static let mapLegend = String(localized: "medical.responder_map.legend.accessibility_label", defaultValue: "Map legend")
+    static let severitySection = String(localized: "medical.responder_map.legend.severity", defaultValue: "SOS Severity")
+    static let critical = String(localized: "medical.alert.severity.critical", defaultValue: "Critical")
+    static let urgent = String(localized: "medical.alert.severity.urgent", defaultValue: "Urgent")
+    static let nonUrgent = String(localized: "medical.alert.severity.non_urgent", defaultValue: "Non-Urgent")
+    static let accuracySection = String(localized: "medical.responder_map.legend.accuracy", defaultValue: "Accuracy")
+    static let gpsLock = String(localized: "medical.alert.accuracy.gps_lock", defaultValue: "GPS Lock")
+    static let estimated = String(localized: "medical.alert.accuracy.estimated", defaultValue: "Estimated")
+    static let lastKnown = String(localized: "medical.alert.accuracy.last_known", defaultValue: "Last Known")
+    static let previewNearPyramid = String(localized: "medical.responder_map.preview.near_pyramid", defaultValue: "Near Pyramid Stage")
+    static let previewCampingB = String(localized: "medical.responder_map.preview.camping_b", defaultValue: "Camping B")
+    static let previewDizzy = String(localized: "medical.responder_map.preview.dizzy", defaultValue: "Dizzy")
+    static let previewMedic5 = String(localized: "medical.responder_map.preview.medic_5", defaultValue: "Medic-5")
+    static let previewMedical1 = String(localized: "medical.responder_map.preview.medical_1", defaultValue: "Medical 1")
+    static let previewMedical2 = String(localized: "medical.responder_map.preview.medical_2", defaultValue: "Medical 2")
+    static let previewMedic1 = String(localized: "medical.responder_map.preview.medic_1", defaultValue: "Medic-1")
+
+    static func medicalTent(_ name: String) -> String {
+        String(format: String(localized: "medical.responder_map.medical_tent_accessibility_label", defaultValue: "Medical tent: %@"), locale: Locale.current, name)
+    }
+
+    static func responder(_ callsign: String) -> String {
+        String(format: String(localized: "medical.responder_map.responder_accessibility_label", defaultValue: "Responder: %@"), locale: Locale.current, callsign)
+    }
+}
+
 // MARK: - ResponderMapView
 
 /// MapKit view for medical responders showing SOS pins, medical tents,
@@ -66,7 +97,7 @@ struct ResponderMapView: View {
 
             // SOS alert pins
             ForEach(alerts) { alert in
-                Annotation("SOS", coordinate: alert.coordinate) {
+                Annotation(ResponderMapL10n.sos, coordinate: alert.coordinate) {
                     SOSPinView(alert: alert) {
                         selectedAlert = alert
                         onAlertTap?(alert)
@@ -136,7 +167,7 @@ struct ResponderMapView: View {
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                         .background(Circle().fill(alert.severityColor))
                 }
-                .accessibilityLabel("Navigate to alert")
+                .accessibilityLabel(ResponderMapL10n.navigateToAlert)
 
                 Button(action: { selectedAlert = nil }) {
                     Image(systemName: "xmark")
@@ -144,7 +175,7 @@ struct ResponderMapView: View {
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 }
-                .accessibilityLabel("Dismiss")
+                .accessibilityLabel(ResponderMapL10n.dismiss)
             }
         }
     }
@@ -166,20 +197,20 @@ struct ResponderMapView: View {
                         ))
                 )
         }
-        .accessibilityLabel("Recenter map")
+        .accessibilityLabel(ResponderMapL10n.recenterMap)
     }
 
     private var legendButton: some View {
         Menu {
-            Section("SOS Severity") {
-                Label("Critical", systemImage: "circle.fill").foregroundStyle(.red)
-                Label("Urgent", systemImage: "circle.fill").foregroundStyle(.orange)
-                Label("Non-Urgent", systemImage: "circle.fill").foregroundStyle(.green)
+            Section(ResponderMapL10n.severitySection) {
+                Label(ResponderMapL10n.critical, systemImage: "circle.fill").foregroundStyle(.red)
+                Label(ResponderMapL10n.urgent, systemImage: "circle.fill").foregroundStyle(.orange)
+                Label(ResponderMapL10n.nonUrgent, systemImage: "circle.fill").foregroundStyle(.green)
             }
-            Section("Accuracy") {
-                Label("GPS Lock", systemImage: "location.fill")
-                Label("Estimated", systemImage: "location.circle")
-                Label("Last Known", systemImage: "location.slash")
+            Section(ResponderMapL10n.accuracySection) {
+                Label(ResponderMapL10n.gpsLock, systemImage: "location.fill")
+                Label(ResponderMapL10n.estimated, systemImage: "location.circle")
+                Label(ResponderMapL10n.lastKnown, systemImage: "location.slash")
             }
         } label: {
             Image(systemName: "info.circle")
@@ -195,7 +226,7 @@ struct ResponderMapView: View {
                         ))
                 )
         }
-        .accessibilityLabel("Map legend")
+        .accessibilityLabel(ResponderMapL10n.mapLegend)
     }
 
     private func recenter() {
@@ -301,7 +332,7 @@ private struct MedicalTentPinView: View {
                 .padding(.vertical, 1)
                 .background(Capsule().fill(.white))
         }
-        .accessibilityLabel("Medical tent: \(tent.name)")
+        .accessibilityLabel(ResponderMapL10n.medicalTent(tent.name))
     }
 }
 
@@ -324,7 +355,7 @@ private struct ResponderPinView: View {
                 .padding(.vertical, 1)
                 .background(Capsule().fill(.blipAccentPurple))
         }
-        .accessibilityLabel("Responder: \(responder.callsign)")
+        .accessibilityLabel(ResponderMapL10n.responder(responder.callsign))
     }
 }
 
@@ -360,9 +391,9 @@ extension SOSAlertItem {
 
     var severityLabel: String {
         switch severity {
-        case .green: return "Non-Urgent"
-        case .amber: return "Urgent"
-        case .red: return "Critical"
+        case .green: return ResponderMapL10n.nonUrgent
+        case .amber: return ResponderMapL10n.urgent
+        case .red: return ResponderMapL10n.critical
         }
     }
 }
@@ -371,20 +402,20 @@ extension SOSAlertItem {
 
 #Preview("Responder Map") {
     let alerts: [SOSAlertItem] = [
-        SOSAlertItem(id: UUID(), shortID: "A7F3", severity: .red, locationDescription: "Near Pyramid Stage", description: nil, accuracy: .precise, acceptedBy: nil, createdAt: Date().addingTimeInterval(-180)),
-        SOSAlertItem(id: UUID(), shortID: "B2E1", severity: .amber, locationDescription: "Camping B", description: "Dizzy", accuracy: .estimated, acceptedBy: "Medic-5", createdAt: Date().addingTimeInterval(-420)),
+        SOSAlertItem(id: UUID(), shortID: "A7F3", severity: .red, locationDescription: ResponderMapL10n.previewNearPyramid, description: nil, accuracy: .precise, acceptedBy: nil, createdAt: Date().addingTimeInterval(-180)),
+        SOSAlertItem(id: UUID(), shortID: "B2E1", severity: .amber, locationDescription: ResponderMapL10n.previewCampingB, description: ResponderMapL10n.previewDizzy, accuracy: .estimated, acceptedBy: ResponderMapL10n.previewMedic5, createdAt: Date().addingTimeInterval(-420)),
     ]
 
     let tents: [MedicalTentPin] = [
-        MedicalTentPin(id: UUID(), name: "Medical 1", coordinate: CLLocationCoordinate2D(latitude: 51.0040, longitude: -2.5850)),
-        MedicalTentPin(id: UUID(), name: "Medical 2", coordinate: CLLocationCoordinate2D(latitude: 51.0050, longitude: -2.5870)),
+        MedicalTentPin(id: UUID(), name: ResponderMapL10n.previewMedical1, coordinate: CLLocationCoordinate2D(latitude: 51.0040, longitude: -2.5850)),
+        MedicalTentPin(id: UUID(), name: ResponderMapL10n.previewMedical2, coordinate: CLLocationCoordinate2D(latitude: 51.0050, longitude: -2.5870)),
     ]
 
     ResponderMapView(
         alerts: alerts,
         medicalTents: tents,
         responderLocations: [
-            ResponderPin(id: UUID(), callsign: "Medic-1", coordinate: CLLocationCoordinate2D(latitude: 51.0045, longitude: -2.5858), isOnDuty: true),
+            ResponderPin(id: UUID(), callsign: ResponderMapL10n.previewMedic1, coordinate: CLLocationCoordinate2D(latitude: 51.0045, longitude: -2.5858), isOnDuty: true),
         ],
         eventCenter: CLLocationCoordinate2D(latitude: 51.0043, longitude: -2.5856),
         eventRadiusMeters: 3000

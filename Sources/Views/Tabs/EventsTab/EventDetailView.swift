@@ -1,5 +1,36 @@
 import SwiftUI
 
+private enum EventDetailL10n {
+    static let notFound = String(localized: "events.detail.not_found", defaultValue: "Event not found")
+    static let fallbackTitle = String(localized: "events.detail.fallback_title", defaultValue: "Event")
+    static let dates = String(localized: "events.detail.dates", defaultValue: "Dates")
+    static let location = String(localized: "events.detail.location", defaultValue: "Location")
+    static let attendees = String(localized: "events.detail.attendees", defaultValue: "Attendees")
+    static let mapUnavailable = String(localized: "events.detail.map_unavailable", defaultValue: "Map available after joining")
+    static let leaveEvent = String(localized: "events.detail.leave", defaultValue: "Leave Event")
+    static let joinEvent = String(localized: "events.detail.join", defaultValue: "Join Event")
+    static let previewUnavailable = String(localized: "events.detail.preview.unavailable", defaultValue: "Preview unavailable")
+    static let previewGlastonbury = String(localized: "events.detail.preview.glastonbury", defaultValue: "Glastonbury 2026")
+    static let previewPilton = String(localized: "events.detail.preview.pilton", defaultValue: "Pilton, Somerset")
+    static let previewDescription = String(localized: "events.detail.preview.description", defaultValue: "The world's most famous greenfield music and performing arts festival. Five days of music, art, and culture across multiple stages.")
+
+    static func attendeeCount(_ count: Int) -> String {
+        String(format: String(localized: "events.detail.attendee_count", defaultValue: "%d"), locale: Locale.current, count)
+    }
+
+    static func detailAccessibility(_ label: String, _ value: String) -> String {
+        String(format: String(localized: "events.detail.accessibility_label", defaultValue: "%@: %@"), locale: Locale.current, label, value)
+    }
+
+    static func leaveAccessibility(_ name: String) -> String {
+        String(format: String(localized: "events.detail.leave_accessibility_label", defaultValue: "Leave %@"), locale: Locale.current, name)
+    }
+
+    static func joinAccessibility(_ name: String) -> String {
+        String(format: String(localized: "events.detail.join_accessibility_label", defaultValue: "Join %@"), locale: Locale.current, name)
+    }
+}
+
 // MARK: - EventDetailView
 
 /// Full event detail with description, dates, location, and join/leave action.
@@ -28,8 +59,8 @@ struct EventDetailView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
             .background(GradientBackground().ignoresSafeArea())
         } else {
-            ContentUnavailableView("Event not found", systemImage: "calendar.badge.exclamationmark")
-                .navigationTitle("Event")
+            ContentUnavailableView(EventDetailL10n.notFound, systemImage: "calendar.badge.exclamationmark")
+                .navigationTitle(EventDetailL10n.fallbackTitle)
                 .navigationBarTitleDisplayMode(.large)
                 .toolbarBackground(.hidden, for: .navigationBar)
                 .background(GradientBackground().ignoresSafeArea())
@@ -75,11 +106,11 @@ struct EventDetailView: View {
     private func detailsCard(_ event: EventsViewModel.DiscoverableEvent) -> some View {
         GlassCard(thickness: .ultraThin) {
             VStack(spacing: BlipSpacing.md) {
-                detailRow(icon: "calendar", label: "Dates", value: formattedDateRange(for: event))
+                detailRow(icon: "calendar", label: EventDetailL10n.dates, value: formattedDateRange(for: event))
                 Divider().opacity(0.15)
-                detailRow(icon: "mappin.and.ellipse", label: "Location", value: event.location)
+                detailRow(icon: "mappin.and.ellipse", label: EventDetailL10n.location, value: event.location)
                 Divider().opacity(0.15)
-                detailRow(icon: "person.2.fill", label: "Attendees", value: "\(event.attendeeCount)")
+                detailRow(icon: "person.2.fill", label: EventDetailL10n.attendees, value: EventDetailL10n.attendeeCount(event.attendeeCount))
             }
         }
     }
@@ -101,7 +132,7 @@ struct EventDetailView: View {
             Spacer()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
+        .accessibilityLabel(EventDetailL10n.detailAccessibility(label, value))
     }
 
     // MARK: - Map Placeholder
@@ -112,7 +143,7 @@ struct EventDetailView: View {
                 Image(systemName: "map")
                     .font(.system(size: 32))
                     .foregroundStyle(theme.colors.mutedText.opacity(0.5))
-                Text("Map available after joining")
+                Text(EventDetailL10n.mapUnavailable)
                     .font(theme.typography.caption)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -133,7 +164,7 @@ struct EventDetailView: View {
         }) {
             HStack {
                 Image(systemName: event.isJoined ? "checkmark.circle.fill" : "plus.circle.fill")
-                Text(event.isJoined ? "Leave Event" : "Join Event")
+                Text(event.isJoined ? EventDetailL10n.leaveEvent : EventDetailL10n.joinEvent)
             }
             .font(.custom(BlipFontName.semiBold, size: 17, relativeTo: .body))
             .foregroundStyle(.white)
@@ -148,16 +179,14 @@ struct EventDetailView: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel(event.isJoined ? "Leave \(event.name)" : "Join \(event.name)")
+        .accessibilityLabel(event.isJoined ? EventDetailL10n.leaveAccessibility(event.name) : EventDetailL10n.joinAccessibility(event.name))
     }
 
     // MARK: - Helpers
 
     private func formattedDateRange(for event: EventsViewModel.DiscoverableEvent) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMM d"
-        let start = formatter.string(from: event.startDate)
-        let end = formatter.string(from: event.endDate)
+        let start = event.startDate.formatted(date: .complete, time: .omitted)
+        let end = event.endDate.formatted(date: .complete, time: .omitted)
         return "\(start) – \(end)"
     }
 }
@@ -181,11 +210,11 @@ private enum EventDetailViewPreviewData {
         previewViewModel.discoveryEvents = [
             .init(
                 id: "1",
-                name: "Glastonbury 2026",
-                location: "Pilton, Somerset",
+                name: EventDetailL10n.previewGlastonbury,
+                location: EventDetailL10n.previewPilton,
                 startDate: Date(),
                 endDate: Date().addingTimeInterval(3 * 86400),
-                description: "The world's most famous greenfield music and performing arts festival. Five days of music, art, and culture across multiple stages.",
+                description: EventDetailL10n.previewDescription,
                 imageURL: nil,
                 attendeeCount: 12450,
                 category: .festival,
@@ -205,7 +234,7 @@ private enum EventDetailViewPreviewData {
                 eventID: "1"
             )
         } else {
-            ContentUnavailableView("Preview unavailable", systemImage: "calendar.badge.exclamationmark")
+            ContentUnavailableView(EventDetailL10n.previewUnavailable, systemImage: "calendar.badge.exclamationmark")
         }
     }
     .blipTheme()

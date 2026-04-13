@@ -20,6 +20,12 @@ private enum LostAndFoundL10n {
     static let you = String(localized: "common.you", defaultValue: "You")
     static let attendee = String(localized: "events.lost_found.sender.attendee", defaultValue: "Attendee")
     static let initialsFallback = String(localized: "events.lost_found.sender.initials_fallback", defaultValue: "LF")
+    static let previewEvent = String(localized: "events.lost_found.preview.event", defaultValue: "Sonic Fields")
+    static let previewChannel = String(localized: "events.lost_found.preview.channel", defaultValue: "Lost & Found")
+    static let previewAlex = String(localized: "events.lost_found.preview.sender.alex", defaultValue: "Alex K")
+    static let previewFoundWallet = String(localized: "events.lost_found.preview.message.found_wallet", defaultValue: "Found a blue wallet near Stage B. Dropping it at the info tent.")
+    static let previewLostPhoneCase = String(localized: "events.lost_found.preview.message.lost_phone_case", defaultValue: "Lost a purple phone case by the food trucks.")
+    static let previewUnavailable = String(localized: "events.lost_found.preview.unavailable", defaultValue: "Preview unavailable")
 
     static func signedPublicPosts(_ eventName: String) -> String {
         String(
@@ -366,7 +372,7 @@ private func makeLostAndFoundPreview() -> (container: ModelContainer, eventID: U
         let eventID = UUID()
         let event = Event(
             id: eventID,
-            name: "Sonic Fields",
+            name: LostAndFoundL10n.previewEvent,
             coordinates: GeoPoint(latitude: -31.9523, longitude: 115.8613),
             radiusMeters: 3_000,
             startDate: .now.addingTimeInterval(-3_600),
@@ -376,14 +382,14 @@ private func makeLostAndFoundPreview() -> (container: ModelContainer, eventID: U
         let channel = Channel(
             id: eventID,
             type: .lostAndFound,
-            name: "Lost & Found",
+            name: LostAndFoundL10n.previewChannel,
             event: event,
             maxRetention: 28_800,
             isAutoJoined: true
         )
         let remoteUser = User(
             username: "alexk",
-            displayName: "Alex K",
+            displayName: LostAndFoundL10n.previewAlex,
             emailHash: "",
             noisePublicKey: Data(repeating: 2, count: 32),
             signingPublicKey: Data(repeating: 3, count: 32)
@@ -399,7 +405,7 @@ private func makeLostAndFoundPreview() -> (container: ModelContainer, eventID: U
             sender: remoteUser,
             channel: channel,
             type: .text,
-            rawPayload: Data("Found a blue wallet near Stage B. Dropping it at the info tent.".utf8),
+            rawPayload: Data(LostAndFoundL10n.previewFoundWallet.utf8),
             status: .delivered,
             createdAt: .now.addingTimeInterval(-1_200)
         )
@@ -407,7 +413,7 @@ private func makeLostAndFoundPreview() -> (container: ModelContainer, eventID: U
             sender: localUser,
             channel: channel,
             type: .text,
-            rawPayload: Data("Lost a purple phone case by the food trucks.".utf8),
+            rawPayload: Data(LostAndFoundL10n.previewLostPhoneCase.utf8),
             status: .sent,
             createdAt: .now.addingTimeInterval(-300)
         )
@@ -430,7 +436,7 @@ private func makeLostAndFoundPreview() -> (container: ModelContainer, eventID: U
     if let preview = makeLostAndFoundPreview() {
         ZStack {
             GradientBackground()
-            LostAndFoundView(eventID: preview.eventID, eventName: "Sonic Fields")
+            LostAndFoundView(eventID: preview.eventID, eventName: LostAndFoundL10n.previewEvent)
         }
         .frame(height: 500)
         .preferredColorScheme(.dark)
@@ -438,7 +444,7 @@ private func makeLostAndFoundPreview() -> (container: ModelContainer, eventID: U
         .modelContainer(preview.container)
         .environment(AppCoordinator())
     } else {
-        Text("Preview unavailable")
+        Text(LostAndFoundL10n.previewUnavailable)
             .blipTheme()
     }
 }

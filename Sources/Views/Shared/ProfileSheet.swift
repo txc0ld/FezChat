@@ -1,5 +1,32 @@
 import SwiftUI
 
+private enum ProfileSheetL10n {
+    static let blockUser = String(localized: "profile.sheet.block.title", defaultValue: "Block User")
+    static let block = String(localized: "common.block", defaultValue: "Block")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let blockMessage = String(localized: "profile.sheet.block.message", defaultValue: "Blocked users cannot send you messages or see your location. You can unblock from Settings.")
+    static let reportUser = String(localized: "profile.sheet.report.title", defaultValue: "Report User")
+    static let report = String(localized: "common.report", defaultValue: "Report")
+    static let reportMessage = String(localized: "profile.sheet.report.message", defaultValue: "Report this user for inappropriate behavior. This will be reviewed by the event safety team.")
+    static let online = String(localized: "common.online", defaultValue: "Online")
+    static let friend = String(localized: "common.friend", defaultValue: "Friend")
+    static let message = String(localized: "common.message", defaultValue: "Message")
+    static let addFriend = String(localized: "common.add_friend", defaultValue: "Add Friend")
+    static let unblock = String(localized: "common.unblock", defaultValue: "Unblock")
+    static let previewSarahChen = String(localized: "profile.sheet.preview.sarah_chen", defaultValue: "Sarah Chen")
+    static let previewSarahBio = String(localized: "profile.sheet.preview.sarah_bio", defaultValue: "Music and mountains. Always at the front row.")
+    static let previewJakeMorrison = String(localized: "profile.sheet.preview.jake_morrison", defaultValue: "Jake Morrison")
+    static let previewJakeBio = String(localized: "profile.sheet.preview.jake_bio", defaultValue: "Event photographer")
+
+    static func mutualFriends(_ count: Int) -> String {
+        String(
+            format: String(localized: "profile.sheet.mutual_friends", defaultValue: "%d mutual"),
+            locale: Locale.current,
+            count
+        )
+    }
+}
+
 // MARK: - ProfileSheet
 
 /// Tap-any-avatar popup showing full profile with action buttons.
@@ -60,22 +87,22 @@ struct ProfileSheet: View {
             .padding(.horizontal, BlipSpacing.md)
         }
         .background(.ultraThinMaterial)
-        .alert("Block User", isPresented: $showBlockConfirm) {
-            Button("Block", role: .destructive) {
+        .alert(ProfileSheetL10n.blockUser, isPresented: $showBlockConfirm) {
+            Button(ProfileSheetL10n.block, role: .destructive) {
                 onBlock?()
                 isPresented = false
             }
-            Button("Cancel", role: .cancel) {}
+            Button(ProfileSheetL10n.cancel, role: .cancel) {}
         } message: {
-            Text("Blocked users cannot send you messages or see your location. You can unblock from Settings.")
+            Text(ProfileSheetL10n.blockMessage)
         }
-        .alert("Report User", isPresented: $showReportConfirm) {
-            Button("Report", role: .destructive) {
+        .alert(ProfileSheetL10n.reportUser, isPresented: $showReportConfirm) {
+            Button(ProfileSheetL10n.report, role: .destructive) {
                 onReport?()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(ProfileSheetL10n.cancel, role: .cancel) {}
         } message: {
-            Text("Report this user for inappropriate behavior. This will be reviewed by the event safety team.")
+            Text(ProfileSheetL10n.reportMessage)
         }
     }
 
@@ -110,7 +137,7 @@ struct ProfileSheet: View {
                             .stroke(colorScheme == .dark ? .black : .white, lineWidth: 2)
                     )
                     .offset(x: 28, y: 28)
-                    .accessibilityLabel("Online")
+                    .accessibilityLabel(ProfileSheetL10n.online)
             }
         }
     }
@@ -144,15 +171,15 @@ struct ProfileSheet: View {
             // Badges
             HStack(spacing: BlipSpacing.md) {
                 if isFriend {
-                    badge(icon: "person.fill.checkmark", text: "Friend", color: .blipAccentPurple)
+                    badge(icon: "person.fill.checkmark", text: ProfileSheetL10n.friend, color: .blipAccentPurple)
                 }
 
                 if isOnline {
-                    badge(icon: "wifi", text: "Online", color: BlipColors.darkColors.statusGreen)
+                    badge(icon: "wifi", text: ProfileSheetL10n.online, color: BlipColors.darkColors.statusGreen)
                 }
 
                 if mutualFriendsCount > 0 {
-                    badge(icon: "person.2", text: "\(mutualFriendsCount) mutual", color: theme.colors.mutedText)
+                    badge(icon: "person.2", text: ProfileSheetL10n.mutualFriends(mutualFriendsCount), color: theme.colors.mutedText)
                 }
             }
             .padding(.top, BlipSpacing.xs)
@@ -182,7 +209,7 @@ struct ProfileSheet: View {
     private var actionButtons: some View {
         VStack(spacing: BlipSpacing.md) {
             if let onMessage {
-                GlassButton("Message", icon: "message.fill") {
+                GlassButton(ProfileSheetL10n.message, icon: "message.fill") {
                     onMessage()
                     isPresented = false
                 }
@@ -217,7 +244,7 @@ struct ProfileSheet: View {
         if !isFriend, let onAddFriend {
             actions.append(
                 SheetAction(
-                    title: "Add Friend",
+                    title: ProfileSheetL10n.addFriend,
                     icon: "person.badge.plus",
                     style: .secondary,
                     handler: onAddFriend
@@ -228,7 +255,7 @@ struct ProfileSheet: View {
         if let onBlock {
             actions.append(
                 SheetAction(
-                    title: isBlocked ? "Unblock" : "Block",
+                    title: isBlocked ? ProfileSheetL10n.unblock : ProfileSheetL10n.block,
                     icon: isBlocked ? "hand.raised.slash" : "hand.raised",
                     style: .outline,
                     handler: {
@@ -246,7 +273,7 @@ struct ProfileSheet: View {
         if onReport != nil {
             actions.append(
                 SheetAction(
-                    title: "Report",
+                    title: ProfileSheetL10n.report,
                     icon: "exclamationmark.bubble",
                     style: .outline,
                     handler: { showReportConfirm = true }
@@ -273,9 +300,9 @@ struct ProfileSheet: View {
 #Preview("Profile Sheet - Friend") {
     ProfileSheet(
         isPresented: .constant(true),
-        displayName: "Sarah Chen",
+        displayName: ProfileSheetL10n.previewSarahChen,
         username: "sarahc",
-        bio: "Music and mountains. Always at the front row.",
+        bio: ProfileSheetL10n.previewSarahBio,
         isFriend: true,
         isOnline: true,
         mutualFriendsCount: 5,
@@ -288,9 +315,9 @@ struct ProfileSheet: View {
 #Preview("Profile Sheet - Not Friend") {
     ProfileSheet(
         isPresented: .constant(true),
-        displayName: "Jake Morrison",
+        displayName: ProfileSheetL10n.previewJakeMorrison,
         username: "jakem",
-        bio: "Event photographer",
+        bio: ProfileSheetL10n.previewJakeBio,
         isFriend: false,
         isOnline: false,
         mutualFriendsCount: 2

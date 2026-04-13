@@ -3,6 +3,26 @@ import SwiftData
 import CryptoKit
 import BlipCrypto
 
+private enum OnboardingFlowL10n {
+    static func step(_ current: Int, of total: Int) -> String {
+        String(
+            format: String(localized: "onboarding.progress.step", defaultValue: "Step %1$d of %2$d"),
+            locale: Locale.current,
+            current,
+            total
+        )
+    }
+
+    static func progress(_ current: Int, of total: Int) -> String {
+        String(
+            format: String(localized: "onboarding.progress.summary", defaultValue: "Onboarding progress: step %1$d of %2$d"),
+            locale: Locale.current,
+            current,
+            total
+        )
+    }
+}
+
 // MARK: - OnboardingFlow
 
 /// Three-step onboarding using TabView with .page style.
@@ -74,11 +94,11 @@ struct OnboardingFlow: View {
                         height: 8
                     )
                     .animation(SpringConstants.accessiblePageEntrance, value: currentStep)
-                    .accessibilityLabel("Step \(index + 1) of \(stepCount)")
+                    .accessibilityLabel(OnboardingFlowL10n.step(index + 1, of: stepCount))
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Onboarding progress: step \(currentStep + 1) of \(stepCount)")
+        .accessibilityLabel(OnboardingFlowL10n.progress(currentStep + 1, of: stepCount))
     }
 
     // MARK: - Navigation

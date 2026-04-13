@@ -1,5 +1,24 @@
 import SwiftUI
 
+private enum EventDiscoveryL10n {
+    static let title = String(localized: "events.discovery.title", defaultValue: "Events")
+    static let notFound = String(localized: "events.discovery.not_found", defaultValue: "Event not found")
+    static let searchPlaceholder = String(localized: "events.discovery.search.placeholder", defaultValue: "Search events...")
+    static let searchAccessibility = String(localized: "events.discovery.search.accessibility", defaultValue: "Search events")
+    static let loading = String(localized: "events.discovery.loading", defaultValue: "Loading events...")
+    static let retry = String(localized: "common.retry", defaultValue: "Retry")
+    static let emptyTitle = String(localized: "events.discovery.empty.title", defaultValue: "No events found")
+    static let emptySubtitle = String(localized: "events.discovery.empty.subtitle", defaultValue: "Check back later for upcoming events\nin your area.")
+
+    static func filterBy(_ category: String) -> String {
+        String(
+            format: String(localized: "events.discovery.filter.accessibility", defaultValue: "Filter by %@"),
+            locale: Locale.current,
+            category
+        )
+    }
+}
+
 // MARK: - EventDiscoveryView
 
 /// Browse and join events. Shows search, category filters, and event cards.
@@ -19,14 +38,14 @@ struct EventDiscoveryView: View {
             categoryChips
             contentArea
         }
-        .navigationTitle("Events")
+        .navigationTitle(EventDiscoveryL10n.title)
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(.hidden, for: .navigationBar)
         .navigationDestination(item: $selectedEventID) { eventID in
             if let eventsViewModel {
                 EventDetailView(eventsViewModel: eventsViewModel, eventID: eventID)
             } else {
-                ContentUnavailableView("Event not found", systemImage: "calendar.badge.exclamationmark")
+                ContentUnavailableView(EventDiscoveryL10n.notFound, systemImage: "calendar.badge.exclamationmark")
             }
         }
         .task {
@@ -50,7 +69,7 @@ struct EventDiscoveryView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(theme.colors.mutedText)
-            TextField("Search events...", text: $searchText)
+            TextField(EventDiscoveryL10n.searchPlaceholder, text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.custom(BlipFontName.regular, size: 16, relativeTo: .body))
@@ -63,7 +82,7 @@ struct EventDiscoveryView: View {
         )
         .padding(.horizontal, BlipSpacing.md)
         .padding(.top, BlipSpacing.sm)
-        .accessibilityLabel("Search events")
+        .accessibilityLabel(EventDiscoveryL10n.searchAccessibility)
     }
 
     // MARK: - Category Chips
@@ -90,7 +109,7 @@ struct EventDiscoveryView: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Filter by \(category.rawValue)")
+                    .accessibilityLabel(EventDiscoveryL10n.filterBy(category.rawValue))
                     .accessibilityAddTraits(selectedCategory == category ? .isSelected : [])
                 }
             }
@@ -138,7 +157,7 @@ struct EventDiscoveryView: View {
         VStack(spacing: BlipSpacing.lg) {
             Spacer()
             ProgressView().controlSize(.large).tint(.blipAccentPurple)
-            Text("Loading events...").font(theme.typography.secondary).foregroundStyle(theme.colors.mutedText)
+            Text(EventDiscoveryL10n.loading).font(theme.typography.secondary).foregroundStyle(theme.colors.mutedText)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -149,7 +168,7 @@ struct EventDiscoveryView: View {
             Spacer()
             Image(systemName: "exclamationmark.triangle").font(.system(size: 48)).foregroundStyle(theme.colors.mutedText.opacity(0.5))
             Text(message).font(theme.typography.secondary).foregroundStyle(theme.colors.mutedText).multilineTextAlignment(.center)
-            GlassButton("Retry", icon: "arrow.clockwise") { Task { await eventsViewModel?.fetchDiscoveryEvents() } }
+            GlassButton(EventDiscoveryL10n.retry, icon: "arrow.clockwise") { Task { await eventsViewModel?.fetchDiscoveryEvents() } }
             Spacer()
         }
         .frame(maxWidth: .infinity).padding(.horizontal, BlipSpacing.md)
@@ -159,8 +178,8 @@ struct EventDiscoveryView: View {
         VStack(spacing: BlipSpacing.lg) {
             Spacer()
             Image(systemName: "calendar.badge.plus").font(.system(size: 48)).foregroundStyle(theme.colors.mutedText.opacity(0.5))
-            Text("No events found").font(theme.typography.headline).foregroundStyle(theme.colors.text)
-            Text("Check back later for upcoming events\nin your area.").font(theme.typography.secondary).foregroundStyle(theme.colors.mutedText).multilineTextAlignment(.center)
+            Text(EventDiscoveryL10n.emptyTitle).font(theme.typography.headline).foregroundStyle(theme.colors.text)
+            Text(EventDiscoveryL10n.emptySubtitle).font(theme.typography.secondary).foregroundStyle(theme.colors.mutedText).multilineTextAlignment(.center)
             Spacer()
         }
         .frame(maxWidth: .infinity).staggeredReveal(index: 0)

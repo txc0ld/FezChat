@@ -1,6 +1,23 @@
 import SwiftUI
 import SwiftData
 
+private enum VerifiedProfileL10n {
+    static let title = String(localized: "profile.verified.sheet.title", defaultValue: "Get Verified")
+    static let subtitle = String(localized: "profile.verified.sheet.subtitle", defaultValue: "Stand out and build trust in the mesh")
+    static let badgeTitle = String(localized: "profile.verified.benefit.badge.title", defaultValue: "Purple Verified Badge")
+    static let badgeDescription = String(localized: "profile.verified.benefit.badge.description", defaultValue: "Visible on your profile and in every chat")
+    static let priorityTitle = String(localized: "profile.verified.benefit.priority.title", defaultValue: "Priority in Nearby")
+    static let priorityDescription = String(localized: "profile.verified.benefit.priority.description", defaultValue: "Appear higher in peer discovery results")
+    static let trustTitle = String(localized: "profile.verified.benefit.trust.title", defaultValue: "Trust Indicator")
+    static let trustDescription = String(localized: "profile.verified.benefit.trust.description", defaultValue: "Friends see you're a verified community member")
+    static let oneTimePurchase = String(localized: "profile.verified.price.title", defaultValue: "One-time purchase")
+    static let forever = String(localized: "profile.verified.price.forever", defaultValue: "Forever")
+    static let unavailable = String(localized: "profile.verified.unavailable.title", defaultValue: "Verification purchases are unavailable in this build.")
+    static let unavailableSubtitle = String(localized: "profile.verified.unavailable.subtitle", defaultValue: "The previous CTA only flipped local state, so it has been disabled until StoreKit and server-backed verification are wired.")
+    static let maybeLater = String(localized: "common.maybe_later", defaultValue: "Maybe Later")
+    static let verified = String(localized: "profile.verified.status", defaultValue: "Verified")
+}
+
 // MARK: - VerifiedProfileSheet
 
 /// Sheet explaining verified profile benefits and handling the purchase.
@@ -46,11 +63,11 @@ struct VerifiedProfileSheet: View {
                     .foregroundStyle(.blipAccentPurple)
             }
 
-            Text("Get Verified")
+            Text(VerifiedProfileL10n.title)
                 .font(theme.typography.largeTitle)
                 .foregroundStyle(theme.colors.text)
 
-            Text("Stand out and build trust in the mesh")
+            Text(VerifiedProfileL10n.subtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -64,20 +81,20 @@ struct VerifiedProfileSheet: View {
             VStack(alignment: .leading, spacing: BlipSpacing.md) {
                 benefitRow(
                     icon: "checkmark.seal.fill",
-                    title: "Purple Verified Badge",
-                    description: "Visible on your profile and in every chat"
+                    title: VerifiedProfileL10n.badgeTitle,
+                    description: VerifiedProfileL10n.badgeDescription
                 )
 
                 benefitRow(
                     icon: "star.fill",
-                    title: "Priority in Nearby",
-                    description: "Appear higher in peer discovery results"
+                    title: VerifiedProfileL10n.priorityTitle,
+                    description: VerifiedProfileL10n.priorityDescription
                 )
 
                 benefitRow(
                     icon: "shield.fill",
-                    title: "Trust Indicator",
-                    description: "Friends see you're a verified community member"
+                    title: VerifiedProfileL10n.trustTitle,
+                    description: VerifiedProfileL10n.trustDescription
                 )
             }
         }
@@ -109,7 +126,7 @@ struct VerifiedProfileSheet: View {
         GlassCard(thickness: .regular) {
             HStack {
                 VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-                    Text("One-time purchase")
+                    Text(VerifiedProfileL10n.oneTimePurchase)
                         .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
 
@@ -120,7 +137,7 @@ struct VerifiedProfileSheet: View {
 
                 Spacer()
 
-                Text("Forever")
+                Text(VerifiedProfileL10n.forever)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -137,12 +154,12 @@ struct VerifiedProfileSheet: View {
                 GlassCard(thickness: .regular) {
                     VStack(spacing: BlipSpacing.sm) {
                         // TODO: BDEV-136 — wire StoreKit 2 purchase for com.blip.verified product
-                        Text("Verification purchases are unavailable in this build.")
+                        Text(VerifiedProfileL10n.unavailable)
                             .font(theme.typography.body)
                             .foregroundStyle(theme.colors.text)
                             .multilineTextAlignment(.center)
 
-                        Text("The previous CTA only flipped local state, so it has been disabled until StoreKit and server-backed verification are wired.")
+                        Text(VerifiedProfileL10n.unavailableSubtitle)
                             .font(theme.typography.caption)
                             .foregroundStyle(theme.colors.mutedText)
                             .multilineTextAlignment(.center)
@@ -151,7 +168,7 @@ struct VerifiedProfileSheet: View {
             }
 
             Button(action: { isPresented = false }) {
-                Text("Maybe Later")
+                Text(VerifiedProfileL10n.maybeLater)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -163,7 +180,7 @@ struct VerifiedProfileSheet: View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: "checkmark.seal.fill")
                 .foregroundStyle(.blipAccentPurple)
-            Text("Verified")
+            Text(VerifiedProfileL10n.verified)
                 .font(theme.typography.body)
                 .foregroundStyle(theme.colors.mutedText)
         }

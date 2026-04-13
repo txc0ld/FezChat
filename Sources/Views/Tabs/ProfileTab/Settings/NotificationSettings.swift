@@ -1,5 +1,13 @@
 import SwiftUI
 
+private enum NotificationSettingsL10n {
+    static let title = String(localized: "profile.settings.notifications.title", defaultValue: "Notifications")
+    static let pushNotifications = String(localized: "profile.settings.notifications.push.title", defaultValue: "Push Notifications")
+    static let pushNotificationsSubtitle = String(localized: "profile.settings.notifications.push.subtitle", defaultValue: "Receive notifications for messages")
+    static let autoJoinChannels = String(localized: "profile.settings.notifications.auto_join.title", defaultValue: "Auto-Join Channels")
+    static let autoJoinChannelsSubtitle = String(localized: "profile.settings.notifications.auto_join.subtitle", defaultValue: "Automatically join nearby location channels")
+}
+
 // MARK: - NotificationSettings
 
 /// Push notifications and auto-join channels section.
@@ -11,18 +19,18 @@ struct NotificationSettings: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        SettingsComponents.settingsGroup(title: "Notifications", icon: "bell.fill", theme: theme) {
+        SettingsComponents.settingsGroup(title: NotificationSettingsL10n.title, icon: "bell.fill", theme: theme) {
             VStack(spacing: BlipSpacing.md) {
                 SettingsComponents.settingsToggleRow(
-                    title: "Push Notifications",
-                    subtitle: "Receive notifications for messages",
+                    title: NotificationSettingsL10n.pushNotifications,
+                    subtitle: NotificationSettingsL10n.pushNotificationsSubtitle,
                     isOn: $pushNotifications,
                     theme: theme
                 )
 
                 SettingsComponents.settingsToggleRow(
-                    title: "Auto-Join Channels",
-                    subtitle: "Automatically join nearby location channels",
+                    title: NotificationSettingsL10n.autoJoinChannels,
+                    subtitle: NotificationSettingsL10n.autoJoinChannelsSubtitle,
                     isOn: $autoJoinChannels,
                     theme: theme
                 )

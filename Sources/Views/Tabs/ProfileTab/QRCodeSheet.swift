@@ -1,6 +1,14 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 
+private enum QRCodeSheetL10n {
+    static let title = String(localized: "profile.qr_code.title", defaultValue: "My QR Code")
+    static let close = String(localized: "common.close", defaultValue: "Close")
+    static let subtitle = String(localized: "profile.qr_code.subtitle", defaultValue: "Scan to add me on Blip")
+    static let shareTitle = String(localized: "profile.qr_code.share_title", defaultValue: "My Blip QR Code")
+    static let shareCTA = String(localized: "profile.qr_code.share_cta", defaultValue: "Share QR Code")
+}
+
 // MARK: - QRCodeSheet
 
 /// Displays a QR code containing the user's username for easy profile sharing.
@@ -23,7 +31,7 @@ struct QRCodeSheet: View {
 
             // Header
             HStack {
-                Text("My QR Code")
+                Text(QRCodeSheetL10n.title)
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
@@ -35,7 +43,7 @@ struct QRCodeSheet: View {
                         .foregroundStyle(theme.colors.mutedText)
                 }
                 .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Close")
+                .accessibilityLabel(QRCodeSheetL10n.close)
             }
             .padding(.horizontal, BlipSpacing.md)
             .padding(.top, BlipSpacing.sm)
@@ -69,7 +77,7 @@ struct QRCodeSheet: View {
                         .foregroundStyle(theme.colors.text)
                 }
 
-                Text("Scan to add me on Blip")
+                Text(QRCodeSheetL10n.subtitle)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -81,12 +89,12 @@ struct QRCodeSheet: View {
             if let qrImage = generateQRCode(for: "blip://user/\(user.username)") {
                 ShareLink(
                     item: Image(uiImage: qrImage),
-                    preview: SharePreview("My Blip QR Code", image: Image(uiImage: qrImage))
+                    preview: SharePreview(QRCodeSheetL10n.shareTitle, image: Image(uiImage: qrImage))
                 ) {
                     HStack(spacing: BlipSpacing.sm) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 14, weight: .medium))
-                        Text("Share QR Code")
+                        Text(QRCodeSheetL10n.shareCTA)
                             .font(theme.typography.body)
                             .fontWeight(.medium)
                     }

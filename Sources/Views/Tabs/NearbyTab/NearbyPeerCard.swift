@@ -1,5 +1,34 @@
 import SwiftUI
 
+private enum NearbyPeerCardL10n {
+    static let add = String(localized: "common.add", defaultValue: "Add")
+    static let pending = String(localized: "common.pending", defaultValue: "Pending")
+    static let pendingAccessibility = String(localized: "nearby.peer.friend_pending_accessibility_label", defaultValue: "Friend request pending")
+    static let alreadyFriends = String(localized: "nearby.peer.already_friends_accessibility_label", defaultValue: "Already friends")
+    static let nearby = String(localized: "nearby.peer.distance.nearby", defaultValue: "Nearby")
+    static let direct = String(localized: "nearby.peer.hops.direct", defaultValue: "Direct")
+    static let excellent = String(localized: "nearby.peer.signal.excellent", defaultValue: "Excellent")
+    static let good = String(localized: "nearby.peer.signal.good", defaultValue: "Good")
+    static let fair = String(localized: "nearby.peer.signal.fair", defaultValue: "Fair")
+    static let weak = String(localized: "nearby.peer.signal.weak", defaultValue: "Weak")
+    static let noSignal = String(localized: "nearby.peer.signal.none", defaultValue: "No signal")
+    static let friend = String(localized: "common.friend", defaultValue: "friend")
+    static let requestPending = String(localized: "nearby.peer.request_pending", defaultValue: "friend request pending")
+    static let online = String(localized: "common.online", defaultValue: "online")
+    static let previewSarah = String(localized: "nearby.peer.preview.sarah", defaultValue: "Sarah")
+    static let previewAlex = String(localized: "nearby.peer.preview.alex", defaultValue: "Alex")
+    static let previewPending = String(localized: "nearby.peer.preview.pending", defaultValue: "Pending")
+    static let previewFarAway = String(localized: "nearby.peer.preview.far_away", defaultValue: "Far Away")
+
+    static func signalStrength(_ description: String) -> String {
+        String(format: String(localized: "nearby.peer.signal_strength", defaultValue: "Signal strength: %@"), locale: Locale.current, description)
+    }
+
+    static func addAccessibility(_ name: String) -> String {
+        String(format: String(localized: "nearby.peer.add_accessibility_label", defaultValue: "Add %@ as friend"), locale: Locale.current, name)
+    }
+}
+
 @MainActor
 private final class NearbyPeerRSSILogThrottler {
     static let shared = NearbyPeerRSSILogThrottler()
@@ -185,7 +214,7 @@ struct NearbyPeerCard: View {
             }
         }
         .frame(width: 20, height: 16)
-        .accessibilityLabel("Signal strength: \(signalDescription)")
+        .accessibilityLabel(NearbyPeerCardL10n.signalStrength(signalDescription))
     }
 
     private func barColor(for index: Int) -> Color {
@@ -225,7 +254,7 @@ struct NearbyPeerCard: View {
         case .notFriend:
             if let onAddFriend {
                 Button(action: onAddFriend) {
-                    Text("Add")
+                    Text(NearbyPeerCardL10n.add)
                         .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
                         .foregroundStyle(.white)
                         .padding(.horizontal, BlipSpacing.sm + 2)
@@ -234,22 +263,22 @@ struct NearbyPeerCard: View {
                 }
                 .buttonStyle(.plain)
                 .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Add \(displayName) as friend")
+                .accessibilityLabel(NearbyPeerCardL10n.addAccessibility(displayName))
             }
         case .pending:
-            Text("Pending")
+            Text(NearbyPeerCardL10n.pending)
                 .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
                 .foregroundStyle(theme.colors.statusAmber)
                 .padding(.horizontal, BlipSpacing.sm + 2)
                 .padding(.vertical, BlipSpacing.xs + 1)
                 .background(Capsule().fill(theme.colors.statusAmber.opacity(0.12)))
-                .accessibilityLabel("Friend request pending")
+                .accessibilityLabel(NearbyPeerCardL10n.pendingAccessibility)
         case .friends:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 18))
                 .foregroundStyle(Color.blipMint)
                 .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Already friends")
+                .accessibilityLabel(NearbyPeerCardL10n.alreadyFriends)
         }
     }
 
@@ -258,7 +287,7 @@ struct NearbyPeerCard: View {
     /// Estimated distance from RSSI using log-distance path loss model.
     /// Very approximate — BLE RSSI is noisy, especially in crowds.
     private var estimatedDistance: String {
-        guard hasSignalData else { return "Nearby" }
+        guard hasSignalData else { return NearbyPeerCardL10n.nearby }
         return RSSIDistance.displayString(fromRSSI: rssi)
     }
 
@@ -272,7 +301,7 @@ struct NearbyPeerCard: View {
 
     private var hopDescription: String {
         switch hopCount {
-        case 0: return "Direct"
+        case 0: return NearbyPeerCardL10n.direct
         case 1: return "1 hop"
         default: return "\(hopCount) hops"
         }
@@ -280,22 +309,22 @@ struct NearbyPeerCard: View {
 
     private var signalDescription: String {
         switch signalLevel {
-        case 4: return "Excellent"
-        case 3: return "Good"
-        case 2: return "Fair"
-        case 1: return "Weak"
-        default: return "No signal"
+        case 4: return NearbyPeerCardL10n.excellent
+        case 3: return NearbyPeerCardL10n.good
+        case 2: return NearbyPeerCardL10n.fair
+        case 1: return NearbyPeerCardL10n.weak
+        default: return NearbyPeerCardL10n.noSignal
         }
     }
 
     private var accessibilityDescription: String {
         var desc = "\(displayName)"
-        if friendState == .friends { desc += ", friend" }
-        if friendState == .pending { desc += ", friend request pending" }
+        if friendState == .friends { desc += ", \(NearbyPeerCardL10n.friend)" }
+        if friendState == .pending { desc += ", \(NearbyPeerCardL10n.requestPending)" }
         desc += ", \(hopDescription) away"
         desc += ", approximately \(estimatedDistance)"
         desc += ", signal \(signalDescription)"
-        if isOnline { desc += ", online" }
+        if isOnline { desc += ", \(NearbyPeerCardL10n.online)" }
         return desc
     }
 
@@ -315,13 +344,13 @@ struct NearbyPeerCard: View {
         GradientBackground()
         ScrollView {
             VStack(spacing: BlipSpacing.sm) {
-                NearbyPeerCard(displayName: "Sarah", username: "sarahc", avatarData: nil,
+                NearbyPeerCard(displayName: NearbyPeerCardL10n.previewSarah, username: "sarahc", avatarData: nil,
                     hopCount: 0, rssi: -45, isOnline: true, hasSignalData: true, friendState: .friends)
-                NearbyPeerCard(displayName: "Alex", username: "alexr", avatarData: nil,
+                NearbyPeerCard(displayName: NearbyPeerCardL10n.previewAlex, username: "alexr", avatarData: nil,
                     hopCount: 1, rssi: -58, isOnline: true, hasSignalData: true, friendState: .notFriend, onAddFriend: {})
-                NearbyPeerCard(displayName: "Pending", username: "pendp", avatarData: nil,
+                NearbyPeerCard(displayName: NearbyPeerCardL10n.previewPending, username: "pendp", avatarData: nil,
                     hopCount: 2, rssi: -75, isOnline: true, hasSignalData: true, friendState: .pending)
-                NearbyPeerCard(displayName: "Far Away", username: nil, avatarData: nil,
+                NearbyPeerCard(displayName: NearbyPeerCardL10n.previewFarAway, username: nil, avatarData: nil,
                     hopCount: 5, rssi: -90, isOnline: false, hasSignalData: true, friendState: .notFriend)
             }
             .padding()

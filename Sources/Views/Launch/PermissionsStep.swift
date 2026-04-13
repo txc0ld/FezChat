@@ -1,6 +1,20 @@
 import SwiftUI
 import CoreBluetooth
 
+private enum PermissionsStepL10n {
+    static let title = String(localized: "onboarding.permissions.title", defaultValue: "Stay connected\nwithout signal")
+    static let subtitle = String(localized: "onboarding.permissions.subtitle", defaultValue: "Blip needs Bluetooth to connect with people nearby. Your device becomes part of a mesh network that relays messages.")
+    static let bluetoothEnabled = String(localized: "onboarding.permissions.enabled", defaultValue: "Bluetooth enabled")
+    static let bluetoothRequired = String(localized: "onboarding.permissions.required_message", defaultValue: "Bluetooth is required for Blip to work.")
+    static let openSettings = String(localized: "common.open_settings", defaultValue: "Open Settings")
+    static let openSettingsHint = String(localized: "onboarding.permissions.open_settings.hint", defaultValue: "Opens the iOS Settings app for Blip.")
+    static let getStarted = String(localized: "onboarding.permissions.cta.get_started", defaultValue: "Get started")
+    static let enableBluetooth = String(localized: "onboarding.permissions.cta.enable_bluetooth", defaultValue: "Enable Bluetooth")
+    static let completeHint = String(localized: "onboarding.permissions.complete.hint", defaultValue: "Finishes onboarding and opens the app.")
+    static let requestHint = String(localized: "onboarding.permissions.request.hint", defaultValue: "Requests Bluetooth permission from iOS.")
+    static let requiredCaption = String(localized: "onboarding.permissions.required_caption", defaultValue: "Required for Blip to work")
+}
+
 // MARK: - BLE Permission Observer
 
 /// Delegate that keeps the CBCentralManager alive and forwards state changes.
@@ -50,13 +64,13 @@ struct PermissionsStep: View {
 
             // Text
             VStack(spacing: BlipSpacing.md) {
-                Text("Stay connected\nwithout signal")
+                Text(PermissionsStepL10n.title)
                     .font(theme.typography.largeTitle)
                     .foregroundStyle(theme.colors.text)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Blip needs Bluetooth to connect with people nearby. Your device becomes part of a mesh network that relays messages.")
+                Text(PermissionsStepL10n.subtitle)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText)
                     .multilineTextAlignment(.center)
@@ -72,8 +86,8 @@ struct PermissionsStep: View {
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(theme.colors.statusGreen)
-                        .accessibilityLabel("Bluetooth enabled")
-                    Text("Bluetooth enabled")
+                        .accessibilityLabel(PermissionsStepL10n.bluetoothEnabled)
+                    Text(PermissionsStepL10n.bluetoothEnabled)
                         .font(.custom(BlipFontName.medium, size: 15, relativeTo: .body))
                         .foregroundStyle(theme.colors.statusGreen)
                 }
@@ -82,7 +96,7 @@ struct PermissionsStep: View {
 
             if permissionDenied {
                 VStack(spacing: BlipSpacing.sm) {
-                    Text("Bluetooth is required for Blip to work.")
+                    Text(PermissionsStepL10n.bluetoothRequired)
                         .font(theme.typography.secondary)
                         .foregroundStyle(theme.colors.statusAmber)
                         .multilineTextAlignment(.center)
@@ -90,13 +104,13 @@ struct PermissionsStep: View {
                     Button {
                         openSettings()
                     } label: {
-                        Text("Open Settings")
+                        Text(PermissionsStepL10n.openSettings)
                             .font(.custom(BlipFontName.medium, size: 14, relativeTo: .footnote))
                             .foregroundStyle(Color.blipAccentPurple)
                             .accessibilityAddTraits(.isButton)
                     }
                     .frame(minHeight: BlipSizing.minTapTarget)
-                    .accessibilityHint("Opens the iOS Settings app for Blip.")
+                    .accessibilityHint(PermissionsStepL10n.openSettingsHint)
                 }
                 .padding(.horizontal, BlipSpacing.xl)
                 .padding(.bottom, BlipSpacing.md)
@@ -107,7 +121,7 @@ struct PermissionsStep: View {
             // Action buttons
             VStack(spacing: BlipSpacing.md) {
                 GlassButton(
-                    permissionGranted ? "Get started" : "Enable Bluetooth",
+                    permissionGranted ? PermissionsStepL10n.getStarted : PermissionsStepL10n.enableBluetooth,
                     icon: permissionGranted ? "arrow.right" : "antenna.radiowaves.left.and.right"
                 ) {
                     if permissionGranted {
@@ -117,10 +131,10 @@ struct PermissionsStep: View {
                     }
                 }
                 .fullWidth()
-                .accessibilityHint(permissionGranted ? "Finishes onboarding and opens the app." : "Requests Bluetooth permission from iOS.")
+                .accessibilityHint(permissionGranted ? PermissionsStepL10n.completeHint : PermissionsStepL10n.requestHint)
 
                 if !permissionGranted && !permissionDenied {
-                    Text("Required for Blip to work")
+                    Text(PermissionsStepL10n.requiredCaption)
                         .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
                 }

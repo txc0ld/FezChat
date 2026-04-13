@@ -1,5 +1,20 @@
 import SwiftUI
 
+private enum ConnectionBannerL10n {
+    static let previewShowBanner = String(localized: "common.connection_banner.preview.show_banner", defaultValue: "Show Banner")
+
+    static func bannerText(peerCount: Int) -> String {
+        if peerCount == 1 {
+            return String(localized: "common.connection_banner.single", defaultValue: "Connected to 1 person nearby")
+        }
+        return String(
+            format: String(localized: "common.connection_banner.multiple", defaultValue: "Connected to %d people nearby"),
+            locale: Locale.current,
+            peerCount
+        )
+    }
+}
+
 // MARK: - ConnectionBanner
 
 /// Glass capsule banner showing "Connected to X people nearby".
@@ -72,11 +87,7 @@ struct ConnectionBanner: View {
     // MARK: - Helpers
 
     private var bannerText: String {
-        if peerCount == 1 {
-            return "Connected to 1 person nearby"
-        } else {
-            return "Connected to \(peerCount) people nearby"
-        }
+        ConnectionBannerL10n.bannerText(peerCount: peerCount)
     }
 
     private var bannerTransition: AnyTransition {
@@ -133,7 +144,7 @@ extension View {
                 VStack {
                     ConnectionBanner(peerCount: 12, isVisible: $isVisible)
                     Spacer()
-                    GlassButton("Show Banner") {
+                    GlassButton(ConnectionBannerL10n.previewShowBanner) {
                         withAnimation(SpringConstants.accessiblePageEntrance) {
                             isVisible = true
                         }

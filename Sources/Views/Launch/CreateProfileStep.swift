@@ -3,6 +3,46 @@ import SwiftData
 import BlipCrypto
 import PhotosUI
 
+private enum CreateProfileL10n {
+    static let title = String(localized: "onboarding.profile.title", defaultValue: "Create your profile")
+    static let subtitle = String(localized: "onboarding.profile.subtitle", defaultValue: "Pick a username and verify your email.")
+    static let continueButton = String(localized: "common.continue", defaultValue: "Continue")
+    static let continueHint = String(localized: "onboarding.profile.continue_hint", defaultValue: "Creates your profile and continues to permissions.")
+    static let choosePhotoLabel = String(localized: "onboarding.profile.avatar.label", defaultValue: "Choose profile photo")
+    static let choosePhotoHint = String(localized: "onboarding.profile.avatar.hint", defaultValue: "Double tap to open your photo library.")
+    static let usernameLabel = String(localized: "onboarding.profile.username.label", defaultValue: "Username")
+    static let usernameHint = String(localized: "onboarding.profile.username.hint", defaultValue: "Enter your desired username, 3 to 32 characters.")
+    static let usernamePlaceholder = String(localized: "onboarding.profile.username.placeholder", defaultValue: "Choose a username")
+    static let emailLabel = String(localized: "onboarding.profile.email.label", defaultValue: "Email")
+    static let emailAccessibilityLabel = String(localized: "onboarding.profile.email.accessibility_label", defaultValue: "Email address")
+    static let emailHint = String(localized: "onboarding.profile.email.hint", defaultValue: "Enter your email address to receive a verification code.")
+    static let emailPlaceholder = String(localized: "onboarding.profile.email.placeholder", defaultValue: "you@example.com")
+    static let sendingEmailLabel = String(localized: "onboarding.profile.email.sending", defaultValue: "Sending verification email")
+    static let verifyButton = String(localized: "onboarding.profile.email.verify", defaultValue: "Verify")
+    static let verifyAccessibilityLabel = String(localized: "onboarding.profile.email.verify_accessibility_label", defaultValue: "Verify email")
+    static let verifyAccessibilityHint = String(localized: "onboarding.profile.email.verify_accessibility_hint", defaultValue: "Send a verification code to your email address.")
+    static let otpLabel = String(localized: "onboarding.profile.otp.label", defaultValue: "Verification code")
+    static let otpHint = String(localized: "onboarding.profile.otp.hint", defaultValue: "Enter the 6-digit code sent to your email address.")
+    static let otpPlaceholder = String(localized: "onboarding.profile.otp.placeholder", defaultValue: "000000")
+    static let verifyingCodeLabel = String(localized: "onboarding.profile.otp.verifying", defaultValue: "Verifying code")
+    static let resendButton = String(localized: "onboarding.profile.otp.resend", defaultValue: "Resend code")
+    static let resendAccessibilityLabel = String(localized: "onboarding.profile.otp.resend_accessibility_label", defaultValue: "Resend verification code")
+    static let resendAccessibilityHint = String(localized: "onboarding.profile.otp.resend_accessibility_hint", defaultValue: "Send a new verification code to your email address.")
+    static let usernameTooShort = String(localized: "onboarding.profile.username.error.too_short", defaultValue: "Username must be at least 3 characters")
+    static let usernameTooLong = String(localized: "onboarding.profile.username.error.too_long", defaultValue: "Username must be 32 characters or fewer")
+    static let usernameInvalidCharacters = String(localized: "onboarding.profile.username.error.invalid_characters", defaultValue: "Only letters, numbers, hyphens, dots, underscores")
+    static let usernameTaken = String(localized: "onboarding.profile.username.error.taken", defaultValue: "Username already taken. Try a different one.")
+    static let identityErrorFormat = String(localized: "onboarding.profile.identity.error_format", defaultValue: "Failed to create identity: %@")
+
+    static func resendCountdown(_ seconds: Int) -> String {
+        String(format: String(localized: "onboarding.profile.otp.resend_countdown", defaultValue: "Resend in %ds"), locale: Locale.current, seconds)
+    }
+
+    static func identityError(_ error: String) -> String {
+        String(format: identityErrorFormat, locale: Locale.current, error)
+    }
+}
+
 // MARK: - CreateProfileStep
 
 /// Onboarding step 2: Username, email verification, optional avatar picker, identity generation.
@@ -47,11 +87,11 @@ struct CreateProfileStep: View {
             VStack(spacing: BlipSpacing.lg) {
                 // Title
                 VStack(spacing: BlipSpacing.sm) {
-                    Text("Create your profile")
+                    Text(CreateProfileL10n.title)
                         .font(theme.typography.largeTitle)
                         .foregroundStyle(theme.colors.text)
 
-                    Text("Pick a username and verify your email.")
+                    Text(CreateProfileL10n.subtitle)
                         .font(theme.typography.secondary)
                         .foregroundStyle(theme.colors.mutedText)
                         .multilineTextAlignment(.center)
@@ -92,7 +132,7 @@ struct CreateProfileStep: View {
 
                 // Continue button
                 GlassButton(
-                    "Continue",
+                    CreateProfileL10n.continueButton,
                     icon: isEmailVerified ? "checkmark" : "arrow.right",
                     isLoading: isCreatingIdentity
                 ) {
@@ -100,7 +140,7 @@ struct CreateProfileStep: View {
                 }
                 .fullWidth()
                 .disabled(!isFormValid || isCreatingIdentity)
-                .accessibilityHint("Creates your profile and continues to permissions.")
+                .accessibilityHint(CreateProfileL10n.continueHint)
                 .padding(.horizontal, BlipSpacing.lg)
                 .padding(.bottom, BlipSpacing.xl)
             }
@@ -158,8 +198,8 @@ struct CreateProfileStep: View {
         .buttonStyle(.plain)
         .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Choose profile photo")
-        .accessibilityHint("Double tap to open your photo library.")
+        .accessibilityLabel(CreateProfileL10n.choosePhotoLabel)
+        .accessibilityHint(CreateProfileL10n.choosePhotoHint)
         .accessibilityAddTraits(.isButton)
         .onChange(of: selectedAvatarItem) { _, newItem in
             Task {
@@ -179,7 +219,7 @@ struct CreateProfileStep: View {
 
     private var usernameField: some View {
         VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-            Text("Username")
+            Text(CreateProfileL10n.usernameLabel)
                 .font(.custom(BlipFontName.medium, size: 13, relativeTo: .caption))
                 .foregroundStyle(theme.colors.mutedText)
                 .accessibilityHidden(true)
@@ -192,11 +232,11 @@ struct CreateProfileStep: View {
                 .autocorrectionDisabled()
                 .focused($focusedField, equals: .username)
                 .frame(minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Username")
-                .accessibilityHint("Enter your desired username, 3 to 30 characters.")
+                .accessibilityLabel(CreateProfileL10n.usernameLabel)
+                .accessibilityHint(CreateProfileL10n.usernameHint)
                 .overlay(alignment: .leading) {
                     if username.isEmpty {
-                        Text("Choose a username")
+                        Text(CreateProfileL10n.usernamePlaceholder)
                             .font(theme.typography.body)
                             .foregroundStyle(theme.colors.mutedText.opacity(0.6))
                             .allowsHitTesting(false)
@@ -218,7 +258,7 @@ struct CreateProfileStep: View {
 
     private var emailField: some View {
         VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-            Text("Email")
+            Text(CreateProfileL10n.emailLabel)
                 .font(.custom(BlipFontName.medium, size: 13, relativeTo: .caption))
                 .foregroundStyle(theme.colors.mutedText)
                 .accessibilityHidden(true)
@@ -233,11 +273,11 @@ struct CreateProfileStep: View {
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .email)
                     .frame(minHeight: BlipSizing.minTapTarget)
-                    .accessibilityLabel("Email address")
-                    .accessibilityHint("Enter your email address to receive a verification code.")
+                    .accessibilityLabel(CreateProfileL10n.emailAccessibilityLabel)
+                    .accessibilityHint(CreateProfileL10n.emailHint)
                     .overlay(alignment: .leading) {
                         if email.isEmpty {
-                            Text("you@example.com")
+                            Text(CreateProfileL10n.emailPlaceholder)
                                 .font(theme.typography.body)
                                 .foregroundStyle(theme.colors.mutedText.opacity(0.6))
                                 .allowsHitTesting(false)
@@ -252,17 +292,17 @@ struct CreateProfileStep: View {
                         if isSendingCode {
                             ProgressView()
                                 .tint(Color.blipAccentPurple)
-                                .accessibilityLabel("Sending verification email")
+                                .accessibilityLabel(CreateProfileL10n.sendingEmailLabel)
                         } else {
-                            Text("Verify")
+                            Text(CreateProfileL10n.verifyButton)
                                 .font(.custom(BlipFontName.semiBold, size: 14, relativeTo: .footnote))
                                 .foregroundStyle(Color.blipAccentPurple)
                         }
                     }
                     .disabled(isSendingCode)
                     .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-                    .accessibilityLabel("Verify email")
-                    .accessibilityHint("Send a verification code to your email address.")
+                    .accessibilityLabel(CreateProfileL10n.verifyAccessibilityLabel)
+                    .accessibilityHint(CreateProfileL10n.verifyAccessibilityHint)
                 }
 
                 if isEmailVerified {
@@ -278,7 +318,7 @@ struct CreateProfileStep: View {
 
     private var otpField: some View {
         VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-            Text("Verification code")
+            Text(CreateProfileL10n.otpLabel)
                 .font(.custom(BlipFontName.medium, size: 13, relativeTo: .caption))
                 .foregroundStyle(theme.colors.mutedText)
                 .accessibilityHidden(true)
@@ -291,11 +331,11 @@ struct CreateProfileStep: View {
                     .keyboardType(.numberPad)
                     .focused($focusedField, equals: .otp)
                     .frame(minHeight: BlipSizing.minTapTarget)
-                    .accessibilityLabel("Verification code")
-                    .accessibilityHint("Enter the 6-digit code sent to your email address.")
+                    .accessibilityLabel(CreateProfileL10n.otpLabel)
+                    .accessibilityHint(CreateProfileL10n.otpHint)
                     .overlay(alignment: .leading) {
                         if otpCode.isEmpty {
-                            Text("000000")
+                            Text(CreateProfileL10n.otpPlaceholder)
                                 .font(.custom(BlipFontName.semiBold, size: 20, relativeTo: .title3))
                                 .foregroundStyle(theme.colors.mutedText.opacity(0.4))
                                 .allowsHitTesting(false)
@@ -310,7 +350,7 @@ struct CreateProfileStep: View {
                 if isVerifyingCode {
                     ProgressView()
                         .tint(theme.colors.mutedText)
-                        .accessibilityLabel("Verifying code")
+                        .accessibilityLabel(CreateProfileL10n.verifyingCodeLabel)
                 }
             }
 
@@ -318,19 +358,19 @@ struct CreateProfileStep: View {
                 Task { await sendVerificationCode() }
             } label: {
                 if resendCooldown > 0 {
-                    Text("Resend in \(resendCooldown)s")
+                    Text(CreateProfileL10n.resendCountdown(resendCooldown))
                         .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
                         .foregroundStyle(theme.colors.mutedText)
                 } else {
-                    Text("Resend code")
+                    Text(CreateProfileL10n.resendButton)
                         .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
                         .foregroundStyle(Color.blipAccentPurple)
                 }
             }
             .disabled(isSendingCode || resendCooldown > 0)
             .frame(minHeight: BlipSizing.minTapTarget)
-            .accessibilityLabel("Resend verification code")
-            .accessibilityHint("Send a new verification code to your email address.")
+            .accessibilityLabel(CreateProfileL10n.resendAccessibilityLabel)
+            .accessibilityHint(CreateProfileL10n.resendAccessibilityHint)
         }
     }
 
@@ -349,16 +389,16 @@ struct CreateProfileStep: View {
             return
         }
         if value.count < 3 {
-            usernameError = "Username must be at least 3 characters"
+            usernameError = CreateProfileL10n.usernameTooShort
             return
         }
         if value.count > 32 {
-            usernameError = "Username must be 32 characters or fewer"
+            usernameError = CreateProfileL10n.usernameTooLong
             return
         }
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-."))
         if value.unicodeScalars.contains(where: { !allowed.contains($0) }) {
-            usernameError = "Only letters, numbers, hyphens, dots, underscores"
+            usernameError = CreateProfileL10n.usernameInvalidCharacters
             return
         }
         usernameError = nil
@@ -503,7 +543,7 @@ struct CreateProfileStep: View {
                 }
                 try? modelContext.save()
                 try? KeyManager.shared.deleteIdentity()
-                usernameError = "Username already taken. Try a different one."
+                usernameError = CreateProfileL10n.usernameTaken
                 DebugLogger.shared.log("AUTH", "Username '\(trimmedUsername)' already taken", isError: true)
                 isCreatingIdentity = false
                 return
@@ -534,7 +574,7 @@ struct CreateProfileStep: View {
 
             onComplete()
         } catch {
-            identityError = "Failed to create identity: \(error.localizedDescription)"
+            identityError = CreateProfileL10n.identityError(error.localizedDescription)
         }
 
         isCreatingIdentity = false

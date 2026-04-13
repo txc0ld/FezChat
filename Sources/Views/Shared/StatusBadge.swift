@@ -1,5 +1,15 @@
 import SwiftUI
 
+private enum StatusBadgeL10n {
+    static let typing = String(localized: "chat.status.typing", defaultValue: "Typing")
+    static let queued = String(localized: "chat.status.queued", defaultValue: "Queued")
+    static let encrypting = String(localized: "chat.status.encrypting", defaultValue: "Encrypting")
+    static let failed = String(localized: "chat.status.failed", defaultValue: "Failed to send")
+    static let sent = String(localized: "chat.status.sent", defaultValue: "Sent")
+    static let delivered = String(localized: "chat.status.delivered", defaultValue: "Delivered")
+    static let read = String(localized: "chat.status.read", defaultValue: "Read")
+}
+
 // MARK: - StatusBadge
 
 /// Displays message delivery status with animated checkmark icons.
@@ -179,13 +189,13 @@ struct StatusBadge: View {
 
     private var accessibilityText: String {
         switch status {
-        case .composing: return "Typing"
-        case .queued: return "Queued"
-        case .encrypting: return "Encrypting"
-        case .failed: return "Failed to send"
-        case .sent: return "Sent"
-        case .delivered: return "Delivered"
-        case .read: return "Read"
+        case .composing: return StatusBadgeL10n.typing
+        case .queued: return StatusBadgeL10n.queued
+        case .encrypting: return StatusBadgeL10n.encrypting
+        case .failed: return StatusBadgeL10n.failed
+        case .sent: return StatusBadgeL10n.sent
+        case .delivered: return StatusBadgeL10n.delivered
+        case .read: return StatusBadgeL10n.read
         }
     }
 

@@ -1,6 +1,21 @@
 import SwiftUI
 import SwiftData
 
+private enum ProfileViewL10n {
+    static let title = String(localized: "profile.title", defaultValue: "Profile")
+    static let settings = String(localized: "common.settings", defaultValue: "Settings")
+    static let friends = String(localized: "common.friends", defaultValue: "Friends")
+    static let noProfile = String(localized: "profile.empty.title", defaultValue: "No profile found")
+    static let noProfileSubtitle = String(localized: "profile.empty.subtitle", defaultValue: "Complete setup to create your profile")
+    static let editPicture = String(localized: "profile.edit_picture", defaultValue: "Edit profile picture")
+    static let editProfile = String(localized: "profile.edit.cta", defaultValue: "Edit Profile")
+    static let preferences = String(localized: "profile.quick_actions.preferences", defaultValue: "Preferences")
+    static let myQRCode = String(localized: "profile.quick_actions.qr_code.title", defaultValue: "My QR Code")
+    static let shareProfile = String(localized: "profile.quick_actions.qr_code.subtitle", defaultValue: "Share profile")
+    static let verificationSoon = String(localized: "profile.verification_soon", defaultValue: "Verification coming soon")
+    static let verificationUnavailable = String(localized: "profile.verification_unavailable", defaultValue: "Verification unavailable in this build")
+}
+
 // MARK: - ProfileView
 
 /// Main profile tab showing user avatar, name, username, bio,
@@ -35,7 +50,7 @@ struct ProfileView: View {
                     emptyState
                 }
             }
-            .navigationTitle("Profile")
+            .navigationTitle(ProfileViewL10n.title)
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
@@ -46,7 +61,7 @@ struct ProfileView: View {
                             .foregroundStyle(theme.colors.mutedText)
                     }
                     .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-                    .accessibilityLabel("Settings")
+                    .accessibilityLabel(ProfileViewL10n.settings)
                 }
             }
             .sheet(isPresented: $showEditProfile) {
@@ -130,11 +145,11 @@ struct ProfileView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText)
 
-            Text("No profile found")
+            Text(ProfileViewL10n.noProfile)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
-            Text("Complete setup to create your profile")
+            Text(ProfileViewL10n.noProfileSubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
         }
@@ -213,7 +228,7 @@ struct ProfileView: View {
                     }
                     .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
                     .offset(x: 28, y: 28)
-                    .accessibilityLabel("Edit profile picture")
+                    .accessibilityLabel(ProfileViewL10n.editPicture)
                 }
 
                 // Name and username
@@ -244,7 +259,7 @@ struct ProfileView: View {
 
                 // Working action — Edit Profile stands alone to read as
                 // the primary, shipped action for this section.
-                GlassButton("Edit Profile", icon: "pencil", style: .secondary, size: .small) {
+                GlassButton(ProfileViewL10n.editProfile, icon: "pencil", style: .secondary, size: .small) {
                     showEditProfile = true
                 }
 
@@ -265,17 +280,17 @@ struct ProfileView: View {
     private func quickActions(_ user: User) -> some View {
         VStack(spacing: BlipSpacing.md) {
             HStack(spacing: BlipSpacing.md) {
-                quickActionCard(icon: "person.2.fill", title: "Friends", subtitle: "\(user.friends.count) friends") {
+                quickActionCard(icon: "person.2.fill", title: ProfileViewL10n.friends, subtitle: "\(user.friends.count) friends") {
                     showFriends = true
                 }
 
-                quickActionCard(icon: "gearshape.fill", title: "Settings", subtitle: "Preferences") {
+                quickActionCard(icon: "gearshape.fill", title: ProfileViewL10n.settings, subtitle: ProfileViewL10n.preferences) {
                     showSettings = true
                 }
             }
 
             HStack(spacing: BlipSpacing.md) {
-                quickActionCard(icon: "qrcode", title: "My QR Code", subtitle: "Share profile") {
+                quickActionCard(icon: "qrcode", title: ProfileViewL10n.myQRCode, subtitle: ProfileViewL10n.shareProfile) {
                     showQRCode = true
                 }
             }
@@ -312,11 +327,11 @@ struct ProfileView: View {
         HStack(spacing: BlipSpacing.xs) {
             Image(systemName: "clock")
                 .font(.system(size: 10, weight: .medium))
-            Text("Verification coming soon")
+            Text(ProfileViewL10n.verificationSoon)
                 .font(theme.typography.caption)
         }
         .foregroundStyle(theme.colors.mutedText.opacity(0.7))
-        .accessibilityLabel("Verification unavailable in this build")
+        .accessibilityLabel(ProfileViewL10n.verificationUnavailable)
     }
 }
 

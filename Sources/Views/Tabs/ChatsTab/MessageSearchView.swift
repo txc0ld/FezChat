@@ -1,6 +1,26 @@
 import SwiftUI
 import SwiftData
 
+private enum MessageSearchL10n {
+    static let title = String(localized: "chat.search.title", defaultValue: "Search Messages")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let placeholder = String(localized: "chat.search.placeholder", defaultValue: "Search messages...")
+    static let clear = String(localized: "chat.search.clear", defaultValue: "Clear search")
+    static let emptyTitle = String(localized: "chat.search.empty.title", defaultValue: "Search across all channels")
+    static let emptySubtitle = String(localized: "chat.search.empty.subtitle", defaultValue: "Find messages by content from\nany conversation.")
+    static let searching = String(localized: "chat.search.loading", defaultValue: "Searching...")
+    static let noResultsSubtitle = String(localized: "chat.search.no_results.subtitle", defaultValue: "Try a different search term.")
+    static let fallbackChannel = String(localized: "chat.search.channel.fallback", defaultValue: "Chat")
+
+    static func noResults(_ query: String) -> String {
+        String(format: String(localized: "chat.search.no_results.title", defaultValue: "No results for \"%@\""), locale: Locale.current, query)
+    }
+
+    static func resultCount(_ count: Int) -> String {
+        String(format: String(localized: "chat.search.result_count", defaultValue: "%d results"), locale: Locale.current, count)
+    }
+}
+
 // MARK: - MessageSearchView
 
 /// Full-screen sheet for searching message content across all channels.
@@ -37,11 +57,11 @@ struct MessageSearchView: View {
                     contentArea
                 }
             }
-            .navigationTitle("Search Messages")
+            .navigationTitle(MessageSearchL10n.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(MessageSearchL10n.cancel) { dismiss() }
                         .foregroundStyle(Color.blipAccentPurple)
                 }
             }
@@ -65,7 +85,7 @@ struct MessageSearchView: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(isFieldFocused ? Color.blipAccentPurple : theme.colors.mutedText)
 
-            TextField("Search messages...", text: $searchText)
+            TextField(MessageSearchL10n.placeholder, text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.custom(BlipFontName.regular, size: 16, relativeTo: .body))
@@ -82,7 +102,7 @@ struct MessageSearchView: View {
                         .foregroundStyle(theme.colors.mutedText)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
+                .accessibilityLabel(MessageSearchL10n.clear)
             }
         }
         .padding(.horizontal, BlipSpacing.md)
@@ -126,10 +146,10 @@ struct MessageSearchView: View {
             Image(systemName: "text.magnifyingglass")
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
-            Text("Search across all channels")
+            Text(MessageSearchL10n.emptyTitle)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
-            Text("Find messages by content from\nany conversation.")
+            Text(MessageSearchL10n.emptySubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -145,7 +165,7 @@ struct MessageSearchView: View {
             ProgressView()
                 .controlSize(.large)
                 .tint(Color.blipAccentPurple)
-            Text("Searching...")
+            Text(MessageSearchL10n.searching)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
             Spacer()
@@ -159,10 +179,10 @@ struct MessageSearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
-            Text("No results for \"\(searchText)\"")
+            Text(MessageSearchL10n.noResults(searchText))
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
-            Text("Try a different search term.")
+            Text(MessageSearchL10n.noResultsSubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
             Spacer()
@@ -177,7 +197,7 @@ struct MessageSearchView: View {
         ScrollView {
             LazyVStack(spacing: BlipSpacing.sm) {
                 HStack {
-                    Text("\(searchResults.count) result\(searchResults.count == 1 ? "" : "s")")
+                    Text(MessageSearchL10n.resultCount(searchResults.count))
                         .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
                     Spacer()
@@ -239,7 +259,7 @@ struct MessageSearchView: View {
                     id: message.id,
                     messageID: message.id,
                     channelID: message.channel?.id ?? UUID(),
-                    channelName: message.channel?.name ?? "Chat",
+                    channelName: message.channel?.name ?? MessageSearchL10n.fallbackChannel,
                     senderName: message.sender?.resolvedDisplayName ?? message.sender?.username,
                     messageText: text,
                     timestamp: message.createdAt

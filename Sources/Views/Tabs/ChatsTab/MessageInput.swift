@@ -1,5 +1,26 @@
 import SwiftUI
 
+private enum MessageInputL10n {
+    static let editing = String(localized: "chat.input.editing", defaultValue: "Editing message")
+    static let cancelEditing = String(localized: "chat.input.cancel_editing", defaultValue: "Cancel editing")
+    static let dismissReply = String(localized: "chat.input.dismiss_reply", defaultValue: "Dismiss reply")
+    static let addAttachment = String(localized: "chat.input.add_attachment", defaultValue: "Add attachment")
+    static let attachmentTitle = String(localized: "chat.input.attachment.title", defaultValue: "Attachment")
+    static let camera = String(localized: "common.camera", defaultValue: "Camera")
+    static let photoLibrary = String(localized: "common.photo_library", defaultValue: "Photo Library")
+    static let voiceNote = String(localized: "chat.input.attachment.voice_note", defaultValue: "Voice Note")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let placeholder = String(localized: "chat.input.placeholder", defaultValue: "Message")
+    static let inputAccessibility = String(localized: "chat.input.accessibility_label", defaultValue: "Message input")
+    static let pushToTalk = String(localized: "chat.input.ptt.accessibility_label", defaultValue: "Push to talk")
+    static let pushToTalkHint = String(localized: "chat.input.ptt.accessibility_hint", defaultValue: "Double tap and hold to record, release to send")
+    static let holdToTalk = String(localized: "chat.input.ptt.hold_accessibility_label", defaultValue: "Hold to talk")
+
+    static func replyingTo(_ senderName: String) -> String {
+        String(format: String(localized: "chat.input.replying_to", defaultValue: "Replying to %@"), locale: Locale.current, senderName)
+    }
+}
+
 // MARK: - MessageInput
 
 /// Glass text field with attachment button, morphing mic/send button, and PTT hold button.
@@ -85,7 +106,7 @@ struct MessageInput: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.blipAccentPurple)
 
-            Text("Editing message")
+            Text(MessageInputL10n.editing)
                 .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
                 .foregroundStyle(Color.blipAccentPurple)
 
@@ -99,7 +120,7 @@ struct MessageInput: View {
                     .foregroundStyle(theme.colors.mutedText)
             }
             .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-            .accessibilityLabel("Cancel editing")
+            .accessibilityLabel(MessageInputL10n.cancelEditing)
         }
         .padding(.horizontal, BlipSpacing.md)
         .padding(.vertical, BlipSpacing.sm)
@@ -120,7 +141,7 @@ struct MessageInput: View {
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Replying to \(senderName)")
+                Text(MessageInputL10n.replyingTo(senderName))
                     .font(.custom(BlipFontName.semiBold, size: 12, relativeTo: .caption2))
                     .foregroundStyle(Color.blipAccentPurple)
 
@@ -140,7 +161,7 @@ struct MessageInput: View {
                     .foregroundStyle(theme.colors.mutedText)
             }
             .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-            .accessibilityLabel("Dismiss reply")
+            .accessibilityLabel(MessageInputL10n.dismissReply)
         }
         .padding(.horizontal, BlipSpacing.md)
         .padding(.vertical, BlipSpacing.sm)
@@ -164,12 +185,12 @@ struct MessageInput: View {
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Add attachment")
-        .confirmationDialog("Attachment", isPresented: $showAttachmentMenu) {
-            Button("Camera") { onCamera() }
-            Button("Photo Library") { onPhotoLibrary() }
-            Button("Voice Note") { onAttachment() }
-            Button("Cancel", role: .cancel) {}
+        .accessibilityLabel(MessageInputL10n.addAttachment)
+        .confirmationDialog(MessageInputL10n.attachmentTitle, isPresented: $showAttachmentMenu) {
+            Button(MessageInputL10n.camera) { onCamera() }
+            Button(MessageInputL10n.photoLibrary) { onPhotoLibrary() }
+            Button(MessageInputL10n.voiceNote) { onAttachment() }
+            Button(MessageInputL10n.cancel, role: .cancel) {}
         }
     }
 
@@ -179,7 +200,7 @@ struct MessageInput: View {
         ZStack(alignment: .leading) {
             // Placeholder
             if text.isEmpty {
-                Text("Message")
+                Text(MessageInputL10n.placeholder)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText.opacity(0.8))
                     .padding(.horizontal, BlipSpacing.sm + 4)
@@ -195,7 +216,7 @@ struct MessageInput: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, BlipSpacing.xs)
                 .focused($isTextFieldFocused)
-                .accessibilityLabel("Message input")
+                .accessibilityLabel(MessageInputL10n.inputAccessibility)
                 .onChange(of: text) { _, newValue in
                     withAnimation(SpringConstants.bouncyAnimation) {
                         isSendMode = !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -271,8 +292,8 @@ struct MessageInput: View {
                         )
                 )
         }
-        .accessibilityLabel("Push to talk")
-        .accessibilityHint("Double tap and hold to record, release to send")
+        .accessibilityLabel(MessageInputL10n.pushToTalk)
+        .accessibilityHint(MessageInputL10n.pushToTalkHint)
         .accessibilityAddTraits(.startsMediaSession)
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -287,7 +308,7 @@ struct MessageInput: View {
                     onPTTEnd()
                 }
         )
-        .accessibilityLabel("Hold to talk")
+        .accessibilityLabel(MessageInputL10n.holdToTalk)
         .accessibilityAddTraits(.isButton)
     }
 

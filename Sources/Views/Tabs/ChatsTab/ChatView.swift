@@ -2,6 +2,33 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 
+private enum ChatViewL10n {
+    static let recording = String(localized: "chat.recording.label", defaultValue: "Recording...")
+    static let unknown = String(localized: "common.unknown", defaultValue: "Unknown")
+    static let recordingVoiceNote = String(localized: "chat.recording.voice_note", defaultValue: "Recording voice note")
+    static let deleteTitle = String(localized: "chat.delete_message.title", defaultValue: "Delete message?")
+    static let delete = String(localized: "common.delete", defaultValue: "Delete")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let deleteMessage = String(localized: "chat.delete_message.body", defaultValue: "This can't be undone.")
+    static let encrypted = String(localized: "chat.encryption.enabled", defaultValue: "Encrypted")
+    static let endToEndEncrypted = String(localized: "chat.encryption.accessibility", defaultValue: "End-to-end encrypted")
+    static let online = String(localized: "chat.presence.online", defaultValue: "Online")
+    static let lastSeenRecently = String(localized: "chat.presence.last_seen_recently", defaultValue: "Last seen recently")
+    static let messageDeleted = String(localized: "chat.message.deleted", defaultValue: "Message deleted")
+    static let today = String(localized: "common.today", defaultValue: "Today")
+    static let yesterday = String(localized: "common.yesterday", defaultValue: "Yesterday")
+
+    static func jumpToLatest(count: Int) -> String {
+        String(
+            format: String(localized: "chat.jump_to_latest.accessibility.with_count", defaultValue: "%d new messages. Jump to latest."),
+            locale: Locale.current,
+            count
+        )
+    }
+
+    static let jumpToLatestSingle = String(localized: "chat.jump_to_latest.accessibility.single", defaultValue: "Jump to latest message")
+}
+
 // MARK: - ChatView
 
 /// Full chat conversation view.
@@ -68,7 +95,7 @@ struct ChatView: View {
                     )
                     .frame(height: 32)
 
-                    Text("Recording...")
+                    Text(ChatViewL10n.recording)
                         .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
                 }
@@ -120,7 +147,7 @@ struct ChatView: View {
                 },
                 replyContext: chatViewModel?.replyTarget.map { msg in
                     (
-                        senderName: msg.sender?.resolvedDisplayName ?? "Unknown",
+                        senderName: msg.sender?.resolvedDisplayName ?? ChatViewL10n.unknown,
                         preview: String(data: msg.rawPayload, encoding: .utf8) ?? ""
                     )
                 },
@@ -132,7 +159,7 @@ struct ChatView: View {
                     chatViewModel?.cancelEditing()
                 }
             )
-            .accessibilityValue(isRecordingVoiceNote ? "Recording voice note" : "")
+            .accessibilityValue(isRecordingVoiceNote ? ChatViewL10n.recordingVoiceNote : "")
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -143,20 +170,20 @@ struct ChatView: View {
         }
         .toolbarBackground(.hidden, for: .navigationBar)
         .alert(
-            "Delete message?",
+            ChatViewL10n.deleteTitle,
             isPresented: Binding(
                 get: { showDeleteConfirmation != nil },
                 set: { if !$0 { showDeleteConfirmation = nil } }
             )
         ) {
-            Button("Delete", role: .destructive) {
+            Button(ChatViewL10n.delete, role: .destructive) {
                 if let message = showDeleteConfirmation {
                     Task { await chatViewModel?.deleteMessage(message) }
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(ChatViewL10n.cancel, role: .cancel) {}
         } message: {
-            Text("This can't be undone.")
+            Text(ChatViewL10n.deleteMessage)
         }
         .fullScreenCover(isPresented: $showImageViewer) {
             ImageViewer(imageData: selectedImageData, isPresented: $showImageViewer)
@@ -247,13 +274,13 @@ struct ChatView: View {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(Color.blipMint)
-                            .accessibilityLabel("End-to-end encrypted")
+                            .accessibilityLabel(ChatViewL10n.endToEndEncrypted)
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
 
                 HStack(spacing: BlipSpacing.xs) {
-                    Text(conversation.isOnline ? "Online" : "Last seen recently")
+                        Text(conversation.isOnline ? ChatViewL10n.online : ChatViewL10n.lastSeenRecently)
                         .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
                         .foregroundStyle(
                             conversation.isOnline
@@ -262,7 +289,7 @@ struct ChatView: View {
                         )
 
                     if isEncrypted {
-                        Text("\u{00B7} Encrypted")
+                        Text("\u{00B7} \(ChatViewL10n.encrypted)")
                             .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
                             .foregroundStyle(Color.blipMint.opacity(0.8))
                     }
@@ -352,8 +379,8 @@ struct ChatView: View {
             )
         }
         .accessibilityLabel(unseenMessageCount > 0
-            ? "\(unseenMessageCount) new messages. Jump to latest."
-            : "Jump to latest message")
+            ? ChatViewL10n.jumpToLatest(count: unseenMessageCount)
+            : ChatViewL10n.jumpToLatestSingle)
     }
 
     // MARK: - Message Bubble
@@ -425,12 +452,12 @@ struct ChatView: View {
         return vm.activeMessages.map { message in
             ChatMessage(
                 id: message.id,
-                senderName: message.sender?.resolvedDisplayName ?? "Unknown",
+                senderName: message.sender?.resolvedDisplayName ?? ChatViewL10n.unknown,
                 senderAvatarData: message.sender?.avatarThumbnail,
                 isFromMe: message.sender == nil,
                 showSenderName: conversation.ringStyle == .none,
                 text: message.isDeleted
-                    ? "Message deleted"
+                    ? ChatViewL10n.messageDeleted
                     : (String(data: message.rawPayload, encoding: .utf8) ?? ""),
                 contentType: message.type,
                 deliveryStatus: Self.mapDeliveryStatus(message.status),
@@ -518,14 +545,11 @@ struct ChatView: View {
     private func formattedDateHeader(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
-            return "Today"
+            return ChatViewL10n.today
         } else if calendar.isDateInYesterday(date) {
-            return "Yesterday"
+            return ChatViewL10n.yesterday
         } else {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.locale = .current
-            return formatter.string(from: date)
+            return date.formatted(date: .abbreviated, time: .omitted)
         }
     }
 }

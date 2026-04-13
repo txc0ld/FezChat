@@ -3,6 +3,35 @@ import SwiftData
 import PhotosUI
 import os.log
 
+private enum EditProfileL10n {
+    static let title = String(localized: "profile.edit.title", defaultValue: "Edit Profile")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let save = String(localized: "common.save", defaultValue: "Save")
+    static let choosePhoto = String(localized: "profile.edit.avatar.choose_photo", defaultValue: "Choose Photo")
+    static let takePhoto = String(localized: "profile.edit.avatar.take_photo", defaultValue: "Take Photo")
+    static let displayName = String(localized: "profile.edit.display_name.label", defaultValue: "Display Name")
+    static let displayNamePlaceholder = String(localized: "profile.edit.display_name.placeholder", defaultValue: "Your name")
+    static let displayNameAccessibility = String(localized: "profile.edit.display_name.accessibility_label", defaultValue: "Display name")
+    static let username = String(localized: "profile.edit.username.label", defaultValue: "Username")
+    static let usernamePlaceholder = String(localized: "profile.edit.username.placeholder", defaultValue: "username")
+    static let usernameAccessibility = String(localized: "profile.edit.username.accessibility_label", defaultValue: "Username")
+    static let bio = String(localized: "profile.edit.bio.label", defaultValue: "Bio")
+    static let email = String(localized: "profile.edit.email.label", defaultValue: "Email")
+    static let changeEmail = String(localized: "profile.edit.email.change", defaultValue: "Change Email")
+    static let changeEmailAccessibility = String(localized: "profile.edit.email.change_accessibility_label", defaultValue: "Change email address — unavailable")
+    static let verifiedEmail = String(localized: "profile.edit.email.verified_placeholder", defaultValue: "Verified email")
+    static let usernameCharacters = String(localized: "profile.edit.username.error.characters", defaultValue: "Letters, numbers, and underscores only")
+    static let usernameTooShort = String(localized: "profile.edit.username.error.too_short", defaultValue: "At least 3 characters")
+
+    static func bioAccessibility(_ count: Int, _ max: Int) -> String {
+        String(format: String(localized: "profile.edit.bio.accessibility_label", defaultValue: "Bio, %d of %d characters"), locale: Locale.current, count, max)
+    }
+
+    static func usernameMax(_ max: Int) -> String {
+        String(format: String(localized: "profile.edit.username.error.maximum", defaultValue: "Maximum %d characters"), locale: Locale.current, max)
+    }
+}
+
 // MARK: - EditProfileView
 
 /// Edit screen for display name, username, bio, avatar, and email.
@@ -59,15 +88,15 @@ struct EditProfileView: View {
                     .padding(BlipSpacing.md)
                 }
             }
-            .navigationTitle("Edit Profile")
+            .navigationTitle(EditProfileL10n.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isPresented = false }
+                    Button(EditProfileL10n.cancel) { isPresented = false }
                         .foregroundStyle(theme.colors.mutedText)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button(EditProfileL10n.save) { save() }
                         .fontWeight(.semibold)
                         .foregroundStyle(.blipAccentPurple)
                         .disabled(isSaving || !isValid)
@@ -131,14 +160,14 @@ struct EditProfileView: View {
 
                 HStack(spacing: BlipSpacing.md) {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label("Choose Photo", systemImage: "photo.on.rectangle")
+                        Label(EditProfileL10n.choosePhoto, systemImage: "photo.on.rectangle")
                             .font(secondaryFont)
                             .foregroundStyle(.blipAccentPurple)
                     }
                     .frame(minHeight: BlipSizing.minTapTarget)
 
                     Button(action: { showCameraPicker = true }) {
-                        Label("Take Photo", systemImage: "camera")
+                        Label(EditProfileL10n.takePhoto, systemImage: "camera")
                             .font(secondaryFont)
                             .foregroundStyle(.blipAccentPurple)
                     }
@@ -176,12 +205,12 @@ struct EditProfileView: View {
     private var nameSection: some View {
         GlassCard(thickness: .regular) {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
-                Text("Display Name")
+                Text(EditProfileL10n.displayName)
                     .font(theme.typography.secondary)
                     .fontWeight(.medium)
                     .foregroundStyle(theme.colors.text)
 
-                TextField("Your name", text: $displayName)
+                TextField(EditProfileL10n.displayNamePlaceholder, text: $displayName)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.text)
                     .focused($focusedField, equals: .name)
@@ -191,7 +220,7 @@ struct EditProfileView: View {
                     .padding(BlipSpacing.md)
                     .background(fieldBackground)
                     .overlay(fieldBorder)
-                    .accessibilityLabel("Display name")
+                    .accessibilityLabel(EditProfileL10n.displayNameAccessibility)
             }
         }
     }
@@ -201,7 +230,7 @@ struct EditProfileView: View {
     private var usernameSection: some View {
         GlassCard(thickness: .regular) {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
-                Text("Username")
+                Text(EditProfileL10n.username)
                     .font(theme.typography.secondary)
                     .fontWeight(.medium)
                     .foregroundStyle(theme.colors.text)
@@ -212,7 +241,7 @@ struct EditProfileView: View {
                         .foregroundStyle(theme.colors.mutedText)
                         .padding(.leading, BlipSpacing.md)
 
-                    TextField("username", text: $username)
+                    TextField(EditProfileL10n.usernamePlaceholder, text: $username)
                         .font(theme.typography.body)
                         .foregroundStyle(theme.colors.text)
                         .focused($focusedField, equals: .username)
@@ -228,7 +257,7 @@ struct EditProfileView: View {
                 }
                 .background(fieldBackground)
                 .overlay(fieldBorder)
-                .accessibilityLabel("Username")
+                .accessibilityLabel(EditProfileL10n.usernameAccessibility)
 
                 if let error = usernameError {
                     Text(error)
@@ -249,7 +278,7 @@ struct EditProfileView: View {
     private var bioSection: some View {
         GlassCard(thickness: .regular) {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
-                Text("Bio")
+                Text(EditProfileL10n.bio)
                     .font(theme.typography.secondary)
                     .fontWeight(.medium)
                     .foregroundStyle(theme.colors.text)
@@ -263,7 +292,7 @@ struct EditProfileView: View {
                     .scrollContentBackground(.hidden)
                     .background(fieldBackground)
                     .overlay(fieldBorder)
-                    .accessibilityLabel("Bio, \(bio.count) of \(maxBioLength) characters")
+                    .accessibilityLabel(EditProfileL10n.bioAccessibility(bio.count, maxBioLength))
                     .onChange(of: bio) { _, newValue in
                         if newValue.count > maxBioLength {
                             bio = String(newValue.prefix(maxBioLength))
@@ -284,7 +313,7 @@ struct EditProfileView: View {
         GlassCard(thickness: .regular) {
             HStack {
                 VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-                    Text("Email")
+                    Text(EditProfileL10n.email)
                         .font(theme.typography.secondary)
                         .fontWeight(.medium)
                         .foregroundStyle(theme.colors.text)
@@ -304,7 +333,7 @@ struct EditProfileView: View {
 
                 // TODO: BDEV-136 — implement email change flow with server verification
                 Button(action: { showEmailVerify = true }) {
-                    Text("Change Email")
+                    Text(EditProfileL10n.changeEmail)
                         .font(theme.typography.caption)
                         .foregroundStyle(.blipAccentPurple)
                         .padding(.horizontal, BlipSpacing.md)
@@ -317,7 +346,7 @@ struct EditProfileView: View {
                 .frame(minHeight: BlipSizing.minTapTarget)
                 .disabled(true)
                 .opacity(0.5)
-                .accessibilityLabel("Change email address — unavailable")
+                .accessibilityLabel(EditProfileL10n.changeEmailAccessibility)
             }
         }
     }
@@ -326,7 +355,7 @@ struct EditProfileView: View {
     private var maskedEmail: String {
         // Email hash is stored, not raw email — show masked placeholder.
         // In production, the raw email could be stored locally for display.
-        "Verified email"
+        EditProfileL10n.verifiedEmail
     }
 
     // MARK: - Shared Components
@@ -349,11 +378,11 @@ struct EditProfileView: View {
     private func validateUsername(_ value: String) {
         let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
         if value.unicodeScalars.contains(where: { !allowedCharacters.contains($0) }) {
-            usernameError = "Letters, numbers, and underscores only"
+            usernameError = EditProfileL10n.usernameCharacters
         } else if value.count < 3 {
-            usernameError = "At least 3 characters"
+            usernameError = EditProfileL10n.usernameTooShort
         } else if value.count > maxUsernameLength {
-            usernameError = "Maximum \(maxUsernameLength) characters"
+            usernameError = EditProfileL10n.usernameMax(maxUsernameLength)
             username = String(value.prefix(maxUsernameLength))
         } else {
             usernameError = nil

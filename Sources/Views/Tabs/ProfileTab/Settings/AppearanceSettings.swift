@@ -1,5 +1,11 @@
 import SwiftUI
 
+private enum AppearanceSettingsL10n {
+    static let title = String(localized: "profile.settings.appearance.title", defaultValue: "Appearance")
+    static let themeTitle = String(localized: "profile.settings.appearance.theme.title", defaultValue: "Theme")
+    static let themeAccessibility = String(localized: "profile.settings.appearance.theme.accessibility", defaultValue: "Theme")
+}
+
 // MARK: - AppearanceSettings
 
 /// Theme picker section for settings.
@@ -10,10 +16,10 @@ struct AppearanceSettings: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        SettingsComponents.settingsGroup(title: "Appearance", icon: "paintbrush.fill", theme: theme) {
+        SettingsComponents.settingsGroup(title: AppearanceSettingsL10n.title, icon: "paintbrush.fill", theme: theme) {
             VStack(spacing: BlipSpacing.md) {
-                SettingsComponents.settingsRow(title: "Theme", theme: theme) {
-                    Picker("Theme", selection: $appTheme) {
+                SettingsComponents.settingsRow(title: AppearanceSettingsL10n.themeTitle, theme: theme) {
+                    Picker(AppearanceSettingsL10n.themeTitle, selection: $appTheme) {
                         ForEach(AppTheme.allCases, id: \.self) { themeOption in
                             Label(themeOption.label, systemImage: themeOption.icon)
                                 .tag(themeOption)
@@ -21,7 +27,7 @@ struct AppearanceSettings: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 220)
-                    .accessibilityLabel("Theme")
+                    .accessibilityLabel(AppearanceSettingsL10n.themeAccessibility)
                 }
             }
         }

@@ -30,6 +30,18 @@ private enum EventsViewL10n {
     static let schedule = String(localized: "events.section.schedule", defaultValue: "Schedule")
     static let announcements = String(localized: "events.section.announcements", defaultValue: "Announcements")
     static let lostAndFound = String(localized: "events.section.lost_and_found", defaultValue: "Lost & Found")
+    static let previewPyramid = String(localized: "events.preview.stage.pyramid", defaultValue: "Pyramid")
+    static let previewOther = String(localized: "events.preview.stage.other", defaultValue: "Other")
+    static let previewWestHolts = String(localized: "events.preview.stage.west_holts", defaultValue: "West Holts")
+    static let previewBicep = String(localized: "events.preview.artist.bicep", defaultValue: "Bicep")
+    static let previewFloatingPoints = String(localized: "events.preview.artist.floating_points", defaultValue: "Floating Points")
+    static let previewWeatherWarning = String(localized: "events.preview.announcement.weather_warning", defaultValue: "WEATHER WARNING")
+    static let previewWeatherMessage = String(localized: "events.preview.announcement.weather_message", defaultValue: "Heavy rain expected from 8pm. Seek shelter.")
+    static let previewSafety = String(localized: "events.preview.announcement.safety", defaultValue: "Safety")
+    static let previewScheduleChange = String(localized: "events.preview.announcement.schedule_change", defaultValue: "Schedule Change")
+    static let previewScheduleMessage = String(localized: "events.preview.announcement.schedule_message", defaultValue: "Fred Again.. moved to 10pm on Pyramid.")
+    static let previewProgramme = String(localized: "events.preview.announcement.programme", defaultValue: "Programme")
+    static let previewPyramidStage = String(localized: "events.preview.stage.pyramid_stage", defaultValue: "Pyramid Stage")
 
     static func shareText(artistName: String, stageName: String, time: String, eventName: String) -> String {
         String(
@@ -621,25 +633,25 @@ private struct ShareSheet: UIViewControllerRepresentable {
 extension EventsView {
 
     static let sampleStages: [StageMapItem] = [
-        StageMapItem(id: UUID(), name: "Pyramid", coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), isLive: true, currentArtist: "Bicep"),
-        StageMapItem(id: UUID(), name: "Other", coordinate: CLLocationCoordinate2D(latitude: 51.0055, longitude: -2.5845), isLive: false, currentArtist: nil),
-        StageMapItem(id: UUID(), name: "West Holts", coordinate: CLLocationCoordinate2D(latitude: 51.0038, longitude: -2.5870), isLive: true, currentArtist: "Floating Points"),
+        StageMapItem(id: UUID(), name: EventsViewL10n.previewPyramid, coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), isLive: true, currentArtist: EventsViewL10n.previewBicep),
+        StageMapItem(id: UUID(), name: EventsViewL10n.previewOther, coordinate: CLLocationCoordinate2D(latitude: 51.0055, longitude: -2.5845), isLive: false, currentArtist: nil),
+        StageMapItem(id: UUID(), name: EventsViewL10n.previewWestHolts, coordinate: CLLocationCoordinate2D(latitude: 51.0038, longitude: -2.5870), isLive: true, currentArtist: EventsViewL10n.previewFloatingPoints),
     ]
 
     static let sampleAnnouncements: [AnnouncementItem] = [
-        AnnouncementItem(id: UUID(), title: "WEATHER WARNING", message: "Heavy rain expected from 8pm. Seek shelter.", severity: .emergency, timestamp: Date().addingTimeInterval(-300), source: "Safety", isPinned: true),
-        AnnouncementItem(id: UUID(), title: "Schedule Change", message: "Fred Again.. moved to 10pm on Pyramid.", severity: .warning, timestamp: Date().addingTimeInterval(-1800), source: "Programme", isPinned: false),
+        AnnouncementItem(id: UUID(), title: EventsViewL10n.previewWeatherWarning, message: EventsViewL10n.previewWeatherMessage, severity: .emergency, timestamp: Date().addingTimeInterval(-300), source: EventsViewL10n.previewSafety, isPinned: true),
+        AnnouncementItem(id: UUID(), title: EventsViewL10n.previewScheduleChange, message: EventsViewL10n.previewScheduleMessage, severity: .warning, timestamp: Date().addingTimeInterval(-1800), source: EventsViewL10n.previewProgramme, isPinned: false),
     ]
 
     static let sampleScheduleStages: [ScheduleStage] = {
         let now = Date()
         return [
-            ScheduleStage(id: UUID(), name: "Pyramid Stage", acts: [
-                ScheduleAct(id: UUID(), artistName: "Bicep", startTime: now.addingTimeInterval(-1800), endTime: now.addingTimeInterval(3600), isLive: true, isSaved: true, hasReminder: true),
+            ScheduleStage(id: UUID(), name: EventsViewL10n.previewPyramidStage, acts: [
+                ScheduleAct(id: UUID(), artistName: EventsViewL10n.previewBicep, startTime: now.addingTimeInterval(-1800), endTime: now.addingTimeInterval(3600), isLive: true, isSaved: true, hasReminder: true),
                 ScheduleAct(id: UUID(), artistName: "Fred Again..", startTime: now.addingTimeInterval(3600), endTime: now.addingTimeInterval(9000), isLive: false, isSaved: false, hasReminder: false),
             ]),
-            ScheduleStage(id: UUID(), name: "West Holts", acts: [
-                ScheduleAct(id: UUID(), artistName: "Floating Points", startTime: now.addingTimeInterval(7200), endTime: now.addingTimeInterval(12600), isLive: false, isSaved: false, hasReminder: false),
+            ScheduleStage(id: UUID(), name: EventsViewL10n.previewWestHolts, acts: [
+                ScheduleAct(id: UUID(), artistName: EventsViewL10n.previewFloatingPoints, startTime: now.addingTimeInterval(7200), endTime: now.addingTimeInterval(12600), isLive: false, isSaved: false, hasReminder: false),
             ]),
         ]
     }()

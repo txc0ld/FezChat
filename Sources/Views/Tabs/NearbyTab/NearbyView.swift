@@ -5,6 +5,67 @@ import MapKit
 import UIKit
 #endif
 
+private enum NearbyL10n {
+    static let title = String(localized: "nearby.title", defaultValue: "Nearby")
+    static let unknown = String(localized: "common.unknown", defaultValue: "Unknown")
+    static let you = String(localized: "common.you", defaultValue: "You")
+    static let peopleNearby = String(localized: "nearby.people_count.label", defaultValue: "people nearby")
+    static let scanning = String(localized: "nearby.transport.scanning", defaultValue: "Scanning...")
+    static let visible = String(localized: "nearby.visibility.visible", defaultValue: "Visible to Nearby")
+    static let hidden = String(localized: "nearby.visibility.hidden", defaultValue: "Hidden from Nearby")
+    static let on = String(localized: "common.on", defaultValue: "ON")
+    static let off = String(localized: "common.off", defaultValue: "OFF")
+    static let visibleAccessibility = String(localized: "nearby.visibility.visible_accessibility", defaultValue: "Visible to nearby people, tap to hide")
+    static let hiddenAccessibility = String(localized: "nearby.visibility.hidden_accessibility", defaultValue: "Hidden from nearby people, tap to show")
+    static let peopleNearbyTitle = String(localized: "nearby.people.title", defaultValue: "People Nearby")
+    static let friendsNearbyTitle = String(localized: "nearby.friends.title", defaultValue: "Friends Nearby")
+    static let scanningTitle = String(localized: "nearby.empty.scanning_title", defaultValue: "Scanning for nearby peers...")
+    static let scanningSubtitle = String(localized: "nearby.empty.scanning_subtitle", defaultValue: "Make sure Bluetooth is enabled and you're near other Blip users.")
+    static let bluetoothOffTitle = String(localized: "nearby.bluetooth_off.title", defaultValue: "Bluetooth is off")
+    static let bluetoothOffSubtitle = String(localized: "nearby.bluetooth_off.subtitle", defaultValue: "Turn on Bluetooth to discover people nearby and join the mesh network.")
+    static let openSettings = String(localized: "nearby.bluetooth_off.cta", defaultValue: "Open Settings")
+    static let noFriendsNearby = String(localized: "nearby.friends.empty.title", defaultValue: "No friends nearby")
+    static let noFriendsNearbySubtitle = String(localized: "nearby.friends.empty.subtitle", defaultValue: "Tap a peer above to send a friend request.")
+    static let friendFinder = String(localized: "nearby.friend_finder.title", defaultValue: "Friend Finder")
+    static let showMap = String(localized: "nearby.friend_finder.show_map", defaultValue: "Show Map")
+    static let hide = String(localized: "common.hide", defaultValue: "Hide")
+    static let hideFriendFinder = String(localized: "nearby.friend_finder.hide_accessibility", defaultValue: "Hide friend finder map")
+    static let showFriendFinder = String(localized: "nearby.friend_finder.show_accessibility", defaultValue: "Show friend finder map")
+    static let locationFixNeeded = String(localized: "nearby.friend_finder.location_fix_needed", defaultValue: "Friend Finder needs a real location fix and shared friend locations before the map can help.")
+    static let locationAccessTitle = String(localized: "nearby.friend_finder.location_access_title", defaultValue: "Location access is needed for Friend Finder")
+    static let locationAccessSubtitle = String(localized: "nearby.friend_finder.location_access_subtitle", defaultValue: "Enable location access to recenter on you, drop a beacon, and show shared friend locations.")
+    static let noSharedLocationsTitle = String(localized: "nearby.friend_finder.no_shared_locations_title", defaultValue: "No shared friend locations yet")
+    static let noSharedLocationsSubtitle = String(localized: "nearby.friend_finder.no_shared_locations_subtitle", defaultValue: "Nearby mesh peers can appear above without GPS sharing. The map fills in only when friends opt into location sharing.")
+    static let tapToExpand = String(localized: "nearby.friend_finder.tap_to_expand", defaultValue: "Tap to expand")
+    static let openFullMap = String(localized: "nearby.friend_finder.open_full_map", defaultValue: "Open full friend finder map")
+    static let bluetoothNotActive = String(localized: "nearby.empty.bluetooth_not_active", defaultValue: "Bluetooth discovery is not active yet.")
+    static let friendRequestPending = String(localized: "nearby.peer.friend_request_pending", defaultValue: "friend request pending")
+    static let openProfile = String(localized: "nearby.peer.open_profile", defaultValue: "open nearby profile")
+    static let previewSarahChen = String(localized: "nearby.preview.friend.sarah_chen", defaultValue: "Sarah Chen")
+    static let previewJakeMorrison = String(localized: "nearby.preview.friend.jake_morrison", defaultValue: "Jake Morrison")
+    static let previewPriyaPatel = String(localized: "nearby.preview.friend.priya_patel", defaultValue: "Priya Patel")
+    static let previewAlex = String(localized: "nearby.preview.peer.alex", defaultValue: "Alex")
+    static let previewMainField = String(localized: "nearby.preview.channel.main_field", defaultValue: "Main Field")
+    static let previewCampingAreaB = String(localized: "nearby.preview.channel.camping_area_b", defaultValue: "Camping Area B")
+    static let previewCarPark3 = String(localized: "nearby.preview.channel.car_park_3", defaultValue: "Car Park 3")
+    static let previewFoodTruckMessage = String(localized: "nearby.preview.channel.food_trucks_message", defaultValue: "Anyone know where the food trucks moved?")
+    static let previewShowersMessage = String(localized: "nearby.preview.channel.showers_message", defaultValue: "Showers open until midnight")
+    static let previewSarah = String(localized: "nearby.preview.pin.sarah", defaultValue: "Sarah")
+    static let previewJake = String(localized: "nearby.preview.pin.jake", defaultValue: "Jake")
+
+    static func headerAccessibility(peerCount: Int, transportState: String) -> String {
+        String(format: String(localized: "nearby.header.accessibility", defaultValue: "%1$d people nearby. Transport: %2$@."), locale: Locale.current, peerCount, transportState)
+    }
+
+    static func peerAccessibility(name: String, pending: Bool) -> String {
+        let template = pending
+            ? String(localized: "nearby.peer.accessibility.pending", defaultValue: "%1$@, %2$@")
+            : String(localized: "nearby.peer.accessibility.profile", defaultValue: "%1$@, %2$@")
+        let suffix = pending ? friendRequestPending : openProfile
+        return String(format: template, locale: Locale.current, name, suffix)
+    }
+}
+
 // MARK: - NearbyView
 
 /// Main view for the Nearby tab.
@@ -66,7 +127,7 @@ struct NearbyView: View {
                     .padding(.top, BlipSpacing.md)
                 }
             }
-            .navigationTitle("Nearby")
+            .navigationTitle(NearbyL10n.title)
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.hidden, for: .navigationBar)
         }
@@ -77,7 +138,7 @@ struct NearbyView: View {
                     get: { selectedPeer != nil },
                     set: { if !$0 { selectedPeer = nil } }
                 ),
-                displayName: peer.displayName ?? peer.username ?? "Unknown",
+                displayName: peer.displayName ?? peer.username ?? NearbyL10n.unknown,
                 username: peer.username ?? "",
                 bio: "",
                 isFriend: peer.friendStatus == .accepted,
@@ -196,7 +257,7 @@ struct NearbyView: View {
                 id: beacon.id,
                 label: beacon.label,
                 coordinate: beacon.coordinate,
-                createdBy: "You",
+                createdBy: NearbyL10n.you,
                 expiresAt: beacon.expiresAt
             )
         ]
@@ -219,7 +280,7 @@ struct NearbyView: View {
                             .foregroundStyle(.blipAccentPurple)
                             .contentTransition(.numericText())
 
-                        Text("people nearby")
+                        Text(NearbyL10n.peopleNearby)
                             .font(theme.typography.body)
                             .foregroundStyle(theme.colors.text)
                     }
@@ -233,7 +294,7 @@ struct NearbyView: View {
                             .foregroundStyle(.blipAccentPurple)
                             .symbolEffect(.pulse, options: .repeating)
 
-                        Text(resolvedMeshViewModel?.transportState ?? "Scanning...")
+                        Text(resolvedMeshViewModel?.transportState ?? NearbyL10n.scanning)
                             .font(theme.typography.caption)
                             .foregroundStyle(theme.colors.mutedText)
                     }
@@ -249,13 +310,13 @@ struct NearbyView: View {
                     Image(systemName: isVisible ? "eye.fill" : "eye.slash.fill")
                         .font(.system(size: 14, weight: .medium))
 
-                    Text(isVisible ? "Visible to Nearby" : "Hidden from Nearby")
+                    Text(isVisible ? NearbyL10n.visible : NearbyL10n.hidden)
                         .font(theme.typography.secondary)
                         .fontWeight(.medium)
 
                     Spacer()
 
-                    Text(isVisible ? "ON" : "OFF")
+                    Text(isVisible ? NearbyL10n.on : NearbyL10n.off)
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(isVisible ? .white : theme.colors.mutedText)
                         .padding(.horizontal, BlipSpacing.sm)
@@ -273,7 +334,7 @@ struct NearbyView: View {
             .glassCard(thickness: .ultraThin, cornerRadius: BlipCornerRadius.lg, borderOpacity: 0.1)
             .padding(.horizontal, BlipSpacing.md)
             .frame(minHeight: BlipSizing.minTapTarget)
-            .accessibilityLabel(isVisible ? "Visible to nearby people, tap to hide" : "Hidden from nearby people, tap to show")
+            .accessibilityLabel(isVisible ? NearbyL10n.visibleAccessibility : NearbyL10n.hiddenAccessibility)
         }
     }
 
@@ -288,7 +349,7 @@ struct NearbyView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.blipAccentPurple)
 
-                    Text("People Nearby")
+                    Text(NearbyL10n.peopleNearbyTitle)
                         .font(theme.typography.headline)
                         .foregroundStyle(theme.colors.text)
 
@@ -306,7 +367,7 @@ struct NearbyView: View {
                 ForEach(Array(nonFriendPeers.enumerated()), id: \.element.id) { index, peer in
                     let isPending = peer.friendStatus == .pending || friendRequestSent.contains(peer.id)
                     NearbyPeerCard(
-                        displayName: peer.displayName ?? peer.username ?? "Unknown",
+                        displayName: peer.displayName ?? peer.username ?? NearbyL10n.unknown,
                         username: peer.username,
                         avatarData: nil,
                         hopCount: peer.isDirectPeer ? 0 : 1,
@@ -334,7 +395,7 @@ struct NearbyView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.blipAccentPurple)
 
-                Text("Friends Nearby")
+                Text(NearbyL10n.friendsNearbyTitle)
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
@@ -360,11 +421,11 @@ struct NearbyView: View {
                                 .tint(.blipAccentPurple)
                                 .scaleEffect(1.2)
 
-                            Text("Scanning for nearby peers...")
+                            Text(NearbyL10n.scanningTitle)
                                 .font(theme.typography.secondary)
                                 .foregroundStyle(theme.colors.text)
 
-                            Text("Make sure Bluetooth is enabled and you're near other Blip users.")
+                            Text(NearbyL10n.scanningSubtitle)
                                 .font(theme.typography.caption)
                                 .foregroundStyle(theme.colors.mutedText)
                                 .multilineTextAlignment(.center)
@@ -377,9 +438,9 @@ struct NearbyView: View {
                 } else {
                     EmptyStateView(
                         icon: "antenna.radiowaves.left.and.right.slash",
-                        title: "Bluetooth is off",
-                        subtitle: "Turn on Bluetooth to discover people nearby and join the mesh network.",
-                        ctaTitle: "Open Settings"
+                        title: NearbyL10n.bluetoothOffTitle,
+                        subtitle: NearbyL10n.bluetoothOffSubtitle,
+                        ctaTitle: NearbyL10n.openSettings
                     ) {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(url)
@@ -395,12 +456,12 @@ struct NearbyView: View {
                             .font(.system(size: 24))
                             .foregroundStyle(theme.colors.mutedText)
 
-                        Text("No friends nearby")
+                        Text(NearbyL10n.noFriendsNearby)
                             .font(theme.typography.body)
                             .fontWeight(.medium)
                             .foregroundStyle(theme.colors.text)
 
-                        Text("Tap a peer above to send a friend request.")
+                        Text(NearbyL10n.noFriendsNearbySubtitle)
                             .font(theme.typography.caption)
                             .foregroundStyle(theme.colors.mutedText)
                     }
@@ -512,14 +573,14 @@ struct NearbyView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.blipAccentPurple)
 
-                Text("Friend Finder")
+                Text(NearbyL10n.friendFinder)
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
                 Spacer()
 
                 Button(action: { withAnimation { showMap.toggle() } }) {
-                    Text(showMap ? "Hide" : "Show Map")
+                    Text(showMap ? NearbyL10n.hide : NearbyL10n.showMap)
                         .font(theme.typography.caption)
                         .foregroundStyle(.blipAccentPurple)
                         .padding(.horizontal, BlipSpacing.sm)
@@ -530,7 +591,7 @@ struct NearbyView: View {
                         )
                 }
                 .frame(minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel(showMap ? "Hide friend finder map" : "Show friend finder map")
+                .accessibilityLabel(showMap ? NearbyL10n.hideFriendFinder : NearbyL10n.showFriendFinder)
             }
             .padding(.horizontal, BlipSpacing.md)
 
@@ -540,19 +601,19 @@ struct NearbyView: View {
                         statusCard(
                             icon: "location.slash.fill",
                             title: locationError,
-                            subtitle: "Friend Finder needs a real location fix and shared friend locations before the map can help."
+                            subtitle: NearbyL10n.locationFixNeeded
                         )
                     } else if userLocation == nil {
                         statusCard(
                             icon: "location.circle",
-                            title: "Location access is needed for Friend Finder",
-                            subtitle: "Enable location access to recenter on you, drop a beacon, and show shared friend locations."
+                            title: NearbyL10n.locationAccessTitle,
+                            subtitle: NearbyL10n.locationAccessSubtitle
                         )
                     } else if friendPins.isEmpty {
                         statusCard(
                             icon: "person.2.slash",
-                            title: "No shared friend locations yet",
-                            subtitle: "Nearby mesh peers can appear above without GPS sharing. The map fills in only when friends opt into location sharing."
+                            title: NearbyL10n.noSharedLocationsTitle,
+                            subtitle: NearbyL10n.noSharedLocationsSubtitle
                         )
                     }
 
@@ -572,7 +633,7 @@ struct NearbyView: View {
                         .frame(height: 250)
                         .clipShape(RoundedRectangle(cornerRadius: BlipCornerRadius.xl))
                         .overlay(alignment: .bottom) {
-                            Text("Tap to expand")
+                            Text(NearbyL10n.tapToExpand)
                                 .font(theme.typography.caption)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, BlipSpacing.md)
@@ -583,7 +644,7 @@ struct NearbyView: View {
                         .allowsHitTesting(false)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open full friend finder map")
+                    .accessibilityLabel(NearbyL10n.openFullMap)
                 }
                 .padding(.horizontal, BlipSpacing.md)
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -624,7 +685,10 @@ struct NearbyView: View {
     }
 
     private var headerAccessibilityLabel: String {
-        "\(peerCount) people nearby. Transport: \(resolvedMeshViewModel?.transportState ?? "Scanning")."
+        NearbyL10n.headerAccessibility(
+            peerCount: peerCount,
+            transportState: resolvedMeshViewModel?.transportState ?? NearbyL10n.scanning
+        )
     }
 
     private var emptyNearbyStateText: String {
@@ -633,19 +697,18 @@ struct NearbyView: View {
         }
 
         if resolvedMeshViewModel?.isBLEActive != true {
-            return "Bluetooth discovery is not active yet."
+            return NearbyL10n.bluetoothNotActive
         }
 
-        return "Scanning for nearby peers..."
+        return NearbyL10n.scanningTitle
     }
 
     private func peerAccessibilityLabel(_ peer: MeshViewModel.NearbyPeer) -> String {
-        let name = peer.displayName ?? peer.username ?? "Unknown"
-        if peer.friendStatus == .pending || friendRequestSent.contains(peer.id) {
-            return "\(name), friend request pending"
-        }
-
-        return "\(name), open nearby profile"
+        let name = peer.displayName ?? peer.username ?? NearbyL10n.unknown
+        return NearbyL10n.peerAccessibility(
+            name: name,
+            pending: peer.friendStatus == .pending || friendRequestSent.contains(peer.id)
+        )
     }
 }
 
@@ -667,25 +730,25 @@ struct NearbyPeerCard_Data: Identifiable {
 extension NearbyView {
 
     static let sampleFriends: [NearbyPeerCard_Data] = [
-        NearbyPeerCard_Data(id: UUID(), displayName: "Sarah Chen", username: "sarahc", hopCount: 0, rssi: -45, isOnline: true, hasSignalData: true),
-        NearbyPeerCard_Data(id: UUID(), displayName: "Jake Morrison", username: "jakem", hopCount: 1, rssi: -62, isOnline: true, hasSignalData: true),
-        NearbyPeerCard_Data(id: UUID(), displayName: "Priya Patel", username: "priyap", hopCount: 3, rssi: -78, isOnline: true, hasSignalData: true),
+        NearbyPeerCard_Data(id: UUID(), displayName: NearbyL10n.previewSarahChen, username: "sarahc", hopCount: 0, rssi: -45, isOnline: true, hasSignalData: true),
+        NearbyPeerCard_Data(id: UUID(), displayName: NearbyL10n.previewJakeMorrison, username: "jakem", hopCount: 1, rssi: -62, isOnline: true, hasSignalData: true),
+        NearbyPeerCard_Data(id: UUID(), displayName: NearbyL10n.previewPriyaPatel, username: "priyap", hopCount: 3, rssi: -78, isOnline: true, hasSignalData: true),
     ]
 
     static let samplePeers: [NearbyPeerCard_Data] = [
-        NearbyPeerCard_Data(id: UUID(), displayName: "Alex", username: nil, hopCount: 2, rssi: -70, isOnline: true, hasSignalData: true),
+        NearbyPeerCard_Data(id: UUID(), displayName: NearbyL10n.previewAlex, username: nil, hopCount: 2, rssi: -70, isOnline: true, hasSignalData: true),
         NearbyPeerCard_Data(id: UUID(), displayName: "MeshUser_7f3a", username: nil, hopCount: 4, rssi: -85, isOnline: false, hasSignalData: true),
     ]
 
     static let sampleChannels: [LocationChannelItem] = [
-        LocationChannelItem(id: UUID(), name: "Main Field", iconName: "mappin.and.ellipse", memberCount: 42, lastMessagePreview: "Anyone know where the food trucks moved?", lastActivityAt: Date().addingTimeInterval(-120), isAutoJoined: true, geohash: "gcpu2e"),
-        LocationChannelItem(id: UUID(), name: "Camping Area B", iconName: "tent.fill", memberCount: 18, lastMessagePreview: "Showers open until midnight", lastActivityAt: Date().addingTimeInterval(-300), isAutoJoined: false, geohash: "gcpu2f"),
-        LocationChannelItem(id: UUID(), name: "Car Park 3", iconName: "car.fill", memberCount: 7, lastMessagePreview: nil, lastActivityAt: nil, isAutoJoined: false, geohash: "gcpu2g"),
+        LocationChannelItem(id: UUID(), name: NearbyL10n.previewMainField, iconName: "mappin.and.ellipse", memberCount: 42, lastMessagePreview: NearbyL10n.previewFoodTruckMessage, lastActivityAt: Date().addingTimeInterval(-120), isAutoJoined: true, geohash: "gcpu2e"),
+        LocationChannelItem(id: UUID(), name: NearbyL10n.previewCampingAreaB, iconName: "tent.fill", memberCount: 18, lastMessagePreview: NearbyL10n.previewShowersMessage, lastActivityAt: Date().addingTimeInterval(-300), isAutoJoined: false, geohash: "gcpu2f"),
+        LocationChannelItem(id: UUID(), name: NearbyL10n.previewCarPark3, iconName: "car.fill", memberCount: 7, lastMessagePreview: nil, lastActivityAt: nil, isAutoJoined: false, geohash: "gcpu2g"),
     ]
 
     static let sampleFriendPins: [FriendMapPin] = [
-        FriendMapPin(id: UUID(), displayName: "Sarah", coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), precision: .precise, color: .blue, lastUpdated: Date()),
-        FriendMapPin(id: UUID(), displayName: "Jake", coordinate: CLLocationCoordinate2D(latitude: 51.0052, longitude: -2.5850), precision: .fuzzy, color: .green, lastUpdated: Date().addingTimeInterval(-60)),
+        FriendMapPin(id: UUID(), displayName: NearbyL10n.previewSarah, coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), precision: .precise, color: .blue, lastUpdated: Date()),
+        FriendMapPin(id: UUID(), displayName: NearbyL10n.previewJake, coordinate: CLLocationCoordinate2D(latitude: 51.0052, longitude: -2.5850), precision: .fuzzy, color: .green, lastUpdated: Date().addingTimeInterval(-60)),
     ]
 }
 

@@ -1,5 +1,20 @@
 import SwiftUI
 
+private enum AccountSettingsL10n {
+    static let title = String(localized: "settings.account.title", defaultValue: "Account")
+    static let signOut = String(localized: "settings.account.sign_out.title", defaultValue: "Sign Out")
+    static let signOutSubtitle = String(localized: "settings.account.sign_out.subtitle", defaultValue: "Clear local session and return to setup")
+    static let signOutAccessibility = String(localized: "settings.account.sign_out.accessibility_label", defaultValue: "Sign out")
+    static let exportData = String(localized: "settings.account.export.title", defaultValue: "Export My Data")
+    static let exportPreparing = String(localized: "settings.account.export.preparing", defaultValue: "Preparing your JSON export...")
+    static let exportSubtitle = String(localized: "settings.account.export.subtitle", defaultValue: "Create a JSON archive of profile, messages, friends, and saved events")
+    static let exportAccessibility = String(localized: "settings.account.export.accessibility_label", defaultValue: "Export my data")
+    static let deleteAccount = String(localized: "settings.account.delete.title", defaultValue: "Delete Account & Data")
+    static let deleteProgress = String(localized: "settings.account.delete.progress", defaultValue: "Deleting your account...")
+    static let deleteSubtitle = String(localized: "settings.account.delete.subtitle", defaultValue: "Permanently remove your Blip account from the server and this device")
+    static let deleteAccessibility = String(localized: "settings.account.delete.accessibility_label", defaultValue: "Delete account and data")
+}
+
 // MARK: - AccountSettings
 
 /// Sign out, export data, and delete account section.
@@ -14,44 +29,44 @@ struct AccountSettings: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        SettingsComponents.settingsGroup(title: "Account", icon: "person.crop.circle", theme: theme) {
+        SettingsComponents.settingsGroup(title: AccountSettingsL10n.title, icon: "person.crop.circle", theme: theme) {
             VStack(alignment: .leading, spacing: BlipSpacing.md) {
                 actionRow(
-                    title: "Sign Out",
-                    subtitle: "Clear local session and return to setup",
+                    title: AccountSettingsL10n.signOut,
+                    subtitle: AccountSettingsL10n.signOutSubtitle,
                     icon: "rectangle.portrait.and.arrow.right"
                 ) {
                     showSignOutConfirm = true
                 }
-                .accessibilityLabel("Sign out")
+                .accessibilityLabel(AccountSettingsL10n.signOutAccessibility)
 
                 Divider()
                     .opacity(0.15)
 
                 actionRow(
-                    title: "Export My Data",
+                    title: AccountSettingsL10n.exportData,
                     subtitle: isExporting
-                        ? "Preparing your JSON export..."
-                        : "Create a JSON archive of profile, messages, friends, and saved events",
+                        ? AccountSettingsL10n.exportPreparing
+                        : AccountSettingsL10n.exportSubtitle,
                     icon: "square.and.arrow.up",
                     showsProgress: isExporting,
                     isDisabled: isExporting || isDeleting,
                     action: onExportData
                 )
-                .accessibilityLabel("Export my data")
+                .accessibilityLabel(AccountSettingsL10n.exportAccessibility)
 
                 actionRow(
-                    title: "Delete Account & Data",
+                    title: AccountSettingsL10n.deleteAccount,
                     subtitle: isDeleting
-                        ? "Deleting your account..."
-                        : "Permanently remove your Blip account from the server and this device",
+                        ? AccountSettingsL10n.deleteProgress
+                        : AccountSettingsL10n.deleteSubtitle,
                     icon: "trash",
                     isDestructive: true,
                     showsProgress: isDeleting,
                     isDisabled: isExporting || isDeleting,
                     action: onDeleteAccount
                 )
-                .accessibilityLabel("Delete account and data")
+                .accessibilityLabel(AccountSettingsL10n.deleteAccessibility)
             }
         }
     }

@@ -1,5 +1,31 @@
 import SwiftUI
 
+private enum SetTimeCellL10n {
+    static let live = String(localized: "events.schedule.live_badge", defaultValue: "LIVE")
+    static let currentlyLive = String(localized: "events.schedule.live_accessibility", defaultValue: "Currently live")
+    static let removeFromSaved = String(localized: "events.schedule.save.remove", defaultValue: "Remove from saved")
+    static let saveAct = String(localized: "events.schedule.save.add", defaultValue: "Save act")
+    static let removeReminder = String(localized: "events.schedule.reminder.remove", defaultValue: "Remove reminder")
+    static let setReminder = String(localized: "events.schedule.reminder.add", defaultValue: "Set reminder")
+    static let currentlyLiveState = String(localized: "events.schedule.accessibility.currently_live", defaultValue: "currently live")
+    static let saved = String(localized: "events.schedule.accessibility.saved", defaultValue: "saved")
+    static let reminderSet = String(localized: "events.schedule.accessibility.reminder_set", defaultValue: "reminder set")
+    static let previewPyramidStage = String(localized: "events.schedule.preview.pyramid_stage", defaultValue: "Pyramid Stage")
+    static let previewBicep = String(localized: "events.schedule.preview.bicep", defaultValue: "Bicep")
+    static let previewWestHolts = String(localized: "events.schedule.preview.west_holts", defaultValue: "West Holts")
+    static let previewFloatingPoints = String(localized: "events.schedule.preview.floating_points", defaultValue: "Floating Points")
+    static let previewHeadliner = String(localized: "events.schedule.preview.headliner", defaultValue: "Headliner TBA")
+    static let previewOtherStage = String(localized: "events.schedule.preview.other_stage", defaultValue: "Other Stage")
+
+    static func shareGoing(artistName: String) -> String {
+        String(
+            format: String(localized: "events.schedule.share_going.accessibility", defaultValue: "Share I'm going to %@"),
+            locale: Locale.current,
+            artistName
+        )
+    }
+}
+
 // MARK: - SetTimeCell
 
 /// A single schedule entry showing artist name, time, stage, save star,
@@ -22,12 +48,6 @@ struct SetTimeCell: View {
 
     @Environment(\.theme) private var theme
     @Environment(\.colorScheme) private var colorScheme
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
 
     var body: some View {
         HStack(spacing: BlipSpacing.md) {
@@ -69,13 +89,13 @@ struct SetTimeCell: View {
 
     private var timeColumn: some View {
         VStack(spacing: BlipSpacing.xs) {
-            Text(Self.timeFormatter.string(from: startTime))
+            Text(startTime.formatted(date: .omitted, time: .shortened))
                 .font(theme.typography.body)
                 .fontWeight(.semibold)
                 .foregroundStyle(isLive ? .blipAccentPurple : theme.colors.text)
                 .monospacedDigit()
 
-            Text(Self.timeFormatter.string(from: endTime))
+            Text(endTime.formatted(date: .omitted, time: .shortened))
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.colors.mutedText)
                 .monospacedDigit()
@@ -95,7 +115,7 @@ struct SetTimeCell: View {
                     .lineLimit(1)
 
                 if isLive {
-                    Text("LIVE")
+                    Text(SetTimeCellL10n.live)
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
@@ -104,7 +124,7 @@ struct SetTimeCell: View {
                             Capsule()
                                 .fill(.blipAccentPurple)
                         )
-                        .accessibilityLabel("Currently live")
+                        .accessibilityLabel(SetTimeCellL10n.currentlyLive)
                 }
             }
 
@@ -137,7 +157,7 @@ struct SetTimeCell: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isSaved ? "Remove from saved" : "Save act")
+            .accessibilityLabel(isSaved ? SetTimeCellL10n.removeFromSaved : SetTimeCellL10n.saveAct)
 
             // Reminder toggle
             Button(action: { onToggleReminder?() }) {
@@ -148,7 +168,7 @@ struct SetTimeCell: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(hasReminder ? "Remove reminder" : "Set reminder")
+            .accessibilityLabel(hasReminder ? SetTimeCellL10n.removeReminder : SetTimeCellL10n.setReminder)
 
             // "I'm going" share
             Button(action: { onShareGoing?() }) {
@@ -159,7 +179,7 @@ struct SetTimeCell: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Share I'm going to \(artistName)")
+            .accessibilityLabel(SetTimeCellL10n.shareGoing(artistName: artistName))
         }
     }
 
@@ -181,10 +201,10 @@ struct SetTimeCell: View {
 
     private var accessibilityDescription: String {
         var desc = "\(artistName) at \(stageName)"
-        desc += ", \(Self.timeFormatter.string(from: startTime)) to \(Self.timeFormatter.string(from: endTime))"
-        if isLive { desc += ", currently live" }
-        if isSaved { desc += ", saved" }
-        if hasReminder { desc += ", reminder set" }
+        desc += ", \(startTime.formatted(date: .omitted, time: .shortened)) to \(endTime.formatted(date: .omitted, time: .shortened))"
+        if isLive { desc += ", \(SetTimeCellL10n.currentlyLiveState)" }
+        if isSaved { desc += ", \(SetTimeCellL10n.saved)" }
+        if hasReminder { desc += ", \(SetTimeCellL10n.reminderSet)" }
         return desc
     }
 }
@@ -198,8 +218,8 @@ struct SetTimeCell: View {
         ScrollView {
             VStack(spacing: 0) {
                 SetTimeCell(
-                    artistName: "Bicep",
-                    stageName: "Pyramid Stage",
+                    artistName: SetTimeCellL10n.previewBicep,
+                    stageName: SetTimeCellL10n.previewPyramidStage,
                     startTime: now.addingTimeInterval(-1800),
                     endTime: now.addingTimeInterval(3600),
                     isLive: true,
@@ -208,8 +228,8 @@ struct SetTimeCell: View {
                 )
 
                 SetTimeCell(
-                    artistName: "Floating Points",
-                    stageName: "West Holts",
+                    artistName: SetTimeCellL10n.previewFloatingPoints,
+                    stageName: SetTimeCellL10n.previewWestHolts,
                     startTime: now.addingTimeInterval(3600),
                     endTime: now.addingTimeInterval(9000),
                     isLive: false,
@@ -218,8 +238,8 @@ struct SetTimeCell: View {
                 )
 
                 SetTimeCell(
-                    artistName: "Headliner TBA",
-                    stageName: "Other Stage",
+                    artistName: SetTimeCellL10n.previewHeadliner,
+                    stageName: SetTimeCellL10n.previewOtherStage,
                     startTime: now.addingTimeInterval(14400),
                     endTime: now.addingTimeInterval(19800),
                     isLive: false,

@@ -3,6 +3,34 @@ import SwiftUI
 import UIKit
 #endif
 
+private enum SettingsL10n {
+    static let title = String(localized: "settings.title", defaultValue: "Settings")
+    static let signOutTitle = String(localized: "settings.sign_out.title", defaultValue: "Sign Out")
+    static let signOutButton = String(localized: "settings.sign_out.button", defaultValue: "Sign Out")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let signOutMessage = String(localized: "settings.sign_out.message", defaultValue: "This clears the local identity on this device, wipes local data, and returns you to setup. Remote account restore is not available yet.")
+    static let deleteAccountTitle = String(localized: "settings.delete_account.title", defaultValue: "Delete your account?")
+    static let deleteButton = String(localized: "common.delete", defaultValue: "Delete")
+    static let deleteAccountMessage = String(localized: "settings.delete_account.message", defaultValue: "This will permanently remove your account from Blip servers and wipe this device after the server deletion succeeds.")
+    static let deleteConfirmTitle = String(localized: "settings.delete_account.confirm_title", defaultValue: "Type DELETE to confirm")
+    static let deleteConfirmPlaceholder = String(localized: "settings.delete_account.confirm_placeholder", defaultValue: "DELETE")
+    static let deleteAccountButton = String(localized: "settings.delete_account.confirm_button", defaultValue: "Delete Account")
+    static let deleteConfirmMessage = String(localized: "settings.delete_account.confirm_message", defaultValue: "Enter DELETE to confirm permanent account deletion.")
+    static let actionFailedTitle = String(localized: "settings.account_action_failed.title", defaultValue: "Account Action Failed")
+    static let ok = String(localized: "common.ok", defaultValue: "OK")
+    static let unknownAccountError = String(localized: "settings.account_action_failed.unknown", defaultValue: "An unknown account error occurred.")
+    static let failedLocalClear = String(localized: "settings.sign_out.failed_local_clear", defaultValue: "Failed to clear local account data.")
+    static let profileUnavailable = String(localized: "settings.account_action_failed.profile_unavailable", defaultValue: "Profile data is not available yet.")
+    static let deleteServerFailedFormat = String(localized: "settings.delete_account.server_failed_format", defaultValue: "Server deletion failed. Try again later. %@")
+    static let localResetUnavailable = String(localized: "settings.delete_account.local_reset_unavailable", defaultValue: "Account was deleted on the server, but this build cannot reset local state automatically.")
+    static let localResetFailed = String(localized: "settings.delete_account.local_reset_failed", defaultValue: "Account was deleted on the server, but local data cleanup failed.")
+    static let exportSaved = String(localized: "settings.account_export.saved", defaultValue: "Account export saved")
+
+    static func deleteServerFailed(_ error: String) -> String {
+        String(format: deleteServerFailedFormat, locale: Locale.current, error)
+    }
+}
+
 // MARK: - SettingsView
 
 /// App settings coordinator. All `@AppStorage` lives here and is passed
@@ -83,57 +111,57 @@ struct SettingsView: View {
                 .padding(BlipSpacing.md)
             }
         }
-        .navigationTitle("Settings")
+        .navigationTitle(SettingsL10n.title)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await profileViewModel?.loadProfile()
             hydrateFromPreferences()
         }
-        .alert("Sign Out", isPresented: $showSignOutConfirm) {
-            Button("Sign Out", role: .destructive) {
+        .alert(SettingsL10n.signOutTitle, isPresented: $showSignOutConfirm) {
+            Button(SettingsL10n.signOutButton, role: .destructive) {
                 if let onSignOut, onSignOut() {
                     dismiss()
                 } else if onSignOut == nil {
                     UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
                     dismiss()
                 } else {
-                    actionErrorMessage = "Failed to clear local account data."
+                    actionErrorMessage = SettingsL10n.failedLocalClear
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(SettingsL10n.cancel, role: .cancel) {}
         } message: {
-            Text("This clears the local identity on this device, wipes local data, and returns you to setup. Remote account restore is not available yet.")
+            Text(SettingsL10n.signOutMessage)
         }
-        .alert("Delete your account?", isPresented: $showDeleteAccountConfirm) {
-            Button("Delete", role: .destructive) {
+        .alert(SettingsL10n.deleteAccountTitle, isPresented: $showDeleteAccountConfirm) {
+            Button(SettingsL10n.deleteButton, role: .destructive) {
                 deleteConfirmationText = ""
                 showDeleteAccountTextPrompt = true
             }
-            Button("Cancel", role: .cancel) {}
+            Button(SettingsL10n.cancel, role: .cancel) {}
         } message: {
-            Text("This will permanently remove your account from Blip servers and wipe this device after the server deletion succeeds.")
+            Text(SettingsL10n.deleteAccountMessage)
         }
-        .alert("Type DELETE to confirm", isPresented: $showDeleteAccountTextPrompt) {
-            TextField("DELETE", text: $deleteConfirmationText)
+        .alert(SettingsL10n.deleteConfirmTitle, isPresented: $showDeleteAccountTextPrompt) {
+            TextField(SettingsL10n.deleteConfirmPlaceholder, text: $deleteConfirmationText)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
-            Button("Delete Account", role: .destructive) {
+            Button(SettingsL10n.deleteAccountButton, role: .destructive) {
                 Task { await deleteAccount() }
             }
             .disabled(deleteConfirmationText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() != "DELETE")
-            Button("Cancel", role: .cancel) {
+            Button(SettingsL10n.cancel, role: .cancel) {
                 deleteConfirmationText = ""
             }
         } message: {
-            Text("Enter DELETE to confirm permanent account deletion.")
+            Text(SettingsL10n.deleteConfirmMessage)
         }
-        .alert("Account Action Failed", isPresented: Binding(
+        .alert(SettingsL10n.actionFailedTitle, isPresented: Binding(
             get: { actionErrorMessage != nil },
             set: { if !$0 { actionErrorMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(SettingsL10n.ok, role: .cancel) {}
         } message: {
-            Text(actionErrorMessage ?? "An unknown account error occurred.")
+            Text(actionErrorMessage ?? SettingsL10n.unknownAccountError)
         }
         .sheet(isPresented: Binding(
             get: { exportFileURL != nil },
@@ -170,7 +198,7 @@ struct SettingsView: View {
             defer { isExportingAccountData = false }
 
             guard let profileViewModel else {
-                actionErrorMessage = "Profile data is not available yet."
+                actionErrorMessage = SettingsL10n.profileUnavailable
                 return
             }
 
@@ -193,26 +221,26 @@ struct SettingsView: View {
         }
 
         guard let profileViewModel else {
-            actionErrorMessage = "Profile data is not available yet."
+            actionErrorMessage = SettingsL10n.profileUnavailable
             return
         }
 
         do {
             try await profileViewModel.deleteAccountRemotely()
         } catch {
-            actionErrorMessage = "Server deletion failed. Try again later. \(error.localizedDescription)"
+            actionErrorMessage = SettingsL10n.deleteServerFailed(error.localizedDescription)
             return
         }
 
         guard let onSignOut else {
-            actionErrorMessage = "Account was deleted on the server, but this build cannot reset local state automatically."
+            actionErrorMessage = SettingsL10n.localResetUnavailable
             return
         }
 
         if onSignOut() {
             dismiss()
         } else {
-            actionErrorMessage = "Account was deleted on the server, but local data cleanup failed."
+            actionErrorMessage = SettingsL10n.localResetFailed
         }
     }
 
@@ -323,7 +351,7 @@ private struct AccountExportShareSheet: View {
 
     var body: some View {
         VStack(spacing: BlipSpacing.md) {
-            Text("Account export saved")
+            Text(SettingsL10n.exportSaved)
                 .font(.headline)
             Text(fileURL.lastPathComponent)
                 .font(.caption)

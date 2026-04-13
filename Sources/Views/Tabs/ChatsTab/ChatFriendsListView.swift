@@ -1,6 +1,22 @@
 import SwiftUI
 import SwiftData
 
+private enum ChatFriendsListL10n {
+    static let unknown = String(localized: "common.unknown", defaultValue: "Unknown")
+    static let friend = String(localized: "common.friend", defaultValue: "friend")
+    static let noFriends = String(localized: "chat.friends.empty.title", defaultValue: "No friends yet")
+    static let noFriendsSubtitle = String(localized: "chat.friends.empty.subtitle", defaultValue: "Add friends to start messaging.\nThey'll appear here once they accept.")
+    static let addFriend = String(localized: "common.add_friend", defaultValue: "Add Friend")
+
+    static func message(_ name: String) -> String {
+        String(
+            format: String(localized: "chat.friends.message.accessibility", defaultValue: "Message %@"),
+            locale: Locale.current,
+            name
+        )
+    }
+}
+
 // MARK: - ChatFriendsListView
 
 /// Friends list embedded in the Chats tab. Shows accepted friends with
@@ -52,7 +68,7 @@ struct ChatFriendsListView: View {
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(friend.user?.resolvedDisplayName ?? "Unknown")
+                    Text(friend.user?.resolvedDisplayName ?? ChatFriendsListL10n.unknown)
                         .font(theme.typography.body)
                         .fontWeight(.medium)
                         .foregroundStyle(theme.colors.text)
@@ -82,7 +98,7 @@ struct ChatFriendsListView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Message \(friend.user?.resolvedDisplayName ?? "friend")")
+        .accessibilityLabel(ChatFriendsListL10n.message(friend.user?.resolvedDisplayName ?? ChatFriendsListL10n.friend))
     }
 
     // MARK: - Empty State
@@ -96,16 +112,16 @@ struct ChatFriendsListView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
 
-            Text("No friends yet")
+            Text(ChatFriendsListL10n.noFriends)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
-            Text("Add friends to start messaging.\nThey'll appear here once they accept.")
+            Text(ChatFriendsListL10n.noFriendsSubtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
 
-            GlassButton("Add Friend", icon: "person.badge.plus") {
+            GlassButton(ChatFriendsListL10n.addFriend, icon: "person.badge.plus") {
                 showAddFriend = true
             }
         }

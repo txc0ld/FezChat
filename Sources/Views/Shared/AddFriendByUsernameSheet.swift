@@ -1,5 +1,47 @@
 import SwiftUI
 
+private enum AddFriendByUsernameL10n {
+    static let navigationTitle = String(localized: "profile.add_friend.title", defaultValue: "Add Friend")
+    static let done = String(localized: "common.done", defaultValue: "Done")
+    static let usernamePlaceholder = String(localized: "profile.add_friend.username.placeholder", defaultValue: "Enter username")
+    static let searchAccessibilityLabel = String(localized: "profile.add_friend.search.accessibility_label", defaultValue: "Search for user")
+    static let emptyTitle = String(localized: "profile.add_friend.empty.title", defaultValue: "Search by username")
+    static let emptySubtitle = String(localized: "profile.add_friend.empty.subtitle", defaultValue: "Find friends even when they're not nearby.\nThey'll get your request next time they're on the mesh.")
+    static let searching = String(localized: "profile.add_friend.search.loading", defaultValue: "Searching...")
+
+    static func noUserFound(_ username: String) -> String {
+        String(
+            format: String(localized: "profile.add_friend.error.not_found", defaultValue: "No user found with username \"%@\""),
+            locale: Locale.current,
+            username
+        )
+    }
+
+    static func searchFailed(_ error: String) -> String {
+        String(
+            format: String(localized: "profile.add_friend.error.search_failed", defaultValue: "Search failed: %@"),
+            locale: Locale.current,
+            error
+        )
+    }
+
+    static func requestSent(_ username: String) -> String {
+        String(
+            format: String(localized: "profile.add_friend.success.request_sent", defaultValue: "Friend request sent to %@!"),
+            locale: Locale.current,
+            username
+        )
+    }
+
+    static func sendFailed(_ error: String) -> String {
+        String(
+            format: String(localized: "profile.add_friend.error.send_failed", defaultValue: "Failed to send: %@"),
+            locale: Locale.current,
+            error
+        )
+    }
+}
+
 // MARK: - Add Friend by Username Sheet
 
 /// Sheet for searching and adding a friend by their Blip username.
@@ -30,11 +72,11 @@ struct AddFriendByUsernameSheet: View {
                 }
                 .padding(BlipSpacing.md)
             }
-            .navigationTitle("Add Friend")
+            .navigationTitle(AddFriendByUsernameL10n.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button(AddFriendByUsernameL10n.done) { dismiss() }
                         .foregroundStyle(.blipAccentPurple)
                 }
             }
@@ -48,7 +90,7 @@ struct AddFriendByUsernameSheet: View {
 
     private var searchField: some View {
         HStack(spacing: BlipSpacing.sm) {
-            TextField("Enter username", text: $username)
+            TextField(AddFriendByUsernameL10n.usernamePlaceholder, text: $username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .focused($isFieldFocused)
@@ -90,7 +132,7 @@ struct AddFriendByUsernameSheet: View {
                 }
             }
             .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty || isSearching)
-            .accessibilityLabel("Search for user")
+            .accessibilityLabel(AddFriendByUsernameL10n.searchAccessibilityLabel)
         }
     }
 
@@ -131,11 +173,11 @@ struct AddFriendByUsernameSheet: View {
             Image(systemName: "person.crop.circle.badge.questionmark")
                 .font(.system(size: 40))
                 .foregroundStyle(theme.colors.mutedText)
-            Text("Search by username")
+            Text(AddFriendByUsernameL10n.emptyTitle)
                 .font(theme.typography.body)
                 .fontWeight(.medium)
                 .foregroundStyle(theme.colors.text)
-            Text("Find friends even when they're not nearby.\nThey'll get your request next time they're on the mesh.")
+            Text(AddFriendByUsernameL10n.emptySubtitle)
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -151,7 +193,7 @@ struct AddFriendByUsernameSheet: View {
             ProgressView()
                 .controlSize(.large)
                 .tint(.blipAccentPurple)
-            Text("Searching...")
+            Text(AddFriendByUsernameL10n.searching)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
         }
@@ -175,10 +217,10 @@ struct AddFriendByUsernameSheet: View {
             if let result {
                 lookupResult = result
             } else {
-                errorMessage = "No user found with username \"\(trimmed)\""
+                errorMessage = AddFriendByUsernameL10n.noUserFound(trimmed)
             }
         } catch {
-            errorMessage = "Search failed: \(error.localizedDescription)"
+            errorMessage = AddFriendByUsernameL10n.searchFailed(error.localizedDescription)
         }
 
         isSearching = false
@@ -190,10 +232,10 @@ struct AddFriendByUsernameSheet: View {
 
         do {
             try await coordinator.messageService?.sendFriendRequestByUsername(result.username)
-            successMessage = "Friend request sent to \(result.username)!"
+            successMessage = AddFriendByUsernameL10n.requestSent(result.username)
             lookupResult = nil
         } catch {
-            errorMessage = "Failed to send: \(error.localizedDescription)"
+            errorMessage = AddFriendByUsernameL10n.sendFailed(error.localizedDescription)
         }
 
         isSending = false

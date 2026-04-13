@@ -1,5 +1,9 @@
 import SwiftUI
 
+private enum SplashViewL10n {
+    static let tagline = String(localized: "launch.splash.tagline", defaultValue: "Chat at events, even without signal.")
+}
+
 // MARK: - SplashView
 
 /// Animated logo reveal with accent purple gradient.
@@ -34,7 +38,7 @@ struct SplashView: View {
                     .opacity(logoOpacity)
 
                 // Tagline
-                Text("Chat at events, even without signal.")
+                Text(SplashViewL10n.tagline)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
                     .opacity(taglineOpacity)

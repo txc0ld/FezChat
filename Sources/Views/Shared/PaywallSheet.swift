@@ -1,6 +1,53 @@
 import SwiftUI
 import SwiftData
 
+private enum PaywallSheetL10n {
+    static let purchaseComplete = String(localized: "store.paywall.purchase_complete.title", defaultValue: "Purchase Complete")
+    static let continueButton = String(localized: "common.continue", defaultValue: "Continue")
+    static let purchaseCompleteMessage = String(localized: "store.paywall.purchase_complete.message", defaultValue: "Your message balance has been updated.")
+    static let purchaseError = String(localized: "store.paywall.purchase_error.title", defaultValue: "Purchase Error")
+    static let ok = String(localized: "common.ok", defaultValue: "OK")
+    static let title = String(localized: "store.paywall.title", defaultValue: "Get more messages")
+    static let subtitle = String(localized: "store.paywall.subtitle", defaultValue: "Buy message credits to keep chatting. Credits update after App Store confirmation.")
+    static let loading = String(localized: "store.paywall.loading", defaultValue: "Loading message packs")
+    static let unavailableTitle = String(localized: "store.paywall.unavailable.title", defaultValue: "Message packs are unavailable")
+    static let unavailableSubtitle = String(localized: "store.paywall.unavailable.subtitle", defaultValue: "The App Store catalog did not load on this device.")
+    static let tryAgain = String(localized: "common.try_again", defaultValue: "Try Again")
+    static let bestValue = String(localized: "store.paywall.badge.best_value", defaultValue: "BEST VALUE")
+    static let purchased = String(localized: "store.paywall.purchase_button.purchased", defaultValue: "Purchased!")
+    static let selectPack = String(localized: "store.paywall.purchase_button.select_pack", defaultValue: "Select a pack")
+    static let receivingFree = String(localized: "store.paywall.fine_print.receiving_free", defaultValue: "Receiving messages is always free.")
+    static let restorePurchases = String(localized: "store.paywall.restore", defaultValue: "Restore Purchases")
+    static let balanceUpdated = String(localized: "store.paywall.fine_print.balance_updated", defaultValue: "After your balance updates, head back to chat and send again.")
+
+    static func messagesCount(_ count: Int) -> String {
+        String(
+            format: String(localized: "store.paywall.pack.messages_count", defaultValue: "%d messages"),
+            locale: Locale.current,
+            count
+        )
+    }
+
+    static func accessibilityLabel(name: String, count: Int, price: String) -> String {
+        String(
+            format: String(localized: "store.paywall.pack.accessibility_label", defaultValue: "%@, %d messages, %@"),
+            locale: Locale.current,
+            name,
+            count,
+            price
+        )
+    }
+
+    static func buyButton(productName: String, productPrice: String) -> String {
+        String(
+            format: String(localized: "store.paywall.purchase_button.buy_format", defaultValue: "Buy %@ - %@"),
+            locale: Locale.current,
+            productName,
+            productPrice
+        )
+    }
+}
+
 // MARK: - PaywallSheet
 
 /// Soft glass sheet with message pack options and one-tap StoreKit purchase.
@@ -61,19 +108,19 @@ struct PaywallSheet: View {
                 selectedProductID = availableProducts.first?.id
             }
         }
-        .alert("Purchase Complete", isPresented: $purchaseSuccess) {
-            Button("Continue") {
+        .alert(PaywallSheetL10n.purchaseComplete, isPresented: $purchaseSuccess) {
+            Button(PaywallSheetL10n.continueButton) {
                 resolvedStoreViewModel?.clearMessages()
                 dismiss()
             }
         } message: {
-            Text(resolvedStoreViewModel?.successMessage ?? "Your message balance has been updated.")
+            Text(resolvedStoreViewModel?.successMessage ?? PaywallSheetL10n.purchaseCompleteMessage)
         }
-        .alert("Purchase Error", isPresented: Binding(
+        .alert(PaywallSheetL10n.purchaseError, isPresented: Binding(
             get: { resolvedStoreViewModel?.errorMessage != nil },
             set: { if !$0 { resolvedStoreViewModel?.clearMessages() } }
         )) {
-            Button("OK") { resolvedStoreViewModel?.clearMessages() }
+            Button(PaywallSheetL10n.ok) { resolvedStoreViewModel?.clearMessages() }
         } message: {
             Text(resolvedStoreViewModel?.errorMessage ?? "")
         }
@@ -101,11 +148,11 @@ struct PaywallSheet: View {
                     )
                 )
 
-            Text("Get more messages")
+            Text(PaywallSheetL10n.title)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
-            Text("Buy message credits to keep chatting. Credits update after App Store confirmation.")
+            Text(PaywallSheetL10n.subtitle)
                 .font(theme.typography.secondary)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
@@ -120,7 +167,7 @@ struct PaywallSheet: View {
                 GlassCard(thickness: .ultraThin) {
                     VStack(spacing: BlipSpacing.sm) {
                         ProgressView()
-                        Text("Loading message packs")
+                        Text(PaywallSheetL10n.loading)
                             .font(theme.typography.body)
                             .foregroundStyle(theme.colors.text)
                     }
@@ -138,16 +185,16 @@ struct PaywallSheet: View {
                             .font(.system(size: 28))
                             .foregroundStyle(theme.colors.mutedText)
 
-                        Text("Message packs are unavailable")
+                        Text(PaywallSheetL10n.unavailableTitle)
                             .font(theme.typography.body)
                             .foregroundStyle(theme.colors.text)
 
-                        Text(resolvedStoreViewModel?.errorMessage ?? "The App Store catalog did not load on this device.")
+                        Text(resolvedStoreViewModel?.errorMessage ?? PaywallSheetL10n.unavailableSubtitle)
                             .font(theme.typography.secondary)
                             .foregroundStyle(theme.colors.mutedText)
                             .multilineTextAlignment(.center)
 
-                        GlassButton("Try Again", icon: "arrow.clockwise", style: .secondary, size: .small) {
+                        GlassButton(PaywallSheetL10n.tryAgain, icon: "arrow.clockwise", style: .secondary, size: .small) {
                             Task { await resolvedStoreViewModel?.loadProducts() }
                         }
                     }
@@ -174,7 +221,7 @@ struct PaywallSheet: View {
                             .foregroundStyle(theme.colors.text)
 
                         if product.messageCount == 50 {
-                            Text("BEST VALUE")
+                            Text(PaywallSheetL10n.bestValue)
                                 .font(.custom(BlipFontName.bold, size: 9, relativeTo: .caption2))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
@@ -186,7 +233,7 @@ struct PaywallSheet: View {
                         }
                     }
 
-                    Text("\(product.messageCount) messages")
+                    Text(PaywallSheetL10n.messagesCount(product.messageCount))
                         .font(theme.typography.secondary)
                         .foregroundStyle(theme.colors.mutedText)
                 }
@@ -213,7 +260,7 @@ struct PaywallSheet: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel("\(product.displayName), \(product.messageCount) messages, \(product.displayPrice)")
+        .accessibilityLabel(PaywallSheetL10n.accessibilityLabel(name: product.displayName, count: product.messageCount, price: product.displayPrice))
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
@@ -237,8 +284,8 @@ struct PaywallSheet: View {
     private var purchaseButton: some View {
         GlassButton(
             purchaseSuccess
-                ? "Purchased!"
-                : (selectedProduct != nil ? "Buy \(selectedProduct!.displayName) - \(selectedProduct!.displayPrice)" : "Select a pack"),
+                ? PaywallSheetL10n.purchased
+                : (selectedProduct != nil ? PaywallSheetL10n.buyButton(productName: selectedProduct!.displayName, productPrice: selectedProduct!.displayPrice) : PaywallSheetL10n.selectPack),
             icon: purchaseSuccess ? "checkmark" : "cart.fill",
             isLoading: resolvedStoreViewModel?.isPurchasing == true
         ) {
@@ -255,12 +302,12 @@ struct PaywallSheet: View {
 
     private var finePrint: some View {
         VStack(spacing: BlipSpacing.xs) {
-            Text("Receiving messages is always free.")
+            Text(PaywallSheetL10n.receivingFree)
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.colors.mutedText)
 
             HStack(spacing: BlipSpacing.md) {
-                Button("Restore Purchases") {
+                Button(PaywallSheetL10n.restorePurchases) {
                     Task { await resolvedStoreViewModel?.restorePurchases() }
                 }
                 .font(theme.typography.caption)
@@ -268,7 +315,7 @@ struct PaywallSheet: View {
                 .frame(minHeight: BlipSizing.minTapTarget)
                 .disabled(resolvedStoreViewModel?.isRestoring == true)
 
-                Text("After your balance updates, head back to chat and send again.")
+                Text(PaywallSheetL10n.balanceUpdated)
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)

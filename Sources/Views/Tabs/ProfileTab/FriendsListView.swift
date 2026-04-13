@@ -1,6 +1,49 @@
 import SwiftUI
 import SwiftData
 
+private enum FriendsListL10n {
+    static let title = String(localized: "friends.title", defaultValue: "Friends")
+    static let addFriend = String(localized: "common.add_friend", defaultValue: "Add Friend")
+    static let username = String(localized: "common.username", defaultValue: "Username")
+    static let sendRequest = String(localized: "friends.send_request", defaultValue: "Send Request")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let addFriendMessage = String(localized: "friends.add_friend.message", defaultValue: "Enter their username to send a friend request.")
+    static let requestFailed = String(localized: "friends.request_failed", defaultValue: "Friend Request Failed")
+    static let ok = String(localized: "common.ok", defaultValue: "OK")
+    static let searchPlaceholder = String(localized: "friends.search.placeholder", defaultValue: "Search friends...")
+    static let searchAccessibilityLabel = String(localized: "friends.search.accessibility_label", defaultValue: "Search friends")
+    static let remove = String(localized: "friends.action.remove", defaultValue: "Remove")
+    static let block = String(localized: "friends.action.block", defaultValue: "Block")
+    static let unblock = String(localized: "friends.action.unblock", defaultValue: "Unblock")
+    static let cancelRequest = String(localized: "friends.action.cancel_request", defaultValue: "Cancel Request")
+    static let decline = String(localized: "friends.action.decline", defaultValue: "Decline")
+    static let notReadyError = String(localized: "friends.request.not_ready", defaultValue: "Messaging service is not ready yet. Please try again in a moment.")
+    static let notFound = String(localized: "friends.error.not_found", defaultValue: "Friend not found")
+    static let blocked = String(localized: "friends.status.blocked", defaultValue: "Blocked")
+    static let requested = String(localized: "friends.status.requested", defaultValue: "Requested")
+    static let accept = String(localized: "friends.status.accept", defaultValue: "Accept")
+    static let online = String(localized: "friends.section.online", defaultValue: "Online")
+    static let all = String(localized: "friends.section.all", defaultValue: "All")
+    static let pending = String(localized: "friends.section.pending", defaultValue: "Pending")
+    static let blockedSection = String(localized: "friends.section.blocked", defaultValue: "Blocked")
+    static let emptyOnline = String(localized: "friends.empty.online", defaultValue: "No friends online right now")
+    static let emptyAll = String(localized: "friends.empty.all", defaultValue: "No friends yet. Add someone!")
+    static let emptyPending = String(localized: "friends.empty.pending", defaultValue: "No pending requests")
+    static let emptyBlocked = String(localized: "friends.empty.blocked", defaultValue: "No blocked users")
+    static let previewSarahChen = String(localized: "friends.preview.sarah_chen", defaultValue: "Sarah Chen")
+    static let previewJakeMorrison = String(localized: "friends.preview.jake_morrison", defaultValue: "Jake Morrison")
+    static let previewPriyaPatel = String(localized: "friends.preview.priya_patel", defaultValue: "Priya Patel")
+    static let previewTomWilson = String(localized: "friends.preview.tom_wilson", defaultValue: "Tom Wilson")
+    static let previewBlockedUser = String(localized: "friends.preview.blocked_user", defaultValue: "Blocked User")
+    static let previewMusicAndMountains = String(localized: "friends.preview.music_and_mountains", defaultValue: "Music and mountains")
+    static let previewAlwaysAtFront = String(localized: "friends.preview.always_at_front", defaultValue: "Always at the front")
+    static let previewEventPhotographer = String(localized: "friends.preview.event_photographer", defaultValue: "Event photographer")
+
+    static func sectionAccessibility(_ name: String, count: Int) -> String {
+        String(format: String(localized: "friends.section.accessibility", defaultValue: "%1$@, %2$d friends"), locale: Locale.current, name, count)
+    }
+}
+
 // MARK: - FriendsListView
 
 /// Friends management view with Online/All/Pending/Blocked sections,
@@ -34,7 +77,7 @@ struct FriendsListView: View {
                 friendsList
             }
         }
-        .navigationTitle("Friends")
+        .navigationTitle(FriendsListL10n.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -44,25 +87,25 @@ struct FriendsListView: View {
                         .foregroundStyle(.blipAccentPurple)
                 }
                 .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-                .accessibilityLabel("Add friend")
+                .accessibilityLabel(FriendsListL10n.addFriend)
             }
         }
-        .alert("Add Friend", isPresented: $showAddFriend) {
-            TextField("Username", text: $addUsername)
+        .alert(FriendsListL10n.addFriend, isPresented: $showAddFriend) {
+            TextField(FriendsListL10n.username, text: $addUsername)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 
-            Button("Send Request") {
+            Button(FriendsListL10n.sendRequest) {
                 sendFriendRequest()
             }
-            Button("Cancel", role: .cancel) {
+            Button(FriendsListL10n.cancel, role: .cancel) {
                 addUsername = ""
             }
         } message: {
-            Text("Enter their username to send a friend request.")
+            Text(FriendsListL10n.addFriendMessage)
         }
-        .alert("Friend Request Failed", isPresented: $showFriendRequestError, presenting: friendRequestError) { _ in
-            Button("OK", role: .cancel) {
+        .alert(FriendsListL10n.requestFailed, isPresented: $showFriendRequestError, presenting: friendRequestError) { _ in
+            Button(FriendsListL10n.ok, role: .cancel) {
                 friendRequestError = nil
             }
         } message: { errorMessage in
@@ -102,7 +145,7 @@ struct FriendsListView: View {
                 .font(.system(size: 14))
                 .foregroundStyle(theme.colors.mutedText)
 
-            TextField("Search friends...", text: $searchText)
+            TextField(FriendsListL10n.searchPlaceholder, text: $searchText)
                 .font(theme.typography.body)
                 .foregroundStyle(theme.colors.text)
                 .textInputAutocapitalization(.never)
@@ -122,7 +165,7 @@ struct FriendsListView: View {
         .clipShape(RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous))
         .padding(.horizontal, BlipSpacing.md)
         .padding(.vertical, BlipSpacing.sm)
-        .accessibilityLabel("Search friends")
+        .accessibilityLabel(FriendsListL10n.searchAccessibilityLabel)
     }
 
     // MARK: - Section Picker
@@ -169,7 +212,7 @@ struct FriendsListView: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel("\(section.displayName), \(count) friends")
+        .accessibilityLabel(FriendsListL10n.sectionAccessibility(section.displayName, count: count))
         .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
     }
 
@@ -195,19 +238,19 @@ struct FriendsListView: View {
                                     Button(role: .destructive) {
                                         removeFriend(friend)
                                     } label: {
-                                        Label("Remove", systemImage: "person.badge.minus")
+                                        Label(FriendsListL10n.remove, systemImage: "person.badge.minus")
                                     }
                                     Button {
                                         blockFriend(friend)
                                     } label: {
-                                        Label("Block", systemImage: "hand.raised")
+                                        Label(FriendsListL10n.block, systemImage: "hand.raised")
                                     }
                                     .tint(.orange)
                                 } else if friend.status == .blocked {
                                     Button {
                                         unblockFriend(friend)
                                     } label: {
-                                        Label("Unblock", systemImage: "hand.raised.slash")
+                                        Label(FriendsListL10n.unblock, systemImage: "hand.raised.slash")
                                     }
                                     .tint(.green)
                                 } else if friend.status == .pending {
@@ -215,9 +258,9 @@ struct FriendsListView: View {
                                         declineFriend(friend)
                                     } label: {
                                         if friend.requestDirection == .outgoing {
-                                            Label("Cancel Request", systemImage: "xmark.circle")
+                                            Label(FriendsListL10n.cancelRequest, systemImage: "xmark.circle")
                                         } else {
-                                            Label("Decline", systemImage: "xmark")
+                                            Label(FriendsListL10n.decline, systemImage: "xmark")
                                         }
                                     }
                                 }
@@ -247,7 +290,7 @@ struct FriendsListView: View {
                 .multilineTextAlignment(.center)
 
             if selectedSection == .all && searchText.isEmpty {
-                GlassButton("Add Friend", icon: "person.badge.plus", style: .secondary, size: .small) {
+                GlassButton(FriendsListL10n.addFriend, icon: "person.badge.plus", style: .secondary, size: .small) {
                     showAddFriend = true
                 }
             }
@@ -272,7 +315,7 @@ struct FriendsListView: View {
         addUsername = ""
 
         guard let messageService = coordinator.messageService else {
-            friendRequestError = "Messaging service is not ready yet. Please try again in a moment."
+            friendRequestError = FriendsListL10n.notReadyError
             showFriendRequestError = true
             return
         }
@@ -401,7 +444,7 @@ struct FriendsListView: View {
         let friendID = id
         let descriptor = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == friendID })
         guard let friend = try context.fetch(descriptor).first else {
-            throw NSError(domain: "FriendsListView", code: 404, userInfo: [NSLocalizedDescriptionKey: "Friend not found"])
+            throw NSError(domain: "FriendsListView", code: 404, userInfo: [NSLocalizedDescriptionKey: FriendsListL10n.notFound])
         }
         return friend
     }
@@ -463,7 +506,7 @@ private struct FriendRow: View {
                 if friend.status == .pending {
                     pendingStatusBadge
                 } else if friend.status == .blocked {
-                    Text("Blocked")
+                    Text(FriendsListL10n.blocked)
                         .font(theme.typography.caption)
                         .foregroundStyle(BlipColors.darkColors.statusRed)
                         .padding(.horizontal, BlipSpacing.sm)
@@ -486,14 +529,14 @@ private struct FriendRow: View {
     @ViewBuilder
     private var pendingStatusBadge: some View {
         if friend.requestDirection == .outgoing {
-            Text("Requested")
+            Text(FriendsListL10n.requested)
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.colors.mutedText)
                 .padding(.horizontal, BlipSpacing.sm)
                 .padding(.vertical, BlipSpacing.xs)
                 .background(Capsule().fill(theme.colors.hover))
         } else {
-            Text("Accept")
+            Text(FriendsListL10n.accept)
                 .font(theme.typography.caption)
                 .foregroundStyle(BlipColors.darkColors.statusAmber)
                 .padding(.horizontal, BlipSpacing.sm)
@@ -523,10 +566,10 @@ enum FriendSection: CaseIterable {
 
     var displayName: String {
         switch self {
-        case .online: return "Online"
-        case .all: return "All"
-        case .pending: return "Pending"
-        case .blocked: return "Blocked"
+        case .online: return FriendsListL10n.online
+        case .all: return FriendsListL10n.all
+        case .pending: return FriendsListL10n.pending
+        case .blocked: return FriendsListL10n.blockedSection
         }
     }
 
@@ -541,10 +584,10 @@ enum FriendSection: CaseIterable {
 
     var emptyMessage: String {
         switch self {
-        case .online: return "No friends online right now"
-        case .all: return "No friends yet. Add someone!"
-        case .pending: return "No pending requests"
-        case .blocked: return "No blocked users"
+        case .online: return FriendsListL10n.emptyOnline
+        case .all: return FriendsListL10n.emptyAll
+        case .pending: return FriendsListL10n.emptyPending
+        case .blocked: return FriendsListL10n.emptyBlocked
         }
     }
 }
@@ -564,11 +607,11 @@ struct FriendListItem: Identifiable {
 
 extension FriendsListView {
     static let sampleFriends: [FriendListItem] = [
-        FriendListItem(id: UUID(), displayName: "Sarah Chen", username: "sarahc", bio: "Music and mountains", isOnline: true, isPhoneVerified: true, status: .accepted, requestDirection: nil),
-        FriendListItem(id: UUID(), displayName: "Jake Morrison", username: "jakem", bio: "Always at the front", isOnline: true, isPhoneVerified: false, status: .accepted, requestDirection: nil),
-        FriendListItem(id: UUID(), displayName: "Priya Patel", username: "priyap", bio: "Event photographer", isOnline: false, isPhoneVerified: true, status: .accepted, requestDirection: nil),
-        FriendListItem(id: UUID(), displayName: "Tom Wilson", username: "tomw", bio: "", isOnline: false, isPhoneVerified: false, status: .pending, requestDirection: .incoming),
-        FriendListItem(id: UUID(), displayName: "Blocked User", username: "spam123", bio: "", isOnline: false, isPhoneVerified: false, status: .blocked, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewSarahChen, username: "sarahc", bio: FriendsListL10n.previewMusicAndMountains, isOnline: true, isPhoneVerified: true, status: .accepted, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewJakeMorrison, username: "jakem", bio: FriendsListL10n.previewAlwaysAtFront, isOnline: true, isPhoneVerified: false, status: .accepted, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewPriyaPatel, username: "priyap", bio: FriendsListL10n.previewEventPhotographer, isOnline: false, isPhoneVerified: true, status: .accepted, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewTomWilson, username: "tomw", bio: "", isOnline: false, isPhoneVerified: false, status: .pending, requestDirection: .incoming),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewBlockedUser, username: "spam123", bio: "", isOnline: false, isPhoneVerified: false, status: .blocked, requestDirection: nil),
     ]
 }
 

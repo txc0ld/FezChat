@@ -1,6 +1,44 @@
 import SwiftUI
 import MapKit
 
+private enum AlertDetailL10n {
+    static let close = String(localized: "medical.alert_detail.close", defaultValue: "Close")
+    static let resolveAlert = String(localized: "medical.alert_detail.resolve.title", defaultValue: "Resolve Alert")
+    static let treatedOnSite = String(localized: "medical.alert_detail.resolve.treated_on_site", defaultValue: "Treated on Site")
+    static let transported = String(localized: "medical.alert_detail.resolve.transported", defaultValue: "Transported")
+    static let falseAlarm = String(localized: "medical.alert_detail.resolve.false_alarm", defaultValue: "False Alarm")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let accepted = String(localized: "medical.alert_detail.status.accepted", defaultValue: "ACCEPTED")
+    static let active = String(localized: "medical.alert_detail.status.active", defaultValue: "ACTIVE")
+    static let liveLocation = String(localized: "medical.alert_detail.live_location", defaultValue: "Live Location")
+    static let sos = String(localized: "medical.alert_detail.map_annotation.sos", defaultValue: "SOS")
+    static let details = String(localized: "medical.alert_detail.details", defaultValue: "Details")
+    static let detailSeverity = String(localized: "medical.alert_detail.detail.severity", defaultValue: "Severity")
+    static let detailLocation = String(localized: "medical.alert_detail.detail.location", defaultValue: "Location")
+    static let detailGPSAccuracy = String(localized: "medical.alert_detail.detail.gps_accuracy", defaultValue: "GPS Accuracy")
+    static let detailDescription = String(localized: "medical.alert_detail.detail.description", defaultValue: "Description")
+    static let detailAcceptedBy = String(localized: "medical.alert_detail.detail.accepted_by", defaultValue: "Accepted By")
+    static let responseTime = String(localized: "medical.alert_detail.response_time", defaultValue: "Response Time")
+    static let acceptAlert = String(localized: "medical.alert_detail.action.accept", defaultValue: "Accept Alert")
+    static let navigate = String(localized: "medical.alert_detail.action.navigate", defaultValue: "Navigate to Location")
+    static let resolve = String(localized: "medical.alert_detail.action.resolve", defaultValue: "Resolve Alert")
+    static let nonUrgent = String(localized: "medical.alert.severity.non_urgent", defaultValue: "Non-Urgent")
+    static let urgent = String(localized: "medical.alert.severity.urgent", defaultValue: "Urgent")
+    static let criticalEmergency = String(localized: "medical.alert.severity.critical_emergency", defaultValue: "Critical Emergency")
+    static let previewNearPyramid = String(localized: "medical.alert_detail.preview.near_pyramid", defaultValue: "Near Pyramid Stage, Section B, Row 12")
+    static let previewCampingArea = String(localized: "medical.alert_detail.preview.camping_area_b", defaultValue: "Camping Area B, near showers")
+    static let previewDescription = String(localized: "medical.alert_detail.preview.description", defaultValue: "Feeling very dizzy and nauseous, has not eaten today")
+    static let previewMedic5 = String(localized: "medical.alert_detail.preview.medic_5", defaultValue: "Medic-5")
+
+    static func alertTitle(_ shortID: String) -> String {
+        String(format: String(localized: "medical.alert.identifier", defaultValue: "Alert #%@"), locale: Locale.current, shortID)
+    }
+
+    static func timer(_ minutes: Int, _ seconds: Int) -> String {
+        String(format: String(localized: "medical.alert_detail.response_timer", defaultValue: "%02d:%02d"), locale: Locale.current, minutes, seconds)
+    }
+}
+
 // MARK: - AlertDetailSheet
 
 /// Full alert detail sheet showing live location, severity info,
@@ -39,21 +77,21 @@ struct AlertDetailSheet: View {
                     .padding(BlipSpacing.md)
                 }
             }
-            .navigationTitle("Alert #\(alert.shortID)")
+            .navigationTitle(AlertDetailL10n.alertTitle(alert.shortID))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { isPresented = false }
+                    Button(AlertDetailL10n.close) { isPresented = false }
                         .foregroundStyle(theme.colors.mutedText)
                 }
             }
             .onAppear { startResponseTimer() }
             .onDisappear { timer?.invalidate() }
-            .confirmationDialog("Resolve Alert", isPresented: $showResolveOptions) {
-                Button("Treated on Site") { onResolve?(.treatedOnSite); isPresented = false }
-                Button("Transported") { onResolve?(.transported); isPresented = false }
-                Button("False Alarm") { onResolve?(.falseAlarm); isPresented = false }
-                Button("Cancel", role: .cancel) {}
+            .confirmationDialog(AlertDetailL10n.resolveAlert, isPresented: $showResolveOptions) {
+                Button(AlertDetailL10n.treatedOnSite) { onResolve?(.treatedOnSite); isPresented = false }
+                Button(AlertDetailL10n.transported) { onResolve?(.transported); isPresented = false }
+                Button(AlertDetailL10n.falseAlarm) { onResolve?(.falseAlarm); isPresented = false }
+                Button(AlertDetailL10n.cancel, role: .cancel) {}
             }
         }
     }
@@ -80,7 +118,7 @@ struct AlertDetailSheet: View {
                         .fontWeight(.bold)
                         .foregroundStyle(severityColor)
 
-                    Text("Alert #\(alert.shortID)")
+                    Text(AlertDetailL10n.alertTitle(alert.shortID))
                         .font(theme.typography.secondary)
                         .foregroundStyle(theme.colors.mutedText)
 
@@ -110,9 +148,9 @@ struct AlertDetailSheet: View {
 
     private var statusInfo: (String, Color) {
         if alert.acceptedBy != nil {
-            return ("ACCEPTED", .blipAccentPurple)
+            return (AlertDetailL10n.accepted, .blipAccentPurple)
         }
-        return ("ACTIVE", severityColor)
+        return (AlertDetailL10n.active, severityColor)
     }
 
     // MARK: - Live Map Section
@@ -125,7 +163,7 @@ struct AlertDetailSheet: View {
                         .font(.system(size: 14))
                         .foregroundStyle(severityColor)
 
-                    Text("Live Location")
+                    Text(AlertDetailL10n.liveLocation)
                         .font(theme.typography.body)
                         .fontWeight(.semibold)
                         .foregroundStyle(theme.colors.text)
@@ -143,7 +181,7 @@ struct AlertDetailSheet: View {
                 }
 
                 Map(position: $cameraPosition) {
-                    Annotation("SOS", coordinate: alert.coordinate) {
+                    Annotation(AlertDetailL10n.sos, coordinate: alert.coordinate) {
                         ZStack {
                             // Accuracy circle
                             if alert.accuracy == .estimated {
@@ -193,21 +231,21 @@ struct AlertDetailSheet: View {
     private var detailsSection: some View {
         GlassCard(thickness: .regular) {
             VStack(alignment: .leading, spacing: BlipSpacing.md) {
-                Text("Details")
+                Text(AlertDetailL10n.details)
                     .font(theme.typography.body)
                     .fontWeight(.semibold)
                     .foregroundStyle(theme.colors.text)
 
-                detailRow(label: "Severity", value: severityLabel, color: severityColor)
-                detailRow(label: "Location", value: alert.locationDescription, color: theme.colors.text)
-                detailRow(label: "GPS Accuracy", value: alert.accuracy.label, color: alert.accuracy.color)
+                detailRow(label: AlertDetailL10n.detailSeverity, value: severityLabel, color: severityColor)
+                detailRow(label: AlertDetailL10n.detailLocation, value: alert.locationDescription, color: theme.colors.text)
+                detailRow(label: AlertDetailL10n.detailGPSAccuracy, value: alert.accuracy.label, color: alert.accuracy.color)
 
                 if let description = alert.description {
-                    detailRow(label: "Description", value: description, color: theme.colors.text)
+                    detailRow(label: AlertDetailL10n.detailDescription, value: description, color: theme.colors.text)
                 }
 
                 if let acceptedBy = alert.acceptedBy {
-                    detailRow(label: "Accepted By", value: acceptedBy, color: .blipAccentPurple)
+                    detailRow(label: AlertDetailL10n.detailAcceptedBy, value: acceptedBy, color: .blipAccentPurple)
                 }
             }
         }
@@ -237,7 +275,7 @@ struct AlertDetailSheet: View {
                     .font(.system(size: 16))
                     .foregroundStyle(theme.colors.mutedText)
 
-                Text("Response Time")
+                Text(AlertDetailL10n.responseTime)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
 
@@ -254,7 +292,7 @@ struct AlertDetailSheet: View {
     private var formattedTime: String {
         let minutes = responseTimer / 60
         let seconds = responseTimer % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        return AlertDetailL10n.timer(minutes, seconds)
     }
 
     // MARK: - Workflow Actions
@@ -262,19 +300,19 @@ struct AlertDetailSheet: View {
     private var workflowActions: some View {
         VStack(spacing: BlipSpacing.md) {
             if alert.acceptedBy == nil {
-                GlassButton("Accept Alert", icon: "checkmark.circle.fill") {
+                GlassButton(AlertDetailL10n.acceptAlert, icon: "checkmark.circle.fill") {
                     onAccept?()
                 }
                 .fullWidth()
             }
 
-            GlassButton("Navigate to Location", icon: "arrow.triangle.turn.up.right.diamond.fill", style: .secondary) {
+            GlassButton(AlertDetailL10n.navigate, icon: "arrow.triangle.turn.up.right.diamond.fill", style: .secondary) {
                 onNavigate?()
             }
             .fullWidth()
 
             if alert.acceptedBy != nil {
-                GlassButton("Resolve Alert", icon: "checkmark.seal.fill", style: .outline) {
+                GlassButton(AlertDetailL10n.resolve, icon: "checkmark.seal.fill", style: .outline) {
                     showResolveOptions = true
                 }
                 .fullWidth()
@@ -294,9 +332,9 @@ struct AlertDetailSheet: View {
 
     private var severityLabel: String {
         switch alert.severity {
-        case .green: return "Non-Urgent"
-        case .amber: return "Urgent"
-        case .red: return "Critical Emergency"
+        case .green: return AlertDetailL10n.nonUrgent
+        case .amber: return AlertDetailL10n.urgent
+        case .red: return AlertDetailL10n.criticalEmergency
         }
     }
 
@@ -321,7 +359,7 @@ struct AlertDetailSheet: View {
             id: UUID(),
             shortID: "A7F3",
             severity: .red,
-            locationDescription: "Near Pyramid Stage, Section B, Row 12",
+            locationDescription: AlertDetailL10n.previewNearPyramid,
             description: nil,
             accuracy: .precise,
             acceptedBy: nil,
@@ -339,10 +377,10 @@ struct AlertDetailSheet: View {
             id: UUID(),
             shortID: "B2E1",
             severity: .amber,
-            locationDescription: "Camping Area B, near showers",
-            description: "Feeling very dizzy and nauseous, has not eaten today",
+            locationDescription: AlertDetailL10n.previewCampingArea,
+            description: AlertDetailL10n.previewDescription,
             accuracy: .estimated,
-            acceptedBy: "Medic-5",
+            acceptedBy: AlertDetailL10n.previewMedic5,
             createdAt: Date().addingTimeInterval(-420)
         )
     )

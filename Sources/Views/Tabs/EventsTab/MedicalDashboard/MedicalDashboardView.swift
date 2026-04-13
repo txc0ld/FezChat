@@ -1,5 +1,76 @@
 import SwiftUI
 
+private enum MedicalDashboardL10n {
+    static let navigationTitle = String(localized: "medical.dashboard.title", defaultValue: "Medical Dashboard")
+    static let notResponderTitle = String(localized: "medical.dashboard.not_responder.title", defaultValue: "Not a Responder")
+    static let notResponderSubtitle = String(localized: "medical.dashboard.not_responder.subtitle", defaultValue: "You are not registered as a medical responder for this event. Contact the event organizer to get responder access.")
+    static let responderFallback = String(localized: "medical.dashboard.responder.fallback_name", defaultValue: "Responder")
+    static let onDuty = String(localized: "medical.dashboard.duty.on", defaultValue: "On duty")
+    static let offDuty = String(localized: "medical.dashboard.duty.off", defaultValue: "Off duty")
+    static let goOffDuty = String(localized: "medical.dashboard.duty.accessibility_off", defaultValue: "Go off duty")
+    static let goOnDuty = String(localized: "medical.dashboard.duty.accessibility_on", defaultValue: "Go on duty")
+    static let noActiveAlerts = String(localized: "medical.dashboard.alerts.none", defaultValue: "No active SOS alerts")
+    static let accept = String(localized: "common.accept", defaultValue: "Accept")
+    static let navigate = String(localized: "common.navigate", defaultValue: "Navigate")
+    static let resolve = String(localized: "common.resolve", defaultValue: "Resolve")
+    static let navigateAccessibility = String(localized: "medical.dashboard.active_alert.navigate_accessibility_label", defaultValue: "Navigate to alert location")
+    static let resolveAccessibility = String(localized: "medical.dashboard.active_alert.resolve_accessibility_label", defaultValue: "Resolve alert")
+    static let resolveAlert = String(localized: "medical.dashboard.resolve.title", defaultValue: "Resolve Alert")
+    static let treatedOnSite = String(localized: "medical.dashboard.resolve.treated_on_site", defaultValue: "Treated on site")
+    static let transported = String(localized: "medical.dashboard.resolve.transported", defaultValue: "Transported")
+    static let falseAlarm = String(localized: "medical.dashboard.resolve.false_alarm", defaultValue: "False alarm")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+
+    static func acceptAccessibility(_ severity: String) -> String {
+        String(
+            format: String(localized: "medical.dashboard.alert.accept_accessibility_label", defaultValue: "Accept %@ alert"),
+            locale: Locale.current,
+            severity
+        )
+    }
+
+    static func activeSeverity(_ severity: String) -> String {
+        String(
+            format: String(localized: "medical.dashboard.active_alert.title", defaultValue: "Active — %@"),
+            locale: Locale.current,
+            severity
+        )
+    }
+
+    static func distanceMeters(_ meters: Int) -> String {
+        String(
+            format: String(localized: "medical.dashboard.alert.distance", defaultValue: "~%dm away"),
+            locale: Locale.current,
+            meters
+        )
+    }
+
+    static func elapsedSeconds(_ seconds: Int) -> String {
+        String(
+            format: String(localized: "medical.dashboard.elapsed.seconds", defaultValue: "%ds ago"),
+            locale: Locale.current,
+            seconds
+        )
+    }
+
+    static func elapsedMinutes(_ minutes: Int) -> String {
+        String(
+            format: String(localized: "medical.dashboard.elapsed.minutes", defaultValue: "%dm ago"),
+            locale: Locale.current,
+            minutes
+        )
+    }
+
+    static func elapsedHoursMinutes(_ hours: Int, _ minutes: Int) -> String {
+        String(
+            format: String(localized: "medical.dashboard.elapsed.hours_minutes", defaultValue: "%dh %dm ago"),
+            locale: Locale.current,
+            hours,
+            minutes
+        )
+    }
+}
+
 // MARK: - MedicalDashboardView
 
 /// SOS responder dashboard — three states: not a responder, on-duty alert list, active alert detail.
@@ -39,7 +110,7 @@ struct MedicalDashboardView: View {
                     .padding(.horizontal, BlipSpacing.md)
                 }
             }
-            .navigationTitle("Medical Dashboard")
+            .navigationTitle(MedicalDashboardL10n.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
         }
         .task {
@@ -56,11 +127,11 @@ struct MedicalDashboardView: View {
                     .font(.system(size: 42))
                     .foregroundStyle(theme.colors.mutedText)
 
-                Text("Not a Responder")
+                Text(MedicalDashboardL10n.notResponderTitle)
                     .font(theme.typography.headline)
                     .foregroundStyle(theme.colors.text)
 
-                Text("You are not registered as a medical responder for this event. Contact the event organizer to get responder access.")
+                Text(MedicalDashboardL10n.notResponderSubtitle)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText)
                     .multilineTextAlignment(.center)
@@ -76,11 +147,11 @@ struct MedicalDashboardView: View {
         GlassCard(thickness: .regular) {
             HStack {
                 VStack(alignment: .leading, spacing: BlipSpacing.xs) {
-                    Text(vm.responderCallsign ?? "Responder")
+                    Text(vm.responderCallsign ?? MedicalDashboardL10n.responderFallback)
                         .font(theme.typography.headline)
                         .foregroundStyle(theme.colors.text)
 
-                    Text(vm.isOnDuty ? "On duty" : "Off duty")
+                    Text(vm.isOnDuty ? MedicalDashboardL10n.onDuty : MedicalDashboardL10n.offDuty)
                         .font(theme.typography.caption)
                         .foregroundStyle(vm.isOnDuty ? theme.colors.statusGreen : theme.colors.mutedText)
                 }
@@ -93,7 +164,7 @@ struct MedicalDashboardView: View {
                 ))
                 .tint(.blipAccentPurple)
                 .labelsHidden()
-                .accessibilityLabel(vm.isOnDuty ? "Go off duty" : "Go on duty")
+                .accessibilityLabel(vm.isOnDuty ? MedicalDashboardL10n.goOffDuty : MedicalDashboardL10n.goOnDuty)
             }
         }
     }
@@ -105,7 +176,7 @@ struct MedicalDashboardView: View {
                     HStack(spacing: BlipSpacing.sm) {
                         Image(systemName: "checkmark.shield.fill")
                             .foregroundStyle(theme.colors.statusGreen)
-                        Text("No active SOS alerts")
+                        Text(MedicalDashboardL10n.noActiveAlerts)
                             .font(theme.typography.body)
                             .foregroundStyle(theme.colors.mutedText)
                     }
@@ -131,7 +202,7 @@ struct MedicalDashboardView: View {
                         .font(theme.typography.caption).fontWeight(.bold)
                         .foregroundStyle(severityColor(alert.severity))
                     if let distance = alert.distance {
-                        Text("~\(Int(distance))m away")
+                        Text(MedicalDashboardL10n.distanceMeters(Int(distance)))
                             .font(theme.typography.secondary).foregroundStyle(theme.colors.text)
                     }
                     Text(elapsedTime(since: alert.createdAt))
@@ -141,12 +212,12 @@ struct MedicalDashboardView: View {
                 Button {
                     Task { await sosViewModel?.acceptAlert(alert) }
                 } label: {
-                    Text("Accept").font(theme.typography.body).fontWeight(.semibold)
+                    Text(MedicalDashboardL10n.accept).font(theme.typography.body).fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .padding(.horizontal, BlipSpacing.md).padding(.vertical, BlipSpacing.sm)
                         .background(.blipAccentPurple, in: Capsule())
                 }
-                .accessibilityLabel("Accept \(alert.severity.rawValue) alert")
+                .accessibilityLabel(MedicalDashboardL10n.acceptAccessibility(alert.severity.rawValue))
             }
         }
     }
@@ -161,7 +232,7 @@ struct MedicalDashboardView: View {
                         Circle()
                             .fill(severityColor(alert.severity))
                             .frame(width: 12, height: 12)
-                        Text("Active — \(alert.severity.rawValue.uppercased())")
+                        Text(MedicalDashboardL10n.activeSeverity(alert.severity.rawValue.uppercased()))
                             .font(theme.typography.headline)
                             .foregroundStyle(theme.colors.text)
                     }
@@ -190,24 +261,24 @@ struct MedicalDashboardView: View {
                     let url = URL(string: "maps://?daddr=\(alert.preciseLocationLatitude),\(alert.preciseLocationLongitude)&dirflg=w")
                     if let url { UIApplication.shared.open(url) }
                 } label: {
-                    Label("Navigate", systemImage: "location.fill").font(theme.typography.body).fontWeight(.semibold)
+                    Label(MedicalDashboardL10n.navigate, systemImage: "location.fill").font(theme.typography.body).fontWeight(.semibold)
                         .frame(maxWidth: .infinity).padding(.vertical, BlipSpacing.sm)
                 }
                 .buttonStyle(.borderedProminent).tint(.blipAccentPurple)
-                .accessibilityLabel("Navigate to alert location")
+                .accessibilityLabel(MedicalDashboardL10n.navigateAccessibility)
 
                 Button { showResolveDialog = true } label: {
-                    Label("Resolve", systemImage: "checkmark.circle.fill").font(theme.typography.body).fontWeight(.semibold)
+                    Label(MedicalDashboardL10n.resolve, systemImage: "checkmark.circle.fill").font(theme.typography.body).fontWeight(.semibold)
                         .frame(maxWidth: .infinity).padding(.vertical, BlipSpacing.sm)
                 }
                 .buttonStyle(.borderedProminent).tint(theme.colors.statusGreen)
-                .accessibilityLabel("Resolve alert")
+                .accessibilityLabel(MedicalDashboardL10n.resolveAccessibility)
             }
-            .confirmationDialog("Resolve Alert", isPresented: $showResolveDialog, titleVisibility: .visible) {
-                Button("Treated on site") { Task { await sosViewModel?.resolveAlert(resolution: .treatedOnSite) } }
-                Button("Transported") { Task { await sosViewModel?.resolveAlert(resolution: .transported) } }
-                Button("False alarm") { Task { await sosViewModel?.resolveAlert(resolution: .falseAlarm) } }
-                Button("Cancel", role: .cancel) {}
+            .confirmationDialog(MedicalDashboardL10n.resolveAlert, isPresented: $showResolveDialog, titleVisibility: .visible) {
+                Button(MedicalDashboardL10n.treatedOnSite) { Task { await sosViewModel?.resolveAlert(resolution: .treatedOnSite) } }
+                Button(MedicalDashboardL10n.transported) { Task { await sosViewModel?.resolveAlert(resolution: .transported) } }
+                Button(MedicalDashboardL10n.falseAlarm) { Task { await sosViewModel?.resolveAlert(resolution: .falseAlarm) } }
+                Button(MedicalDashboardL10n.cancel, role: .cancel) {}
             }
         }
     }
@@ -235,9 +306,9 @@ struct MedicalDashboardView: View {
 
     private func elapsedTime(since date: Date) -> String {
         let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 60 { return "\(seconds)s ago" }
-        if seconds < 3600 { return "\(seconds / 60)m ago" }
-        return "\(seconds / 3600)h \((seconds % 3600) / 60)m ago"
+        if seconds < 60 { return MedicalDashboardL10n.elapsedSeconds(seconds) }
+        if seconds < 3600 { return MedicalDashboardL10n.elapsedMinutes(seconds / 60) }
+        return MedicalDashboardL10n.elapsedHoursMinutes(seconds / 3600, (seconds % 3600) / 60)
     }
 }
 

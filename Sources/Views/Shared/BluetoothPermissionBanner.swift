@@ -1,5 +1,11 @@
 import SwiftUI
 
+private enum BluetoothPermissionBannerL10n {
+    static let title = String(localized: "common.bluetooth.permission.title", defaultValue: "Bluetooth is required for mesh chat")
+    static let subtitle = String(localized: "common.bluetooth.permission.subtitle", defaultValue: "Tap to open Settings")
+    static let accessibilityLabel = String(localized: "common.bluetooth.permission.accessibility_label", defaultValue: "Enable Bluetooth in Settings")
+}
+
 // MARK: - BluetoothPermissionBanner
 
 /// Full-width banner shown when Bluetooth permission is denied.
@@ -13,14 +19,14 @@ struct BluetoothPermissionBanner: View {
             HStack(spacing: BlipSpacing.sm) {
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Color("AccentPurple"))
+                    .foregroundStyle(Color.blipAccentPurple)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Bluetooth is required for mesh chat")
+                    Text(BluetoothPermissionBannerL10n.title)
                         .font(.custom(BlipFontName.semiBold, size: 14, relativeTo: .subheadline))
                         .foregroundStyle(theme.colors.text)
 
-                    Text("Tap to open Settings")
+                    Text(BluetoothPermissionBannerL10n.subtitle)
                         .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption))
                         .foregroundStyle(theme.colors.mutedText)
                 }
@@ -34,11 +40,11 @@ struct BluetoothPermissionBanner: View {
             .padding(BlipSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color("AccentPurple").opacity(0.1))
+                    .fill(Color.blipAccentPurple.opacity(0.1))
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Enable Bluetooth in Settings")
+        .accessibilityLabel(BluetoothPermissionBannerL10n.accessibilityLabel)
     }
 
     private func openSettings() {
@@ -55,6 +61,6 @@ struct BluetoothPermissionBanner: View {
             .padding()
         Spacer()
     }
-    .background(Color("Background"))
+    .background(Color.black)
     .environment(\.theme, Theme.shared)
 }

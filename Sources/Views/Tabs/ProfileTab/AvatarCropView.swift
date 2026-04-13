@@ -1,5 +1,14 @@
 import SwiftUI
 
+private enum AvatarCropL10n {
+    static let title = String(localized: "profile.avatar_crop.title", defaultValue: "Crop Avatar")
+    static let cancel = String(localized: "common.cancel", defaultValue: "Cancel")
+    static let cropAccessibility = String(localized: "profile.avatar_crop.area_accessibility_label", defaultValue: "Crop area. Pinch to zoom, drag to reposition.")
+    static let instructions = String(localized: "profile.avatar_crop.instructions", defaultValue: "Pinch to zoom, drag to reposition")
+    static let reset = String(localized: "common.reset", defaultValue: "Reset")
+    static let confirm = String(localized: "common.confirm", defaultValue: "Confirm")
+}
+
 // MARK: - AvatarCropView
 
 /// Circular crop editor for avatar images.
@@ -38,11 +47,11 @@ struct AvatarCropView: View {
                     Spacer()
                 }
             }
-            .navigationTitle("Crop Avatar")
+            .navigationTitle(AvatarCropL10n.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isPresented = false }
+                    Button(AvatarCropL10n.cancel) { isPresented = false }
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
@@ -83,7 +92,7 @@ struct AvatarCropView: View {
         .clipShape(Rectangle())
         .gesture(panGesture)
         .gesture(pinchGesture)
-        .accessibilityLabel("Crop area. Pinch to zoom, drag to reposition.")
+        .accessibilityLabel(AvatarCropL10n.cropAccessibility)
     }
 
     // MARK: - Grid Lines
@@ -116,7 +125,7 @@ struct AvatarCropView: View {
     // MARK: - Instructions
 
     private var instructions: some View {
-        Text("Pinch to zoom, drag to reposition")
+        Text(AvatarCropL10n.instructions)
             .font(theme.typography.secondary)
             .foregroundStyle(.white.opacity(0.5))
     }
@@ -125,7 +134,7 @@ struct AvatarCropView: View {
 
     private var actionButtons: some View {
         HStack(spacing: BlipSpacing.lg) {
-            GlassButton("Reset", icon: "arrow.counterclockwise", style: .secondary) {
+            GlassButton(AvatarCropL10n.reset, icon: "arrow.counterclockwise", style: .secondary) {
                 withAnimation(SpringConstants.accessiblePageEntrance) {
                     scale = 1.0
                     lastScale = 1.0
@@ -134,7 +143,7 @@ struct AvatarCropView: View {
                 }
             }
 
-            GlassButton("Confirm", icon: "checkmark", style: .primary) {
+            GlassButton(AvatarCropL10n.confirm, icon: "checkmark", style: .primary) {
                 let cropRect = calculateCropRect()
                 onCrop?(cropRect)
                 isPresented = false

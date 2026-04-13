@@ -1,5 +1,10 @@
 import SwiftUI
 
+private enum SettingsComponentsL10n {
+    static let comingSoon = String(localized: "profile.settings.common.coming_soon", defaultValue: "COMING SOON")
+    static let comingSoonAccessibility = String(localized: "profile.settings.common.coming_soon.accessibility", defaultValue: "Coming soon")
+}
+
 // MARK: - SettingsComponents
 
 /// Shared helper views used across all settings sub-sections.
@@ -103,7 +108,7 @@ enum SettingsComponents {
             HStack(spacing: BlipSpacing.xs) {
                 Image(systemName: "clock")
                     .font(.system(size: 10, weight: .medium))
-                Text("COMING SOON")
+                Text(SettingsComponentsL10n.comingSoon)
                     .font(theme.typography.caption)
                     .fontWeight(.semibold)
                     .tracking(0.8)
@@ -112,7 +117,7 @@ enum SettingsComponents {
         }
         .padding(.top, BlipSpacing.xs)
         .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel("Coming soon")
+        .accessibilityLabel(SettingsComponentsL10n.comingSoonAccessibility)
     }
 
     /// A non-interactive, de-emphasized row for unavailable actions.

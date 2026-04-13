@@ -1,5 +1,26 @@
 import SwiftUI
 
+private enum MessageBubbleL10n {
+    static let retryLabel = String(localized: "chat.message.retry", defaultValue: "Retry sending message")
+    static let retryText = String(localized: "chat.message.retry_text", defaultValue: "Failed to send. Tap to retry.")
+    static let edited = String(localized: "chat.message.edited", defaultValue: "edited")
+    static let reply = String(localized: "chat.message.context.reply", defaultValue: "Reply")
+    static let copy = String(localized: "chat.message.context.copy", defaultValue: "Copy")
+    static let edit = String(localized: "chat.message.context.edit", defaultValue: "Edit")
+    static let delete = String(localized: "chat.message.context.delete", defaultValue: "Delete")
+    static let report = String(localized: "chat.message.context.report", defaultValue: "Report")
+    static let you = String(localized: "common.you", defaultValue: "You")
+    static let voiceNote = String(localized: "chat.message.content.voice_note", defaultValue: "Voice note")
+    static let image = String(localized: "chat.message.content.image", defaultValue: "Image")
+    static let editedSuffix = String(localized: "chat.message.accessibility.edited_suffix", defaultValue: ", edited")
+    static let previewAlice = String(localized: "chat.preview.sender.alice", defaultValue: "Alice")
+    static let previewMe = String(localized: "chat.preview.sender.me", defaultValue: "Me")
+    static let previewQuestion = String(localized: "chat.preview.message.question", defaultValue: "Hey! Are you at the event yet?")
+    static let previewArrival = String(localized: "chat.preview.message.arrival", defaultValue: "Just arrived! Where are you?")
+    static let previewPyramid = String(localized: "chat.preview.message.pyramid", defaultValue: "I'm near the Pyramid Stage! Bicep is about to start")
+    static let previewOnMyWay = String(localized: "chat.preview.message.on_my_way", defaultValue: "On my way! Save me a spot")
+}
+
 // MARK: - MessageBubble
 
 /// Glass chat bubble with spring entrance animation.
@@ -73,13 +94,13 @@ struct MessageBubble: View {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.circle")
                                 .font(.system(size: 11, weight: .medium))
-                            Text("Failed to send. Tap to retry.")
+                            Text(MessageBubbleL10n.retryText)
                                 .font(.custom(BlipFontName.medium, size: 11, relativeTo: .caption2))
                         }
                         .foregroundStyle(theme.colors.statusRed)
                     }
                     .padding(.horizontal, BlipSpacing.sm)
-                    .accessibilityLabel("Retry sending message")
+                    .accessibilityLabel(MessageBubbleL10n.retryLabel)
                 }
             }
 
@@ -131,7 +152,7 @@ struct MessageBubble: View {
                     )
 
                 if message.isEdited {
-                    Text("edited")
+                    Text(MessageBubbleL10n.edited)
                         .font(.custom(BlipFontName.regular, size: 10, relativeTo: .caption2))
                         .foregroundStyle(
                             message.isFromMe
@@ -254,26 +275,26 @@ struct MessageBubble: View {
         Button {
             onReply?()
         } label: {
-            Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+            Label(MessageBubbleL10n.reply, systemImage: "arrowshape.turn.up.left.fill")
         }
 
         Button {
             UIPasteboard.general.string = message.text
         } label: {
-            Label("Copy", systemImage: "doc.on.doc")
+            Label(MessageBubbleL10n.copy, systemImage: "doc.on.doc")
         }
 
         if message.isFromMe {
             Button {
                 onEdit?()
             } label: {
-                Label("Edit", systemImage: "pencil")
+                Label(MessageBubbleL10n.edit, systemImage: "pencil")
             }
 
             Button(role: .destructive) {
                 onDelete?()
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label(MessageBubbleL10n.delete, systemImage: "trash")
             }
         }
 
@@ -282,7 +303,7 @@ struct MessageBubble: View {
         Button(role: .destructive) {
             onReport?()
         } label: {
-            Label("Report", systemImage: "exclamationmark.triangle")
+            Label(MessageBubbleL10n.report, systemImage: "exclamationmark.triangle")
         }
     }
 
@@ -324,15 +345,15 @@ struct MessageBubble: View {
     }
 
     private var bubbleAccessibilityLabel: String {
-        let sender = message.isFromMe ? "You" : message.senderName
+        let sender = message.isFromMe ? MessageBubbleL10n.you : message.senderName
         let content: String
         switch message.contentType {
         case .text: content = message.text
-        case .voiceNote, .pttAudio: content = "Voice note"
-        case .image: content = "Image"
+        case .voiceNote, .pttAudio: content = MessageBubbleL10n.voiceNote
+        case .image: content = MessageBubbleL10n.image
         }
         let time = message.formattedTime
-        let edited = message.isEdited ? ", edited" : ""
+        let edited = message.isEdited ? MessageBubbleL10n.editedSuffix : ""
         return "\(sender): \(content), \(time)\(edited)"
     }
 
@@ -372,9 +393,7 @@ struct ChatMessage: Identifiable, Sendable {
     let audioData: Data?
 
     var formattedTime: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return formatter.string(from: timestamp)
+        timestamp.formatted(date: .omitted, time: .shortened)
     }
 }
 
@@ -383,43 +402,43 @@ struct ChatMessage: Identifiable, Sendable {
 extension ChatMessage {
     static let sampleMessages: [ChatMessage] = [
         ChatMessage(
-            id: UUID(), senderName: "Alice", senderAvatarData: nil,
+            id: UUID(), senderName: MessageBubbleL10n.previewAlice, senderAvatarData: nil,
             isFromMe: false, showSenderName: false,
-            text: "Hey! Are you at the event yet?",
+            text: MessageBubbleL10n.previewQuestion,
             contentType: .text, deliveryStatus: .read,
             timestamp: Date().addingTimeInterval(-3600),
             isEdited: false, replyPreview: nil, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil
         ),
         ChatMessage(
-            id: UUID(), senderName: "Me", senderAvatarData: nil,
+            id: UUID(), senderName: MessageBubbleL10n.previewMe, senderAvatarData: nil,
             isFromMe: true, showSenderName: false,
-            text: "Just arrived! Where are you?",
+            text: MessageBubbleL10n.previewArrival,
             contentType: .text, deliveryStatus: .read,
             timestamp: Date().addingTimeInterval(-3500),
             isEdited: false, replyPreview: nil, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil
         ),
         ChatMessage(
-            id: UUID(), senderName: "Alice", senderAvatarData: nil,
+            id: UUID(), senderName: MessageBubbleL10n.previewAlice, senderAvatarData: nil,
             isFromMe: false, showSenderName: false,
-            text: "I'm near the Pyramid Stage! Bicep is about to start",
+            text: MessageBubbleL10n.previewPyramid,
             contentType: .text, deliveryStatus: .delivered,
             timestamp: Date().addingTimeInterval(-3400),
-            isEdited: false, replyPreview: "Just arrived! Where are you?", imageData: nil,
+            isEdited: false, replyPreview: MessageBubbleL10n.previewArrival, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil
         ),
         ChatMessage(
-            id: UUID(), senderName: "Me", senderAvatarData: nil,
+            id: UUID(), senderName: MessageBubbleL10n.previewMe, senderAvatarData: nil,
             isFromMe: true, showSenderName: false,
-            text: "On my way! Save me a spot",
+            text: MessageBubbleL10n.previewOnMyWay,
             contentType: .text, deliveryStatus: .sent,
             timestamp: Date().addingTimeInterval(-60),
             isEdited: true, replyPreview: nil, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil
         ),
         ChatMessage(
-            id: UUID(), senderName: "Alice", senderAvatarData: nil,
+            id: UUID(), senderName: MessageBubbleL10n.previewAlice, senderAvatarData: nil,
             isFromMe: false, showSenderName: false,
             text: "",
             contentType: .voiceNote, deliveryStatus: .delivered,

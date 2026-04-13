@@ -1,5 +1,34 @@
 import SwiftUI
 
+private enum EventCardL10n {
+    static let joined = String(localized: "events.discovery.card.joined", defaultValue: "Joined")
+    static let join = String(localized: "events.discovery.card.join", defaultValue: "Join")
+
+    static func attendees(_ count: Int) -> String {
+        String(
+            format: String(localized: "events.discovery.card.attendees", defaultValue: "%d attendees"),
+            locale: Locale.current,
+            count
+        )
+    }
+
+    static func leave(_ name: String) -> String {
+        String(
+            format: String(localized: "events.discovery.card.leave.accessibility", defaultValue: "Leave %@"),
+            locale: Locale.current,
+            name
+        )
+    }
+
+    static func join(_ name: String) -> String {
+        String(
+            format: String(localized: "events.discovery.card.join.accessibility", defaultValue: "Join %@"),
+            locale: Locale.current,
+            name
+        )
+    }
+}
+
 // MARK: - EventCard
 
 /// Glassmorphism card for browsing events in the discovery tab.
@@ -34,7 +63,7 @@ struct EventCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(event.name), \(event.location), \(event.attendeeCount) attendees")
+        .accessibilityLabel("\(event.name), \(event.location), \(EventCardL10n.attendees(event.attendeeCount))")
         .accessibilityAddTraits(.isButton)
         ._onButtonGesture { pressing in
             isPressed = pressing
@@ -112,7 +141,7 @@ struct EventCard: View {
                     .font(theme.typography.caption)
                     .foregroundStyle(theme.colors.mutedText)
             }
-            .accessibilityLabel("\(event.attendeeCount) attendees")
+            .accessibilityLabel(EventCardL10n.attendees(event.attendeeCount))
 
             Spacer()
         }
@@ -124,7 +153,7 @@ struct EventCard: View {
         Button {
             onJoinToggle()
         } label: {
-            Text(event.isJoined ? "Joined" : "Join")
+            Text(event.isJoined ? EventCardL10n.joined : EventCardL10n.join)
                 .font(.custom(BlipFontName.semiBold, size: 13, relativeTo: .footnote))
                 .foregroundStyle(event.isJoined ? .blipAccentPurple : .white)
                 .padding(.horizontal, BlipSpacing.md)
@@ -138,16 +167,14 @@ struct EventCard: View {
         }
         .buttonStyle(.plain)
         .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
-        .accessibilityLabel(event.isJoined ? "Leave \(event.name)" : "Join \(event.name)")
+        .accessibilityLabel(event.isJoined ? EventCardL10n.leave(event.name) : EventCardL10n.join(event.name))
     }
 
     // MARK: - Helpers
 
     private var formattedDateRange: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        let start = formatter.string(from: event.startDate)
-        let end = formatter.string(from: event.endDate)
+        let start = event.startDate.formatted(date: .abbreviated, time: .omitted)
+        let end = event.endDate.formatted(date: .abbreviated, time: .omitted)
         return "\(start) – \(end)"
     }
 }

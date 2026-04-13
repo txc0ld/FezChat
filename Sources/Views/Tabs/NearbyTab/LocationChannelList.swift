@@ -1,5 +1,26 @@
 import SwiftUI
 
+private enum LocationChannelListL10n {
+    static let nearbyChannels = String(localized: "nearby.location_channels.title", defaultValue: "Nearby Channels")
+    static let noChannels = String(localized: "nearby.location_channels.empty.title", defaultValue: "No channels nearby")
+    static let noChannelsSubtitle = String(localized: "nearby.location_channels.empty.subtitle", defaultValue: "Channels appear when people are chatting in your area")
+    static let autoJoined = String(localized: "nearby.location_channels.auto_joined", defaultValue: "Auto-joined")
+    static let tapToJoin = String(localized: "nearby.location_channels.tap_to_join", defaultValue: "Tap to join")
+    static let previewMainField = String(localized: "nearby.location_channels.preview.main_field", defaultValue: "Main Field")
+    static let previewFoodTrucks = String(localized: "nearby.location_channels.preview.food_trucks", defaultValue: "Anyone know where the food trucks are?")
+    static let previewCampingAreaB = String(localized: "nearby.location_channels.preview.camping_area_b", defaultValue: "Camping Area B")
+    static let previewShowers = String(localized: "nearby.location_channels.preview.showers", defaultValue: "The showers are open until midnight")
+    static let previewCarPark3 = String(localized: "nearby.location_channels.preview.car_park_3", defaultValue: "Car Park 3")
+
+    static func memberCount(_ count: Int) -> String {
+        String(format: String(localized: "nearby.location_channels.member_count", defaultValue: "%d %@"), locale: Locale.current, count, count == 1 ? "person" : "people")
+    }
+
+    static func channelAccessibility(_ name: String, _ count: Int) -> String {
+        String(format: String(localized: "nearby.location_channels.accessibility_label", defaultValue: "%@, %d members"), locale: Locale.current, name, count)
+    }
+}
+
 // MARK: - LocationChannelList
 
 /// Auto-discovered location channels displayed as a scrollable list.
@@ -33,7 +54,7 @@ struct LocationChannelList: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.blipAccentPurple)
 
-            Text("Nearby Channels")
+            Text(LocationChannelListL10n.nearbyChannels)
                 .font(theme.typography.headline)
                 .foregroundStyle(theme.colors.text)
 
@@ -76,11 +97,11 @@ struct LocationChannelList: View {
                     .font(.system(size: 28))
                     .foregroundStyle(theme.colors.mutedText)
 
-                Text("No channels nearby")
+                Text(LocationChannelListL10n.noChannels)
                     .font(theme.typography.body)
                     .foregroundStyle(theme.colors.mutedText)
 
-                Text("Channels appear when people are chatting in your area")
+                Text(LocationChannelListL10n.noChannelsSubtitle)
                     .font(theme.typography.secondary)
                     .foregroundStyle(theme.colors.mutedText.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -124,7 +145,7 @@ private struct LocationChannelCard: View {
                             .foregroundStyle(theme.colors.text)
                             .lineLimit(1)
 
-                        Text(channel.isAutoJoined ? "Auto-joined" : "Tap to join")
+                        Text(channel.isAutoJoined ? LocationChannelListL10n.autoJoined : LocationChannelListL10n.tapToJoin)
                             .font(theme.typography.caption)
                             .foregroundStyle(.blipAccentPurple.opacity(0.8))
                     }
@@ -136,7 +157,7 @@ private struct LocationChannelCard: View {
                         .font(.system(size: 10))
                         .foregroundStyle(theme.colors.mutedText)
 
-                    Text("\(channel.memberCount) \(channel.memberCount == 1 ? "person" : "people")")
+                    Text(LocationChannelListL10n.memberCount(channel.memberCount))
                         .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
                 }
@@ -167,7 +188,7 @@ private struct LocationChannelCard: View {
             borderOpacity: 0.12
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(channel.name), \(channel.memberCount) members")
+        .accessibilityLabel(LocationChannelListL10n.channelAccessibility(channel.name, channel.memberCount))
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -196,27 +217,27 @@ struct LocationChannelItem: Identifiable, Equatable {
     let channels: [LocationChannelItem] = [
         LocationChannelItem(
             id: UUID(),
-            name: "Main Field",
+            name: LocationChannelListL10n.previewMainField,
             iconName: "mappin.and.ellipse",
             memberCount: 42,
-            lastMessagePreview: "Anyone know where the food trucks are?",
+            lastMessagePreview: LocationChannelListL10n.previewFoodTrucks,
             lastActivityAt: Date().addingTimeInterval(-120),
             isAutoJoined: true,
             geohash: "gcpu2e"
         ),
         LocationChannelItem(
             id: UUID(),
-            name: "Camping Area B",
+            name: LocationChannelListL10n.previewCampingAreaB,
             iconName: "tent.fill",
             memberCount: 18,
-            lastMessagePreview: "The showers are open until midnight",
+            lastMessagePreview: LocationChannelListL10n.previewShowers,
             lastActivityAt: Date().addingTimeInterval(-300),
             isAutoJoined: false,
             geohash: "gcpu2f"
         ),
         LocationChannelItem(
             id: UUID(),
-            name: "Car Park 3",
+            name: LocationChannelListL10n.previewCarPark3,
             iconName: "car.fill",
             memberCount: 7,
             lastMessagePreview: nil,

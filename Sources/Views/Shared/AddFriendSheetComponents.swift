@@ -1,5 +1,19 @@
 import SwiftUI
 
+private enum AddFriendSheetComponentsL10n {
+    static let keysAvailable = String(localized: "friends.add_friend.result.keys_available", defaultValue: "Keys available")
+    static let noEncryptionKeys = String(localized: "friends.add_friend.result.no_encryption_keys", defaultValue: "No encryption keys")
+    static let sendFriendRequest = String(localized: "friends.add_friend.result.send_request", defaultValue: "Send Friend Request")
+
+    static func sendRequestAccessibility(_ username: String) -> String {
+        String(
+            format: String(localized: "friends.add_friend.result.send_request.accessibility", defaultValue: "Send friend request to %@"),
+            locale: Locale.current,
+            username
+        )
+    }
+}
+
 // MARK: - Add Friend Sheet Components
 
 /// Extracted card components for AddFriendByUsernameSheet.
@@ -67,7 +81,7 @@ enum AddFriendSheetComponents {
                             }
                         }
 
-                        Text(result.noisePublicKey != nil ? "Keys available" : "No encryption keys")
+                        Text(result.noisePublicKey != nil ? AddFriendSheetComponentsL10n.keysAvailable : AddFriendSheetComponentsL10n.noEncryptionKeys)
                             .font(theme.typography.caption)
                             .foregroundStyle(result.noisePublicKey != nil ? .green : theme.colors.mutedText)
                     }
@@ -84,7 +98,7 @@ enum AddFriendSheetComponents {
                                 .tint(.white)
                         } else {
                             Image(systemName: "person.badge.plus")
-                            Text("Send Friend Request")
+                            Text(AddFriendSheetComponentsL10n.sendFriendRequest)
                         }
                     }
                     .font(.custom(BlipFontName.semiBold, size: 15, relativeTo: .body))
@@ -98,7 +112,7 @@ enum AddFriendSheetComponents {
                     .opacity(result.noisePublicKey == nil ? 0.5 : 1.0)
                 }
                 .disabled(isSending || result.noisePublicKey == nil)
-                .accessibilityLabel("Send friend request to \(result.username)")
+                .accessibilityLabel(AddFriendSheetComponentsL10n.sendRequestAccessibility(result.username))
             }
         }
     }

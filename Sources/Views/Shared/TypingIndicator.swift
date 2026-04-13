@@ -1,5 +1,9 @@
 import SwiftUI
 
+private enum TypingIndicatorL10n {
+    static let accessibility = String(localized: "common.typing_indicator.accessibility", defaultValue: "Someone is typing")
+}
+
 // MARK: - TypingIndicator
 
 /// Three glass dots with sequential scale pulse animation.
@@ -46,7 +50,7 @@ struct TypingIndicator: View {
         .onAppear {
             startAnimation()
         }
-        .accessibilityLabel("Someone is typing")
+        .accessibilityLabel(TypingIndicatorL10n.accessibility)
     }
 
     // MARK: - Dot
