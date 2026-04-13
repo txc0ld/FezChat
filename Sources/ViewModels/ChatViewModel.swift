@@ -493,6 +493,34 @@ final class ChatViewModel {
         }
     }
 
+    /// Resolve a PeerID's raw bytes to a human-readable display name.
+    ///
+    /// Lookup order: PeerStore username → SwiftData User displayName → hex fallback.
+    private func resolveDisplayName(for peerData: Data) -> String {
+        if let peerInfo = PeerStore.shared.findPeer(byPeerIDBytes: peerData),
+           let username = peerInfo.username {
+            let targetUsername = username
+            var descriptor = FetchDescriptor<User>(
+                predicate: #Predicate<User> { $0.username == targetUsername }
+            )
+            descriptor.fetchLimit = 1
+            do {
+                if let user = try context.fetch(descriptor).first {
+                    return user.resolvedDisplayName
+                }
+            } catch {
+                DebugLogger.shared.log("CHAT", "Failed to fetch user for typing indicator: \(error.localizedDescription)")
+            }
+            return username
+        }
+
+        let peerLabel = peerData
+            .prefix(4)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "Peer \(peerLabel)"
+    }
+
     // MARK: - Unread Counts
 
     /// Mark a channel as read up to the current time.
@@ -740,13 +768,11 @@ extension ChatViewModel: MessageServiceDelegate {
     }
 
     nonisolated func messageService(_ service: MessageService, didReceiveTypingIndicatorFrom peerID: PeerID, in channelID: UUID) {
-        let peerLabel = peerID.bytes
-            .prefix(4)
-            .map { String(format: "%02x", $0) }
-            .joined()
+        let peerData = peerID.bytes
 
         Task { @MainActor in
-            self.handleTypingIndicator(from: "Peer \(peerLabel)", in: channelID)
+            let displayName = self.resolveDisplayName(for: peerData)
+            self.handleTypingIndicator(from: displayName, in: channelID)
         }
     }
 
