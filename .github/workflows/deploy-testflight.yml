@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     env:
       XCODE_SCHEME: Blip
@@ -49,9 +49,9 @@ jobs:
       - name: Select Xcode & install iOS platform
         run: |
           set -euo pipefail
-          XCODE=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
           if [ -z "$XCODE" ]; then
-            echo "::error::No Xcode 16 installation found on the runner"
+            echo "::error::No Xcode 26 installation found on the runner"
             exit 1
           fi
 
