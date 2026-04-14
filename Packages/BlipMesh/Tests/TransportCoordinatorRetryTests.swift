@@ -39,26 +39,55 @@ private func makeRunningCoordinator() -> (coordinator: TransportCoordinator, ble
     return (coordinator, ble, delegate)
 }
 
-@Suite("TransportCoordinator retry exhaustion")
+@Suite("TransportCoordinator onSendFailed callback")
 struct TransportCoordinatorRetryTests {
-    @Test("Queued direct message notifies delegate after max retries")
-    func queuedMessageFailureCallback() throws {
-        let (coordinator, ble, delegate) = makeRunningCoordinator()
+    @Test("onSendFailed fires when both transports fail to deliver")
+    func onSendFailedCallbackFires() throws {
+        let (coordinator, _, _) = makeRunningCoordinator()
         let targetPeer = makeRetryTestPeerID(0x11)
-        let triggerPeer = makeRetryTestPeerID(0x22)
-        let payload = Data("failed-after-retries".utf8)
+        let payload = Data("no-transport".utf8)
 
-        coordinator.send(data: payload, to: targetPeer)
-        #expect(coordinator.localQueueCount == 1)
-
-        for _ in 0...TransportCoordinator.maxRetries {
-            coordinator.transport(ble, didConnect: triggerPeer)
-            Thread.sleep(forTimeInterval: 0.02)
+        var failedCalls: [(Data, PeerID?)] = []
+        coordinator.onSendFailed = { data, peer in
+            failedCalls.append((data, peer))
         }
 
-        #expect(coordinator.localQueueCount == 0)
-        #expect(delegate.failedDeliveries.count == 1)
-        #expect(delegate.failedDeliveries[0].data == payload)
-        #expect(delegate.failedDeliveries[0].to == targetPeer)
+        // BLE is running but peer isn't connected → BLE throws.
+        // WebSocket not running → onSendFailed fires.
+        coordinator.send(data: payload, to: targetPeer)
+
+        #expect(failedCalls.count == 1)
+        #expect(failedCalls[0].0 == payload)
+        #expect(failedCalls[0].1 == targetPeer)
+    }
+
+    @Test("onSendFailed not called when no callback is set")
+    func noCallbackSetDoesNotCrash() throws {
+        let (coordinator, _, _) = makeRunningCoordinator()
+        let targetPeer = makeRetryTestPeerID(0x22)
+        let payload = Data("silent-fail".utf8)
+
+        // No onSendFailed set — should not crash
+        coordinator.onSendFailed = nil
+        coordinator.send(data: payload, to: targetPeer)
+    }
+
+    @Test("Multiple send failures each invoke onSendFailed")
+    func multipleFailuresCallbackMultipleTimes() throws {
+        let (coordinator, _, _) = makeRunningCoordinator()
+        let peer1 = makeRetryTestPeerID(0x11)
+        let peer2 = makeRetryTestPeerID(0x22)
+
+        var failedCalls: [(Data, PeerID?)] = []
+        coordinator.onSendFailed = { data, peer in
+            failedCalls.append((data, peer))
+        }
+
+        coordinator.send(data: Data("msg1".utf8), to: peer1)
+        coordinator.send(data: Data("msg2".utf8), to: peer2)
+
+        #expect(failedCalls.count == 2)
+        #expect(failedCalls[0].1 == peer1)
+        #expect(failedCalls[1].1 == peer2)
     }
 }
