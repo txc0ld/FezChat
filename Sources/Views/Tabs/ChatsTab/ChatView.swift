@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import BlipProtocol
 
 private enum ChatViewL10n {
     static let recording = String(localized: "chat.recording.label", defaultValue: "Recording...")
@@ -28,13 +29,10 @@ private enum ChatViewL10n {
 
     static let jumpToLatestSingle = String(localized: "chat.jump_to_latest.accessibility.single", defaultValue: "Jump to latest message")
 
-    // Transport indicator
-    static let transportBLE = String(localized: "chat.transport.ble", defaultValue: "Mesh")
-    static let transportRelay = String(localized: "chat.transport.relay", defaultValue: "Relay")
-    static let transportBLEAccessibility = String(localized: "chat.transport.ble.accessibility", defaultValue: "Messages via Bluetooth mesh")
-    static let transportRelayAccessibility = String(localized: "chat.transport.relay.accessibility", defaultValue: "Messages via internet relay")
-    static let transportBothAccessibility = String(localized: "chat.transport.both.accessibility", defaultValue: "Messages via Bluetooth mesh and internet relay")
-    static let transportOfflineAccessibility = String(localized: "chat.transport.offline.accessibility", defaultValue: "No transport available")
+    static let meshAccessibility = String(localized: "chat.transport.ble.accessibility", defaultValue: "Messages via Bluetooth mesh")
+    static let relayAccessibility = String(localized: "chat.transport.relay.accessibility", defaultValue: "Messages via internet relay")
+    static let bothTransportsAccessibility = String(localized: "chat.transport.both.accessibility", defaultValue: "Messages via Bluetooth mesh and internet relay")
+    static let offlineTransportAccessibility = String(localized: "chat.transport.offline.accessibility", defaultValue: "No transport available")
 }
 
 // MARK: - ChatView
@@ -262,14 +260,51 @@ struct ChatView: View {
 
     // MARK: - Transport State
 
-    /// Whether BLE mesh transport is active.
-    private var isBLEActive: Bool {
-        coordinator.meshViewModel?.isBLEActive ?? false
-    }
+    /// Computes transport availability for this specific conversation.
+    /// Prefers direct peer reachability for DMs and falls back to recent message transport evidence.
+    private var conversationTransportState: (mesh: Bool, relay: Bool) {
+        let recentMessages = messages.suffix(20)
+        let hasRecentMesh = recentMessages.contains { !$0.isRelayed }
+        let hasRecentRelay = recentMessages.contains(where: { $0.isRelayed })
 
-    /// Whether WebSocket relay transport is connected.
-    private var isWebSocketConnected: Bool {
-        coordinator.meshViewModel?.isWebSocketConnected ?? false
+        guard
+            let channel = chatViewModel?.activeChannel,
+            channel.type == .dm
+        else {
+            return (hasRecentMesh, hasRecentRelay)
+        }
+
+        let localNoiseKey = coordinator.identity?.noisePublicKey.rawRepresentation
+        let remoteUser = channel.memberships.compactMap(\.user).first { user in
+            guard !user.noisePublicKey.isEmpty else { return false }
+            if let localNoiseKey {
+                return user.noisePublicKey != localNoiseKey
+            }
+            return true
+        }
+
+        guard let remoteUser else {
+            return (hasRecentMesh, hasRecentRelay)
+        }
+
+        let peerIDBytes: Data
+        if let peer = coordinator.peerStore.peer(byNoisePublicKey: remoteUser.noisePublicKey) {
+            peerIDBytes = peer.peerID
+        } else if remoteUser.noisePublicKey.count == PeerID.length {
+            peerIDBytes = remoteUser.noisePublicKey
+        } else {
+            peerIDBytes = PeerID(noisePublicKey: remoteUser.noisePublicKey).bytes
+        }
+
+        let isNearbyViaMesh = coordinator.meshViewModel?.nearbyPeers.contains(where: {
+            $0.isDirectPeer && $0.peerID == peerIDBytes
+        }) ?? false
+
+        let relayConnected = coordinator.messageService?.transportAvailabilitySnapshot()?.webSocket ?? hasRecentRelay
+        let meshAvailable = isNearbyViaMesh || hasRecentMesh
+        let relayAvailable = hasRecentRelay || (!isNearbyViaMesh && relayConnected)
+
+        return (meshAvailable, relayAvailable)
     }
 
     // MARK: - Navigation Title
@@ -325,39 +360,32 @@ struct ChatView: View {
     /// Small inline indicator showing whether messages route via BLE mesh or WebSocket relay.
     @ViewBuilder
     private var transportIndicator: some View {
-        let bleActive = isBLEActive
-        let wsActive = isWebSocketConnected
+        let state = conversationTransportState
+        let meshAvailable = state.mesh
+        let relayAvailable = state.relay
 
-        if bleActive || wsActive {
+        if meshAvailable || relayAvailable {
             HStack(spacing: 3) {
                 Text("\u{00B7}")
                     .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
                     .foregroundStyle(theme.colors.mutedText)
 
-                if bleActive {
+                if meshAvailable {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.blipAccentPurple)
-
-                    Text(ChatViewL10n.transportBLE)
-                        .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
-                        .foregroundStyle(theme.colors.mutedText)
                 }
 
-                if bleActive && wsActive {
+                if meshAvailable && relayAvailable {
                     Text("+")
                         .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
                         .foregroundStyle(theme.colors.mutedText)
                 }
 
-                if wsActive {
+                if relayAvailable {
                     Image(systemName: "cloud.fill")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.blipAccentPurple)
-
-                    Text(ChatViewL10n.transportRelay)
-                        .font(.custom(BlipFontName.regular, size: 12, relativeTo: .caption2))
-                        .foregroundStyle(theme.colors.mutedText)
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -367,25 +395,26 @@ struct ChatView: View {
                     ? .opacity
                     : .opacity.combined(with: .scale(scale: 0.9))
             )
-            .animation(SpringConstants.gentleAnimation, value: bleActive)
-            .animation(SpringConstants.gentleAnimation, value: wsActive)
+            .animation(SpringConstants.gentleAnimation, value: meshAvailable)
+            .animation(SpringConstants.gentleAnimation, value: relayAvailable)
         }
     }
 
     /// Accessibility label for the transport indicator.
     private var transportAccessibilityLabel: String {
-        let bleActive = isBLEActive
-        let wsActive = isWebSocketConnected
+        let state = conversationTransportState
+        let meshAvailable = state.mesh
+        let relayAvailable = state.relay
 
-        switch (bleActive, wsActive) {
+        switch (meshAvailable, relayAvailable) {
         case (true, true):
-            return ChatViewL10n.transportBothAccessibility
+            return ChatViewL10n.bothTransportsAccessibility
         case (true, false):
-            return ChatViewL10n.transportBLEAccessibility
+            return ChatViewL10n.meshAccessibility
         case (false, true):
-            return ChatViewL10n.transportRelayAccessibility
+            return ChatViewL10n.relayAccessibility
         case (false, false):
-            return ChatViewL10n.transportOfflineAccessibility
+            return ChatViewL10n.offlineTransportAccessibility
         }
     }
 
