@@ -748,9 +748,9 @@ final class MessageService: @unchecked Sendable {
                     case .noiseHandshake:
                         try await self.handleNoiseHandshake(packet, from: peerID)
                     case .noiseEncrypted:
-                        try await self.handleEncryptedPacket(packet, from: peerID)
+                        try await self.handleEncryptedPacket(packet, from: peerID, ingressTransport: ingressTransport)
                     case .meshBroadcast:
-                        try await self.handleBroadcastMessage(packet)
+                        try await self.handleBroadcastMessage(packet, ingressTransport: ingressTransport)
                     case .sosAlert, .sosAccept, .sosPreciseLocation, .sosResolve, .sosNearbyAssist:
                         try await self.handleSOSPacket(packet)
                     case .locationShare, .locationRequest, .proximityPing, .iAmHereBeacon:
@@ -758,7 +758,7 @@ final class MessageService: @unchecked Sendable {
                     case .pttAudio:
                         try await self.handlePTTAudio(packet, from: peerID)
                     case .orgAnnouncement:
-                        try await self.handleOrgAnnouncement(packet)
+                        try await self.handleOrgAnnouncement(packet, ingressTransport: ingressTransport)
                     case .leave:
                         self.handleLeave(packet)
                     case .fragment:

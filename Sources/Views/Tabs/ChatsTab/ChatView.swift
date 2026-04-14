@@ -560,7 +560,8 @@ struct ChatView: View {
                 imageData: message.attachments.first?.fullData ?? message.attachments.first?.thumbnail,
                 voiceNoteDuration: message.attachments.first(where: { $0.isAudio })?.duration,
                 waveformSamples: [],
-                audioData: message.attachments.first(where: { $0.isAudio })?.fullData
+                audioData: message.attachments.first(where: { $0.isAudio })?.fullData,
+                isRelayed: message.isRelayed
             )
         }
     }

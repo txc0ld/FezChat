@@ -336,13 +336,13 @@ extension MessageService {
     }
 
     @MainActor
-    func handleEncryptedPacket(_ packet: Packet, from peerID: PeerID) async throws {
+    func handleEncryptedPacket(_ packet: Packet, from peerID: PeerID, ingressTransport: PeerIngressTransport) async throws {
         let senderHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         let peerBytes = peerID.bytes
 
         // Broadcast (no recipient) → sender-key encrypted group message
         if !packet.flags.contains(.hasRecipient) {
-            try await handleSenderKeyEncryptedPacket(packet, from: peerID, senderHex: senderHex)
+            try await handleSenderKeyEncryptedPacket(packet, from: peerID, senderHex: senderHex, ingressTransport: ingressTransport)
             return
         }
 
@@ -369,12 +369,12 @@ extension MessageService {
             return
         }
 
-        try await dispatchDecryptedPayload(decryptedPayload, packet: packet, from: peerID, senderHex: senderHex)
+        try await dispatchDecryptedPayload(decryptedPayload, packet: packet, from: peerID, senderHex: senderHex, ingressTransport: ingressTransport)
     }
 
     /// Decrypt and dispatch a sender-key encrypted group broadcast packet.
     @MainActor
-    private func handleSenderKeyEncryptedPacket(_ packet: Packet, from peerID: PeerID, senderHex: String) async throws {
+    private func handleSenderKeyEncryptedPacket(_ packet: Packet, from peerID: PeerID, senderHex: String, ingressTransport: PeerIngressTransport) async throws {
         guard let senderKeyManager else {
             DebugLogger.shared.log("CRYPTO", "Dropped group packet from \(senderHex): SenderKeyManager not configured", isError: true)
             return
@@ -407,12 +407,12 @@ extension MessageService {
             return
         }
 
-        try await dispatchDecryptedPayload(decryptedPayload, packet: packet, from: peerID, senderHex: senderHex)
+        try await dispatchDecryptedPayload(decryptedPayload, packet: packet, from: peerID, senderHex: senderHex, ingressTransport: ingressTransport)
     }
 
     /// Decompress, extract sub-type, and dispatch a decrypted payload to the appropriate handler.
     @MainActor
-    private func dispatchDecryptedPayload(_ decryptedPayload: Data, packet: Packet, from peerID: PeerID, senderHex: String) async throws {
+    private func dispatchDecryptedPayload(_ decryptedPayload: Data, packet: Packet, from peerID: PeerID, senderHex: String, ingressTransport: PeerIngressTransport) async throws {
         // Decompress if needed
         var payload = decryptedPayload
         if packet.flags.contains(.isCompressed) {
@@ -433,7 +433,8 @@ extension MessageService {
                 data: Data(contentData),
                 subType: subType,
                 senderPeerID: packet.senderID,
-                timestamp: packet.date
+                timestamp: packet.date,
+                ingressTransport: ingressTransport
             )
         case .deliveryAck:
             handleDeliveryAck(data: Data(contentData))
@@ -446,14 +447,16 @@ extension MessageService {
                 data: Data(contentData),
                 type: .voiceNote,
                 senderPeerID: packet.senderID,
-                timestamp: packet.date
+                timestamp: packet.date,
+                ingressTransport: ingressTransport
             )
         case .imageMessage:
             try await handleIncomingMedia(
                 data: Data(contentData),
                 type: .image,
                 senderPeerID: packet.senderID,
-                timestamp: packet.date
+                timestamp: packet.date,
+                ingressTransport: ingressTransport
             )
         case .friendRequest:
             try await handleFriendRequest(data: Data(contentData), from: packet.senderID)
@@ -533,7 +536,8 @@ extension MessageService {
         data: Data,
         subType: EncryptedSubType,
         senderPeerID: PeerID,
-        timestamp: Date
+        timestamp: Date,
+        ingressTransport: PeerIngressTransport
     ) async throws {
         let senderHex = senderPeerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         DebugLogger.shared.log("DM", "handleIncomingMessage: \(data.count)B from \(senderHex) subType=\(subType)")
@@ -597,6 +601,7 @@ extension MessageService {
             type: .text,
             rawPayload: content,
             status: .delivered,
+            isRelayed: ingressTransport == .relay,
             createdAt: timestamp
         )
 
@@ -658,7 +663,8 @@ extension MessageService {
         data: Data,
         type: MessageType,
         senderPeerID: PeerID,
-        timestamp: Date
+        timestamp: Date,
+        ingressTransport: PeerIngressTransport
     ) async throws {
         let context = self.context
 
@@ -685,6 +691,7 @@ extension MessageService {
             type: type == .voiceNote ? .voiceNote : .image,
             rawPayload: Data(),
             status: .delivered,
+            isRelayed: ingressTransport == .relay,
             createdAt: timestamp
         )
 
@@ -706,7 +713,7 @@ extension MessageService {
     }
 
     @MainActor
-    func handleBroadcastMessage(_ packet: Packet) async throws {
+    func handleBroadcastMessage(_ packet: Packet, ingressTransport: PeerIngressTransport) async throws {
         let context = self.context
 
         let parsedPayload = MessagePayloadBuilder.parsePublicChannelTextPayload(packet.payload)
@@ -730,6 +737,7 @@ extension MessageService {
                 type: .text,
                 rawPayload: parsedPayload.content,
                 status: .delivered,
+                isRelayed: ingressTransport == .relay,
                 createdAt: packet.date
             )
 
@@ -789,6 +797,7 @@ extension MessageService {
             type: .text,
             rawPayload: content,
             status: .delivered,
+            isRelayed: ingressTransport == .relay,
             createdAt: packet.date
         )
         context.insert(message)
@@ -852,7 +861,7 @@ extension MessageService {
     }
 
     @MainActor
-    func handleOrgAnnouncement(_ packet: Packet) async throws {
+    func handleOrgAnnouncement(_ packet: Packet, ingressTransport: PeerIngressTransport) async throws {
         let context = self.context
 
         let channel: Channel
@@ -869,6 +878,7 @@ extension MessageService {
             type: .text,
             rawPayload: packet.payload,
             status: .delivered,
+            isRelayed: ingressTransport == .relay,
             createdAt: packet.date
         )
         context.insert(message)
