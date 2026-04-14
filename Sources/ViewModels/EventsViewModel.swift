@@ -168,6 +168,7 @@ final class EventsViewModel {
     private let context: ModelContext
     private let locationService: LocationService
     private let notificationService: NotificationService
+    private var previousAnnouncementIDs: Set<UUID> = []
     @ObservationIgnored nonisolated(unsafe) private var geofenceObservation: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var announcementObservation: NSObjectProtocol?
 
@@ -719,7 +720,7 @@ final class EventsViewModel {
             }
 
             let messages = channel.messages.sorted { $0.createdAt > $1.createdAt }
-            announcements = messages.compactMap { message in
+            let items: [AnnouncementItem] = messages.compactMap { message in
                 guard let text = String(data: message.rawPayload, encoding: .utf8),
                       !text.isEmpty else { return nil }
 
@@ -744,6 +745,19 @@ final class EventsViewModel {
                     isPinned: false
                 )
             }
+            announcements = items
+
+            let currentIDs = Set(items.map(\.id))
+            let newIDs = currentIDs.subtracting(previousAnnouncementIDs)
+            if !previousAnnouncementIDs.isEmpty {
+                for item in items where newIDs.contains(item.id) {
+                    notificationService.notifyOrgAnnouncement(
+                        eventName: activeEvent?.name ?? "Event",
+                        message: item.message
+                    )
+                }
+            }
+            previousAnnouncementIDs = currentIDs
         } catch {
             DebugLogger.shared.log("EVENT", "Failed to fetch announcements: \(error.localizedDescription)")
             announcements = []

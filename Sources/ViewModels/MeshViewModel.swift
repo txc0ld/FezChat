@@ -164,10 +164,14 @@ final class MeshViewModel {
 
     // MARK: - Init
 
-    init(modelContainer: ModelContainer, peerStore: PeerStore = .shared) {
+    private let notificationService: NotificationService
+    private var previousNearbyFriendIDs: Set<UUID> = []
+
+    init(modelContainer: ModelContainer, peerStore: PeerStore = .shared, notificationService: NotificationService = NotificationService()) {
         self.modelContainer = modelContainer
         self.context = ModelContext(modelContainer)
         self.peerStore = peerStore
+        self.notificationService = notificationService
         setupObservers()
     }
 
@@ -299,6 +303,17 @@ final class MeshViewModel {
         }
 
         nearbyFriends = nearby.sorted { $0.rssi > $1.rssi }
+
+        let currentIDs = Set(nearby.map(\.id))
+        let newFriendIDs = currentIDs.subtracting(previousNearbyFriendIDs)
+        for friend in nearby where newFriendIDs.contains(friend.id) {
+            notificationService.notifyFriendNearby(
+                friendName: friend.displayName,
+                friendID: friend.id,
+                distance: friend.rssi
+            )
+        }
+        previousNearbyFriendIDs = currentIDs
     }
 
     // MARK: - Nearby Peers (All)

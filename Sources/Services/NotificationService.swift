@@ -32,12 +32,14 @@ enum BlipNotificationAction: String, Sendable {
     case declineFriend = "com.blip.action.declineFriend"
     case viewMap = "com.blip.action.viewMap"
     case respondSOS = "com.blip.action.respondSOS"
+    case openConversation = "com.blip.action.openConversation"
 }
 
 // MARK: - Notification Service Delegate
 
 protocol NotificationServiceDelegate: AnyObject, Sendable {
     func notificationService(_ service: NotificationService, didReceiveAction action: BlipNotificationAction, with userInfo: [String: Any])
+    func notificationService(_ service: NotificationService, didReceiveReplyText text: String, with userInfo: [String: Any])
 }
 
 // MARK: - Notification Service
@@ -520,13 +522,14 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        let userInfo = response.notification.request.content.userInfo
+        let info = response.notification.request.content.userInfo as? [String: Any] ?? [:]
 
-        if let action = BlipNotificationAction(rawValue: response.actionIdentifier) {
-            delegate?.notificationService(self, didReceiveAction: action, with: userInfo as? [String: Any] ?? [:])
+        if let textResponse = response as? UNTextInputNotificationResponse {
+            delegate?.notificationService(self, didReceiveReplyText: textResponse.userText, with: info)
+        } else if let action = BlipNotificationAction(rawValue: response.actionIdentifier) {
+            delegate?.notificationService(self, didReceiveAction: action, with: info)
         } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
-            // User tapped the notification body -- delegate should navigate to the relevant screen
-            delegate?.notificationService(self, didReceiveAction: .reply, with: userInfo as? [String: Any] ?? [:])
+            delegate?.notificationService(self, didReceiveAction: .openConversation, with: info)
         }
     }
 }

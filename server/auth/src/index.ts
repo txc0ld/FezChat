@@ -1287,6 +1287,7 @@ async function handleDeviceUnregister(request: Request, env: Env): Promise<Respo
 interface InternalPushBody {
   recipientPeerIdHex?: string;
   senderPeerIdHex?: string;
+  pushType?: number;
 }
 
 async function handleInternalPush(request: Request, env: Env): Promise<Response> {
@@ -1324,11 +1325,19 @@ async function handleInternalPush(request: Request, env: Env): Promise<Response>
     const senderName: string = senderRows[0]?.username ?? "Someone";
     const conversationId = body.senderPeerIdHex;
 
+    let alertBody: string;
+    switch (body.pushType) {
+      case 0x60: alertBody = `${senderName} sent you a friend request`; break;
+      case 0x61: alertBody = `${senderName} accepted your friend request`; break;
+      case 0x40: alertBody = "SOS Alert nearby"; break;
+      default:   alertBody = `Message from ${senderName}`; break;
+    }
+
     let sent = 0;
     let failed = 0;
 
     await Promise.all(tokenRows.map(async (row: Record<string, any>) => {
-      const ok = await sendPush(String(row.token), senderName, conversationId, 1, env);
+      const ok = await sendPush(String(row.token), senderName, conversationId, 1, env, alertBody);
       if (ok) { sent++; } else { failed++; }
     }));
 

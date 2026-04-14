@@ -342,6 +342,7 @@ final class ChatViewModel {
             activeChannel = channels.first(where: { $0.id == preferredChannelID }) ?? channel
             activeMessages = try loadMessages(for: conversationChannels, context: context)
             markChannelAsRead(activeChannel ?? channel)
+            notificationService.clearNotifications(forChannel: (activeChannel ?? channel).id)
         } catch {
             errorMessage = "Failed to load messages: \(error.localizedDescription)"
         }

@@ -11,6 +11,13 @@ import UIKit
 import UserNotifications
 #endif
 
+/// Destination for notification-initiated navigation.
+enum NotificationDestination: Equatable {
+    case conversation(channelID: UUID)
+    case friendRequest(friendID: UUID)
+    case sosAlert(alertID: UUID)
+}
+
 /// Wires BLE mesh, WebSocket relay, identity, and MessageService together on launch.
 ///
 /// Lifecycle:
@@ -37,6 +44,9 @@ final class AppCoordinator {
     /// Set to `true` when registration or self-check fails; cleared when
     /// a successful verification or retry succeeds.
     private(set) var registrationSyncPending = false
+
+    /// Navigation target set by notification taps — views observe this to route.
+    var pendingNotificationNavigation: NotificationDestination?
 
     // MARK: - Services
 
@@ -153,6 +163,7 @@ final class AppCoordinator {
         teardownRuntimeState()
         ensureUserPreferencesExists(in: modelContainer)
         locationService.delegate = self
+        notificationService.delegate = self
 
         let peerID = identity.peerID
 
@@ -246,7 +257,7 @@ final class AppCoordinator {
             messageService: msgService,
             notificationService: notificationService
         )
-        self.meshViewModel = MeshViewModel(modelContainer: modelContainer, peerStore: peerStore)
+        self.meshViewModel = MeshViewModel(modelContainer: modelContainer, peerStore: peerStore, notificationService: notificationService)
         self.locationViewModel = LocationViewModel(
             modelContainer: modelContainer,
             locationService: locationService
@@ -954,5 +965,93 @@ extension AppCoordinator: LocationServiceDelegate {
         Task { @MainActor [weak self] in
             self?.logger.error("Location service error: \(error.localizedDescription)")
         }
+    }
+}
+
+// MARK: - NotificationServiceDelegate
+
+extension AppCoordinator: NotificationServiceDelegate {
+    nonisolated func notificationService(_ service: NotificationService, didReceiveAction action: BlipNotificationAction, with userInfo: [String: Any]) {
+        Task { @MainActor [weak self] in
+            self?.handleNotificationAction(action, userInfo: userInfo)
+        }
+    }
+
+    nonisolated func notificationService(_ service: NotificationService, didReceiveReplyText text: String, with userInfo: [String: Any]) {
+        Task { @MainActor [weak self] in
+            self?.handleNotificationReply(text: text, userInfo: userInfo)
+        }
+    }
+
+    private func handleNotificationAction(_ action: BlipNotificationAction, userInfo: [String: Any]) {
+        switch action {
+        case .openConversation:
+            guard let channelIDString = userInfo["channelID"] as? String,
+                  let channelID = UUID(uuidString: channelIDString) else { return }
+            pendingNotificationNavigation = .conversation(channelID: channelID)
+
+        case .markRead:
+            guard let channelIDString = userInfo["channelID"] as? String,
+                  let channelID = UUID(uuidString: channelIDString),
+                  let channel = fetchChannel(by: channelID) else { return }
+            chatViewModel?.markChannelAsRead(channel)
+
+        case .mute:
+            guard let channelIDString = userInfo["channelID"] as? String,
+                  let channelID = UUID(uuidString: channelIDString),
+                  let channel = fetchChannel(by: channelID) else { return }
+            chatViewModel?.toggleMute(for: channel)
+
+        case .acceptFriend:
+            guard let friendIDString = userInfo["friendID"] as? String,
+                  let friendID = UUID(uuidString: friendIDString),
+                  let friend = fetchFriend(by: friendID) else { return }
+            Task { try await messageService?.acceptFriendRequest(from: friend) }
+
+        case .declineFriend:
+            guard let friendIDString = userInfo["friendID"] as? String,
+                  let friendID = UUID(uuidString: friendIDString),
+                  let friend = fetchFriend(by: friendID) else { return }
+            friend.statusRaw = "declined"
+
+        case .respondSOS:
+            guard let alertIDString = userInfo["alertID"] as? String,
+                  let alertID = UUID(uuidString: alertIDString) else { return }
+            if let alert = sosViewModel?.visibleAlerts.first(where: { $0.id == alertID }) {
+                Task { await sosViewModel?.acceptAlert(alert) }
+            }
+
+        case .reply:
+            break
+
+        case .viewMap:
+            break
+        }
+    }
+
+    private func handleNotificationReply(text: String, userInfo: [String: Any]) {
+        guard !text.isEmpty,
+              let channelIDString = userInfo["channelID"] as? String,
+              let channelID = UUID(uuidString: channelIDString),
+              let channel = fetchChannel(by: channelID) else { return }
+        Task {
+            do {
+                try await messageService?.sendTextMessage(content: text, to: channel)
+            } catch {
+                logger.error("Notification reply failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func fetchChannel(by id: UUID) -> Channel? {
+        guard let context = modelContainer?.mainContext else { return nil }
+        let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.id == id })
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    private func fetchFriend(by id: UUID) -> Friend? {
+        guard let context = modelContainer?.mainContext else { return nil }
+        let descriptor = FetchDescriptor<Friend>(predicate: #Predicate { $0.id == id })
+        return (try? context.fetch(descriptor))?.first
     }
 }
