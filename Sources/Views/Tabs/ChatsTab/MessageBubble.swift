@@ -13,6 +13,8 @@ private enum MessageBubbleL10n {
     static let voiceNote = String(localized: "chat.message.content.voice_note", defaultValue: "Voice note")
     static let image = String(localized: "chat.message.content.image", defaultValue: "Image")
     static let editedSuffix = String(localized: "chat.message.accessibility.edited_suffix", defaultValue: ", edited")
+    static let viaMesh = String(localized: "chat.message.transport.mesh", defaultValue: "Sent via mesh")
+    static let viaRelay = String(localized: "chat.message.transport.relay", defaultValue: "Sent via cloud relay")
     static let previewAlice = String(localized: "chat.preview.sender.alice", defaultValue: "Alice")
     static let previewMe = String(localized: "chat.preview.sender.me", defaultValue: "Me")
     static let previewQuestion = String(localized: "chat.preview.message.question", defaultValue: "Hey! Are you at the event yet?")
@@ -143,6 +145,15 @@ struct MessageBubble: View {
 
             // Timestamp + status row
             HStack(spacing: BlipSpacing.xs) {
+                Image(systemName: message.isRelayed ? "cloud" : "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 8))
+                    .foregroundStyle(
+                        message.isFromMe
+                            ? Color.white.opacity(0.6)
+                            : theme.colors.mutedText.opacity(0.7)
+                    )
+                    .accessibilityLabel(message.isRelayed ? MessageBubbleL10n.viaRelay : MessageBubbleL10n.viaMesh)
+
                 Text(message.formattedTime)
                     .font(.custom(BlipFontName.regular, size: 10, relativeTo: .caption2))
                     .foregroundStyle(
@@ -391,6 +402,7 @@ struct ChatMessage: Identifiable, Sendable {
     let voiceNoteDuration: TimeInterval?
     let waveformSamples: [Float]
     let audioData: Data?
+    let isRelayed: Bool
 
     var formattedTime: String {
         timestamp.formatted(date: .omitted, time: .shortened)
@@ -408,7 +420,8 @@ extension ChatMessage {
             contentType: .text, deliveryStatus: .read,
             timestamp: Date().addingTimeInterval(-3600),
             isEdited: false, replyPreview: nil, imageData: nil,
-            voiceNoteDuration: nil, waveformSamples: [], audioData: nil
+            voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
+            isRelayed: false
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewMe, senderAvatarData: nil,
@@ -417,7 +430,8 @@ extension ChatMessage {
             contentType: .text, deliveryStatus: .read,
             timestamp: Date().addingTimeInterval(-3500),
             isEdited: false, replyPreview: nil, imageData: nil,
-            voiceNoteDuration: nil, waveformSamples: [], audioData: nil
+            voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
+            isRelayed: false
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewAlice, senderAvatarData: nil,
@@ -426,7 +440,8 @@ extension ChatMessage {
             contentType: .text, deliveryStatus: .delivered,
             timestamp: Date().addingTimeInterval(-3400),
             isEdited: false, replyPreview: MessageBubbleL10n.previewArrival, imageData: nil,
-            voiceNoteDuration: nil, waveformSamples: [], audioData: nil
+            voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
+            isRelayed: true
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewMe, senderAvatarData: nil,
@@ -435,7 +450,8 @@ extension ChatMessage {
             contentType: .text, deliveryStatus: .sent,
             timestamp: Date().addingTimeInterval(-60),
             isEdited: true, replyPreview: nil, imageData: nil,
-            voiceNoteDuration: nil, waveformSamples: [], audioData: nil
+            voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
+            isRelayed: false
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewAlice, senderAvatarData: nil,
@@ -446,7 +462,8 @@ extension ChatMessage {
             isEdited: false, replyPreview: nil, imageData: nil,
             voiceNoteDuration: 12.5,
             waveformSamples: [0.2, 0.4, 0.6, 0.8, 0.5, 0.3, 0.7, 0.9, 0.4, 0.2, 0.5, 0.6],
-            audioData: nil
+            audioData: nil,
+            isRelayed: true
         )
     ]
 }
