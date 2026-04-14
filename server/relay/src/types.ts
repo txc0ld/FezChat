@@ -26,6 +26,7 @@ export const PUBLIC_KEY_LENGTH = 32;
  *   11:    flags    (UInt8)
  *   12-15: payloadLength (UInt32 big-endian)
  */
+export const OFFSET_TYPE = 1;
 export const OFFSET_FLAGS = 11;
 export const OFFSET_SENDER_ID = HEADER_SIZE; // 16
 export const OFFSET_RECIPIENT_ID = HEADER_SIZE + PEER_ID_LENGTH; // 24

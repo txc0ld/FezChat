@@ -123,6 +123,13 @@ struct ChatListView: View {
         .onReceive(NotificationCenter.default.publisher(for: .didReceiveFriendAccept)) { notification in
             navigateToFriendDM(from: notification)
         }
+        .onChange(of: coordinator.pendingNotificationNavigation) { _, destination in
+            guard case .conversation(let channelID) = destination else { return }
+            if let match = conversations.first(where: { $0.id == channelID }) {
+                selectedConversation = match
+            }
+            coordinator.pendingNotificationNavigation = nil
+        }
     }
 
     // MARK: - Scroll Content

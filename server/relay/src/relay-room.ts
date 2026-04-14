@@ -8,6 +8,7 @@ import {
   bytesToHex,
   HEADER_SIZE,
   PEER_ID_LENGTH,
+  OFFSET_TYPE,
   OFFSET_FLAGS,
   OFFSET_SENDER_ID,
   OFFSET_RECIPIENT_ID,
@@ -314,10 +315,11 @@ export class RelayRoom implements DurableObject {
       this.state.storage.setAlarm(storedAt + QUEUE_TTL_MS);
     }
 
-    // Extract sender PeerID from packet header
+    // Extract sender PeerID and packet type from header
     const senderHex = bytesToHex(data.slice(OFFSET_SENDER_ID, OFFSET_SENDER_ID + PEER_ID_LENGTH));
+    const packetType = data[OFFSET_TYPE];
     // Fire-and-forget push trigger — don't await (don't block queuing)
-    this.triggerPush(recipientHex, senderHex).catch(() => {});
+    this.triggerPush(recipientHex, senderHex, packetType).catch(() => {});
   }
 
   /**
@@ -418,7 +420,7 @@ export class RelayRoom implements DurableObject {
     }
   }
 
-  private async triggerPush(recipientHex: string, senderHex: string): Promise<void> {
+  private async triggerPush(recipientHex: string, senderHex: string, packetType?: number): Promise<void> {
     const now = Date.now();
     const lastSent = this.lastPushSentAt.get(recipientHex) ?? 0;
     if (now - lastSent < this.PUSH_COOLDOWN_MS) return;
@@ -435,6 +437,7 @@ export class RelayRoom implements DurableObject {
         body: JSON.stringify({
           recipientPeerIdHex: recipientHex,
           senderPeerIdHex: senderHex,
+          pushType: packetType,
         }),
       });
       if (!resp.ok) {

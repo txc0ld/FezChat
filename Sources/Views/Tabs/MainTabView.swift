@@ -50,6 +50,17 @@ struct MainTabView: View {
             }
         }
         .animation(SpringConstants.accessiblePageEntrance, value: coordinator.registrationSyncPending)
+        .onChange(of: coordinator.pendingNotificationNavigation) { _, destination in
+            guard let destination else { return }
+            switch destination {
+            case .conversation:
+                selectedTab = .chats
+            case .friendRequest:
+                selectedTab = .chats
+            case .sosAlert:
+                selectedTab = .nearby
+            }
+        }
     }
 
     // MARK: - Tab Content

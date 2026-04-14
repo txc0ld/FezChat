@@ -24,12 +24,13 @@ export async function sendPush(
     senderName: string,
     conversationId: string,
     unreadCount: number,
-    env: Env
+    env: Env,
+    alertBody?: string
 ): Promise<boolean> {
     try {
         const client = getClient(env);
         const notification = new Notification(deviceToken, {
-            alert: { title: 'Blip', body: `New message from ${senderName}` },
+            alert: { title: 'HeyBlip', body: alertBody ?? `New message from ${senderName}` },
             badge: unreadCount,
             sound: 'default',
             contentAvailable: true,
