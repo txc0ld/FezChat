@@ -611,6 +611,9 @@ final class ChatViewModel {
     func handleDeliveryAck(for messageID: UUID) {
         if let idx = activeMessages.firstIndex(where: { $0.id == messageID }) {
             activeMessages[idx].status = .delivered
+            do { try context.save() } catch {
+                DebugLogger.shared.log("DM", "Failed to persist delivery ack: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -618,6 +621,9 @@ final class ChatViewModel {
     func handleReadReceipt(for messageID: UUID) {
         if let idx = activeMessages.firstIndex(where: { $0.id == messageID }) {
             activeMessages[idx].status = .read
+            do { try context.save() } catch {
+                DebugLogger.shared.log("DM", "Failed to persist read receipt: \(error.localizedDescription)")
+            }
         }
     }
 
