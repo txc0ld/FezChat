@@ -756,7 +756,7 @@ final class MessageService: @unchecked Sendable {
                     case .locationShare, .locationRequest, .proximityPing, .iAmHereBeacon:
                         try await self.handleLocationPacket(packet, from: peerID)
                     case .pttAudio:
-                        try await self.handlePTTAudio(packet, from: peerID)
+                        try await self.handlePTTAudio(packet, from: peerID, ingressTransport: ingressTransport)
                     case .orgAnnouncement:
                         try await self.handleOrgAnnouncement(packet, ingressTransport: ingressTransport)
                     case .leave:

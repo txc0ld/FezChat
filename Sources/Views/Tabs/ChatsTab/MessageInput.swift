@@ -58,6 +58,9 @@ struct MessageInput: View {
     /// Called when user cancels edit mode.
     var onCancelEdit: () -> Void = {}
 
+    /// Whether the WebSocket relay is connected (PTT requires relay — too large for BLE).
+    var isRelayAvailable: Bool = true
+
     @State private var isSendMode = false
     @State private var isPTTActive = false
     @State private var showAttachmentMenu = false
@@ -271,9 +274,10 @@ struct MessageInput: View {
 
     private var pttButton: some View {
         ZStack {
-            // Ripple effect behind
+            // Ripple effect behind (hidden when relay unavailable)
             RippleEffect(isActive: $isPTTActive, ringCount: 3, color: .blipAccentPurple)
                 .frame(width: 60, height: 60)
+                .opacity(isRelayAvailable ? 1 : 0)
 
             Circle()
                 .fill(isPTTActive ? LinearGradient.blipAccent : LinearGradient(colors: [.clear], startPoint: .top, endPoint: .bottom))
@@ -299,6 +303,7 @@ struct MessageInput: View {
                             lineWidth: isPTTActive ? 0 : BlipSizing.hairline
                         )
                 )
+                .opacity(isRelayAvailable ? 1 : 0.35)
         }
         .accessibilityLabel(MessageInputL10n.pushToTalk)
         .accessibilityHint(MessageInputL10n.pushToTalkHint)
@@ -306,6 +311,7 @@ struct MessageInput: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
+                    guard isRelayAvailable else { return }
                     if !isPTTActive {
                         isPTTActive = true
                         if !SpringConstants.isReduceMotionEnabled {
@@ -317,6 +323,7 @@ struct MessageInput: View {
                     }
                 }
                 .onEnded { _ in
+                    guard isRelayAvailable else { return }
                     isPTTActive = false
                     if !SpringConstants.isReduceMotionEnabled {
                         #if canImport(UIKit)
