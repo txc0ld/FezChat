@@ -387,7 +387,7 @@ struct FriendsListView: View {
                     username: user.username,
                     bio: user.bio ?? "",
                     isOnline: isOnline,
-                    isPhoneVerified: user.isVerified,
+                    isVerified: user.isVerified,
                     status: friend.status,
                     requestDirection: friend.requestDirection
                 )
@@ -447,7 +447,7 @@ private struct FriendRow: View {
                             .fontWeight(.medium)
                             .foregroundStyle(theme.colors.text)
 
-                        if friend.isPhoneVerified {
+                        if friend.isVerified {
                             VerifiedBadge(size: 12)
                         }
                     }
@@ -555,7 +555,7 @@ struct FriendListItem: Identifiable {
     let username: String
     let bio: String
     let isOnline: Bool
-    let isPhoneVerified: Bool
+    let isVerified: Bool
     let status: FriendStatus
     let requestDirection: FriendRequestDirection?
 }
@@ -564,11 +564,11 @@ struct FriendListItem: Identifiable {
 
 extension FriendsListView {
     static let sampleFriends: [FriendListItem] = [
-        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewSarahChen, username: "sarahc", bio: FriendsListL10n.previewMusicAndMountains, isOnline: true, isPhoneVerified: true, status: .accepted, requestDirection: nil),
-        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewJakeMorrison, username: "jakem", bio: FriendsListL10n.previewAlwaysAtFront, isOnline: true, isPhoneVerified: false, status: .accepted, requestDirection: nil),
-        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewPriyaPatel, username: "priyap", bio: FriendsListL10n.previewEventPhotographer, isOnline: false, isPhoneVerified: true, status: .accepted, requestDirection: nil),
-        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewTomWilson, username: "tomw", bio: "", isOnline: false, isPhoneVerified: false, status: .pending, requestDirection: .incoming),
-        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewBlockedUser, username: "spam123", bio: "", isOnline: false, isPhoneVerified: false, status: .blocked, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewSarahChen, username: "sarahc", bio: FriendsListL10n.previewMusicAndMountains, isOnline: true, isVerified: true, status: .accepted, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewJakeMorrison, username: "jakem", bio: FriendsListL10n.previewAlwaysAtFront, isOnline: true, isVerified: false, status: .accepted, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewPriyaPatel, username: "priyap", bio: FriendsListL10n.previewEventPhotographer, isOnline: false, isVerified: true, status: .accepted, requestDirection: nil),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewTomWilson, username: "tomw", bio: "", isOnline: false, isVerified: false, status: .pending, requestDirection: .incoming),
+        FriendListItem(id: UUID(), displayName: FriendsListL10n.previewBlockedUser, username: "spam123", bio: "", isOnline: false, isVerified: false, status: .blocked, requestDirection: nil),
     ]
 }
 
