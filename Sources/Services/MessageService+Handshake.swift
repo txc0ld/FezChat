@@ -852,7 +852,45 @@ extension MessageService {
     }
 
     @MainActor
-    func handlePTTAudio(_ packet: Packet, from peerID: PeerID) async throws {
+    func handlePTTAudio(_ packet: Packet, from peerID: PeerID, ingressTransport: PeerIngressTransport) async throws {
+        let context = self.context
+        let audioData = packet.payload
+
+        guard !audioData.isEmpty else { return }
+
+        let (channel, senderUser) = try resolveChannel(
+            for: .voiceNote,
+            senderPeerID: packet.senderID,
+            context: context
+        )
+
+        let message = Message(
+            sender: senderUser,
+            channel: channel,
+            type: .voiceNote,
+            rawPayload: Data(),
+            status: .delivered,
+            isRelayed: ingressTransport == .relay,
+            createdAt: packet.date
+        )
+
+        let attachment = Attachment(
+            message: message,
+            type: .voiceNote,
+            fullData: audioData,
+            sizeBytes: audioData.count,
+            mimeType: "audio/opus"
+        )
+
+        context.insert(message)
+        context.insert(attachment)
+
+        channel.lastActivityAt = Date()
+        try context.save()
+
+        delegate?.messageService(self, didReceiveMessageID: message.id, channelID: channel.id)
+
+        // Also post notification for PTTViewModel real-time playback queue
         NotificationCenter.default.post(
             name: .didReceivePTTAudio,
             object: nil,

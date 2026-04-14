@@ -95,9 +95,7 @@ struct ChatView: View {
                         .frame(width: 8, height: 8)
 
                     WaveformView(
-                        levels: pttAudioLevels.isEmpty
-                            ? Array(repeating: Float.random(in: 0.1...0.6), count: 16)
-                            : pttAudioLevels,
+                        levels: pttWaveformLevels,
                         color: .blipAccentPurple,
                         isActive: true
                     )
@@ -149,10 +147,16 @@ struct ChatView: View {
                     showPhotoPicker = true
                 },
                 onPTTStart: {
+                    if let pttVM = coordinator.pttViewModel,
+                       let channel = chatViewModel?.activeChannel {
+                        pttVM.configure(channel: channel, crowdScale: .gather)
+                        pttVM.startRecording()
+                    }
                     isPTTRecording = true
                     pttAudioLevels = []
                 },
                 onPTTEnd: {
+                    coordinator.pttViewModel?.stopRecording()
                     isPTTRecording = false
                     pttAudioLevels = []
                 },
@@ -245,6 +249,14 @@ struct ChatView: View {
         }
         .task {
             await loadConversation()
+        }
+        .onChange(of: coordinator.pttViewModel?.audioLevel) { _, newLevel in
+            guard isPTTRecording, let level = newLevel else { return }
+            pttAudioLevels.append(level)
+            // Keep a rolling window of 16 samples for the waveform
+            if pttAudioLevels.count > 16 {
+                pttAudioLevels.removeFirst(pttAudioLevels.count - 16)
+            }
         }
         .onDisappear {
             chatViewModel?.closeConversation()
@@ -570,6 +582,21 @@ struct ChatView: View {
         return grouped
             .sorted { $0.key < $1.key }
             .map { MessageSection(date: $0.key, messages: $0.value.sorted { $0.timestamp < $1.timestamp }) }
+    }
+
+    // MARK: - PTT Waveform
+
+    /// Builds a 16-sample waveform from accumulated audio levels,
+    /// padding with a small baseline when fewer than 16 samples exist.
+    private var pttWaveformLevels: [Float] {
+        if pttAudioLevels.isEmpty {
+            return Array(repeating: Float(0.05), count: 16)
+        }
+        if pttAudioLevels.count >= 16 {
+            return Array(pttAudioLevels.suffix(16))
+        }
+        let padding = Array(repeating: Float(0.05), count: 16 - pttAudioLevels.count)
+        return padding + pttAudioLevels
     }
 
     // MARK: - Data

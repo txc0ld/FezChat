@@ -72,6 +72,13 @@ final class AppCoordinator {
     private(set) var profileViewModel: ProfileViewModel?
     private(set) var storeViewModel: StoreViewModel?
     private(set) var sosViewModel: SOSViewModel?
+    private(set) var pttViewModel: PTTViewModel?
+
+    // MARK: - Shared Services
+
+    /// Shared AudioService for PTT recording/playback (owned by coordinator,
+    /// injected into PTTViewModel so the delegate lifecycle is stable).
+    private var pttAudioService: AudioService?
 
     // MARK: - Identity
 
@@ -278,6 +285,15 @@ final class AppCoordinator {
             locationService: locationService,
             messageService: msgService,
             notificationService: notificationService
+        )
+
+        // PTT: create a dedicated AudioService and view model
+        let pttAudio = AudioService()
+        self.pttAudioService = pttAudio
+        self.pttViewModel = PTTViewModel(
+            modelContainer: modelContainer,
+            audioService: pttAudio,
+            messageService: msgService
         )
 
         // Listen for broadcast requests from ViewModels (e.g. SOSViewModel).
@@ -787,6 +803,9 @@ final class AppCoordinator {
         profileViewModel = nil
         storeViewModel = nil
         sosViewModel = nil
+        pttViewModel?.reset()
+        pttViewModel = nil
+        pttAudioService = nil
         locationService.stopUpdating()
         locationService.stopMonitoringAllEvents()
         locationService.delegate = nil
