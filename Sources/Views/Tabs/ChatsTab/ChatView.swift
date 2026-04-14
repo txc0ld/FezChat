@@ -62,6 +62,7 @@ struct ChatView: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var justSentMessage = false
     @State private var lastTypingIndicatorSent = Date.distantPast
+    @State private var showPTTUnavailableToast = false
 
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.theme) private var theme
@@ -147,6 +148,10 @@ struct ChatView: View {
                     showPhotoPicker = true
                 },
                 onPTTStart: {
+                    guard isRelayAvailable else {
+                        showPTTUnavailableToast = true
+                        return
+                    }
                     if let pttVM = coordinator.pttViewModel,
                        let channel = chatViewModel?.activeChannel {
                         pttVM.configure(channel: channel, crowdScale: .gather)
@@ -172,7 +177,8 @@ struct ChatView: View {
                 isEditing: chatViewModel?.editingMessage != nil,
                 onCancelEdit: {
                     chatViewModel?.cancelEditing()
-                }
+                },
+                isRelayAvailable: isRelayAvailable
             )
             .accessibilityValue(isRecordingVoiceNote ? ChatViewL10n.recordingVoiceNote : "")
         }
@@ -247,6 +253,27 @@ struct ChatView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottom) {
+            if showPTTUnavailableToast {
+                Text("Voice notes need internet — you're on mesh only")
+                    .font(theme.typography.caption)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, BlipSpacing.md)
+                    .padding(.vertical, BlipSpacing.sm)
+                    .background(Capsule().fill(theme.colors.mutedText))
+                    .padding(.bottom, 80)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .onAppear {
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            withAnimation(SpringConstants.gentleAnimation) {
+                                showPTTUnavailableToast = false
+                            }
+                        }
+                    }
+            }
+        }
+        .animation(SpringConstants.gentleAnimation, value: showPTTUnavailableToast)
         .task {
             await loadConversation()
         }
@@ -261,6 +288,14 @@ struct ChatView: View {
         .onDisappear {
             chatViewModel?.closeConversation()
         }
+    }
+
+    // MARK: - Relay Availability (PTT)
+
+    /// Whether the WebSocket relay is connected. PTT voice notes are too large for BLE
+    /// fragmentation, so they always route through the relay.
+    private var isRelayAvailable: Bool {
+        coordinator.meshViewModel?.isWebSocketConnected ?? false
     }
 
     // MARK: - Encryption State
