@@ -34,7 +34,7 @@ struct BlipApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(coordinator: coordinator, deepLinkUsername: $deepLinkUsername)
+            RootView(deepLinkUsername: $deepLinkUsername, coordinator: coordinator)
                 .environment(coordinator)
                 .environment(\.theme, Theme.shared)
                 .preferredColorScheme(appTheme.colorScheme)
