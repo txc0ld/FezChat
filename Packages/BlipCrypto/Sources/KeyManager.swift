@@ -47,7 +47,7 @@ public struct RecoveryKit: Sendable {
 
 // MARK: - Errors
 
-public enum KeyManagerError: Error, Sendable {
+public enum KeyManagerError: Error, Sendable, Equatable {
     case keychainWriteFailed(OSStatus)
     case keychainReadFailed(OSStatus)
     case keychainDeleteFailed(OSStatus)
@@ -57,6 +57,8 @@ public enum KeyManagerError: Error, Sendable {
     case recoveryKitMalformed
     case sodiumInitFailed
     case ed25519KeyGenFailed
+    case notABlipExport
+    case unsupportedExportVersion(UInt8)
 }
 
 // MARK: - Storage Backends
@@ -376,6 +378,97 @@ public final class KeyManager: @unchecked Sendable {
         try storeIdentity(identity)
 
         return identity
+    }
+
+    // MARK: - Data Encryption (AES-256-GCM)
+
+    // MARK: - Export format constants
+
+    /// Magic bytes identifying a Blip export file: "BLIP" in ASCII.
+    private static let exportMagic = Data([0x42, 0x4C, 0x49, 0x50])
+    /// Current export format version.
+    private static let exportVersion: UInt8 = 0x01
+    /// Salt length for the export format (16 bytes).
+    private static let exportSaltLength = 16
+
+    /// Encrypt arbitrary data with a user-chosen password using AES-256-GCM.
+    ///
+    /// The encryption key is derived from the password via iterated HKDF-SHA256 (same
+    /// derivation used for recovery kits). The output is self-contained and includes
+    /// all metadata required for decryption.
+    ///
+    /// Format: `[magic:4][version:1][salt:16][nonce:12][ciphertext+tag]`
+    public func encryptData(_ plaintext: Data, password: String) throws -> Data {
+        let salt = generateRandomBytes(count: Self.exportSaltLength)
+        let symmetricKey = deriveKey(password: password, salt: salt)
+
+        let nonce = AES.GCM.Nonce()
+        let sealed = try AES.GCM.seal(plaintext, using: symmetricKey, nonce: nonce)
+
+        var output = Data()
+        output.append(Self.exportMagic)
+        output.append(Self.exportVersion)
+        output.append(salt)
+        output.append(contentsOf: nonce)
+        output.append(sealed.ciphertext + sealed.tag)
+
+        return output
+    }
+
+    /// Decrypt data that was encrypted with ``encryptData(_:password:)``.
+    ///
+    /// Returns the original plaintext on success. Throws on wrong password or
+    /// corrupted/truncated data.
+    public func decryptData(_ encryptedData: Data, password: String) throws -> Data {
+        // Minimum: magic(4) + version(1) + salt(16) + nonce(12) + tag(16) + at least 1 byte = 50
+        let headerSize = Self.exportMagic.count + 1 + Self.exportSaltLength + 12
+        let minSize = headerSize + 16 + 1
+        guard encryptedData.count >= minSize else {
+            throw KeyManagerError.recoveryKitMalformed
+        }
+
+        var offset = 0
+
+        // Verify magic header
+        let magic = Data(encryptedData[offset ..< offset + Self.exportMagic.count])
+        guard magic == Self.exportMagic else {
+            throw KeyManagerError.notABlipExport
+        }
+        offset += Self.exportMagic.count
+
+        // Verify version
+        let version = encryptedData[offset]
+        guard version == Self.exportVersion else {
+            throw KeyManagerError.unsupportedExportVersion(version)
+        }
+        offset += 1
+
+        let salt = Data(encryptedData[offset ..< offset + Self.exportSaltLength])
+        offset += Self.exportSaltLength
+
+        let nonceData = Data(encryptedData[offset ..< offset + 12])
+        offset += 12
+
+        let ciphertextAndTag = Data(encryptedData[offset...])
+
+        let symmetricKey = deriveKey(password: password, salt: salt)
+
+        let nonce = try AES.GCM.Nonce(data: nonceData)
+        let tagLength = 16
+        guard ciphertextAndTag.count >= tagLength else {
+            throw KeyManagerError.recoveryKitMalformed
+        }
+        let sealedBox = try AES.GCM.SealedBox(
+            nonce: nonce,
+            ciphertext: ciphertextAndTag.dropLast(tagLength),
+            tag: ciphertextAndTag.suffix(tagLength)
+        )
+
+        do {
+            return try AES.GCM.open(sealedBox, using: symmetricKey)
+        } catch {
+            throw KeyManagerError.recoveryKitDecryptionFailed
+        }
     }
 
     // MARK: - Phone Salt
