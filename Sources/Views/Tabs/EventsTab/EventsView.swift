@@ -80,6 +80,7 @@ struct EventsView: View {
     @State private var crowdPulseData: [CrowdPulseCell] = []
 
     @Environment(\.theme) private var theme
+    @Environment(AppCoordinator.self) private var coordinator
 
     var body: some View {
         NavigationStack {
@@ -323,7 +324,15 @@ struct EventsView: View {
                         eventCenter: eventCenter,
                         eventRadiusMeters: eventRadius,
                         onStageTap: { stage in
-                            selectedSection = .schedule
+                            guard let channel = eventsViewModel?.stageChannel(named: stage.name) else {
+                                selectedSection = .schedule
+                                return
+                            }
+
+                            Task {
+                                await coordinator.chatViewModel?.loadChannels()
+                                coordinator.pendingNotificationNavigation = .conversation(channelID: channel.id)
+                            }
                         },
                         onMeetingPointTap: { _ in
                             showMeetingPointSheet = true
@@ -669,10 +678,12 @@ extension EventsView {
     EventsView()
         .preferredColorScheme(.dark)
         .blipTheme()
+        .environment(AppCoordinator())
 }
 
 #Preview("Event Tab - Light") {
     EventsView()
         .preferredColorScheme(.light)
         .blipTheme()
+        .environment(AppCoordinator())
 }

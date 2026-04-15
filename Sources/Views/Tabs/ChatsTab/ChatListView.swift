@@ -130,6 +130,11 @@ struct ChatListView: View {
             }
             coordinator.pendingNotificationNavigation = nil
         }
+        .onReceive(NotificationCenter.default.publisher(for: .channelListDidChange)) { _ in
+            Task {
+                await chatViewModel?.loadChannels()
+            }
+        }
     }
 
     // MARK: - Scroll Content
