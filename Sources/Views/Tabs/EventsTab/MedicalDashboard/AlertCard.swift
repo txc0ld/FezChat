@@ -67,7 +67,7 @@ struct AlertCard: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        TimelineView(.periodic(every: 1)) { context in
+        TimelineView(.periodic(from: .now, by: 1)) { context in
             let elapsed = elapsedString(at: context.date)
             GlassCard(thickness: .regular, cornerRadius: BlipCornerRadius.xl) {
                 VStack(alignment: .leading, spacing: BlipSpacing.md) {

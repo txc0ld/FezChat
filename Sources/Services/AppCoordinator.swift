@@ -59,6 +59,7 @@ final class AppCoordinator {
     private(set) var peerStore = PeerStore.shared
     private(set) var locationService = LocationService()
     private(set) var notificationService = NotificationService()
+    private(set) var proximityAlertService: ProximityAlertService?
     private(set) var backgroundTaskService: BackgroundTaskService?
     private(set) var authTokenManager = AuthTokenManager.shared
 
@@ -269,7 +270,13 @@ final class AppCoordinator {
             modelContainer: modelContainer,
             locationService: locationService
         )
-        self.friendFinderViewModel = FriendFinderViewModel(locationService: locationService)
+        let proximityAlerts = ProximityAlertService()
+        self.proximityAlertService = proximityAlerts
+        self.friendFinderViewModel = FriendFinderViewModel(
+            locationService: locationService,
+            modelContainer: modelContainer,
+            proximityAlertService: proximityAlerts
+        )
         self.eventsViewModel = EventsViewModel(
             modelContainer: modelContainer,
             locationService: locationService,
@@ -799,6 +806,7 @@ final class AppCoordinator {
         meshViewModel = nil
         locationViewModel = nil
         friendFinderViewModel = nil
+        proximityAlertService = nil
         eventsViewModel = nil
         profileViewModel = nil
         storeViewModel = nil

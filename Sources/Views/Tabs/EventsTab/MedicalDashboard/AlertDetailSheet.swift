@@ -181,7 +181,7 @@ struct AlertDetailSheet: View {
                 }
 
                 Map(position: $cameraPosition) {
-                    Annotation(AlertDetailL10n.sos, coordinate: alert.coordinate) {
+                    Annotation(AlertDetailL10n.sos, coordinate: alertMapCoordinate) {
                         ZStack {
                             // Accuracy circle
                             if alert.accuracy == .estimated {
@@ -336,6 +336,12 @@ struct AlertDetailSheet: View {
         case .amber: return AlertDetailL10n.urgent
         case .red: return AlertDetailL10n.criticalEmergency
         }
+    }
+
+    private var alertMapCoordinate: CLLocationCoordinate2D {
+        // Alert detail currently has no event-center dependency, so use a stable
+        // deterministic fallback for the map preview until real alert coordinates arrive.
+        alert.coordinate(relativeTo: CLLocationCoordinate2D(latitude: 0, longitude: 0))
     }
 
     private func startResponseTimer() {
