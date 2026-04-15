@@ -65,8 +65,11 @@ struct ChatListCell: View {
                         }
 
                         Text(conversation.displayName)
-                            .font(.custom(BlipFontName.semiBold, size: 16, relativeTo: .body))
-                            .fontWeight(conversation.unreadCount > 0 ? .bold : .medium)
+                            .font(.custom(
+                                conversation.unreadCount > 0 ? BlipFontName.bold : BlipFontName.semiBold,
+                                size: 16,
+                                relativeTo: .body
+                            ))
                             .foregroundStyle(theme.colors.text)
                             .lineLimit(1)
 
@@ -126,8 +129,8 @@ struct ChatListCell: View {
                 RoundedRectangle(cornerRadius: BlipCornerRadius.lg, style: .continuous)
                     .stroke(
                         colorScheme == .dark
-                            ? Color.white.opacity(0.06)
-                            : Color.black.opacity(0.04),
+                            ? Color.white.opacity(0.10)
+                            : Color.black.opacity(0.08),
                         lineWidth: BlipSizing.hairline
                     )
             )
@@ -191,7 +194,7 @@ struct ChatListCell: View {
                     .fill(Color.blipAccentPurple)
             )
             .contentTransition(.numericText())
-            .animation(.default, value: conversation.unreadCount)
+            .animation(SpringConstants.bouncyAnimation, value: conversation.unreadCount)
             .accessibilityLabel(ChatListCellL10n.unreadCount(conversation.unreadCount))
     }
 

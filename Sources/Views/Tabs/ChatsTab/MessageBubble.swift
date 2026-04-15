@@ -58,7 +58,7 @@ struct MessageBubble: View {
     @Environment(\.theme) private var theme
     @Environment(\.colorScheme) private var colorScheme
 
-    private let maxBubbleWidth: CGFloat = 280
+    private let maxBubbleWidth: CGFloat = UIScreen.main.bounds.width * 0.75
 
     var body: some View {
         HStack(alignment: .bottom, spacing: BlipSpacing.sm) {
@@ -349,7 +349,7 @@ struct MessageBubble: View {
         if message.isFromMe {
             // Glass material + accent gradient overlay for translucent outgoing
             ZStack {
-                RoundedRectangle(cornerRadius: BlipCornerRadius.xl, style: .continuous)
+                RoundedRectangle(cornerRadius: BlipCornerRadius.md, style: .continuous)
                     .fill(.ultraThinMaterial)
                 LinearGradient(
                     colors: [
@@ -363,16 +363,16 @@ struct MessageBubble: View {
         } else {
             // Neutral glass surface for incoming
             ZStack {
-                RoundedRectangle(cornerRadius: BlipCornerRadius.xl, style: .continuous)
+                RoundedRectangle(cornerRadius: BlipCornerRadius.md, style: .continuous)
                     .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: BlipCornerRadius.xl, style: .continuous)
+                RoundedRectangle(cornerRadius: BlipCornerRadius.md, style: .continuous)
                     .fill(colorScheme == .dark ? Color.white.opacity(0.03) : Color.black.opacity(0.02))
             }
         }
     }
 
     private var bubbleShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: BlipCornerRadius.xl, style: .continuous)
+        RoundedRectangle(cornerRadius: BlipCornerRadius.md, style: .continuous)
     }
 
     private var borderColor: Color {
@@ -400,7 +400,7 @@ struct MessageBubble: View {
                 isVisible = true
             }
         } else {
-            withAnimation(SpringConstants.pageEntranceAnimation.delay(Double(min(index, 10)) * 0.03)) {
+            withAnimation(SpringConstants.pageEntranceAnimation.delay(Double(min(index, 10)) * SpringConstants.staggerDelay)) {
                 isVisible = true
             }
         }
