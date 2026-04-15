@@ -139,8 +139,8 @@ final class LocationViewModel {
     /// Walking speed assumption for ETA (5 km/h).
     private static let walkingSpeedMPS: Double = 5.0 / 3.6
 
-    /// Refresh interval for friend locations.
-    private static let refreshInterval: TimeInterval = 10.0
+    /// Refresh interval for friend locations — matches LocationPayload.updateInterval (30s).
+    private static let refreshInterval: TimeInterval = 30.0
 
     // MARK: - Init
 
@@ -167,6 +167,7 @@ final class LocationViewModel {
         refreshTimer?.invalidate()
         let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
+                DebugLogger.shared.log("LOCATION", "Refreshing friend locations (30s interval)")
                 await self?.refreshFriendLocations()
                 self?.updateUserLocation()
             }
