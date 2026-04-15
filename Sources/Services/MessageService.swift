@@ -1002,7 +1002,7 @@ final class MessageService: @unchecked Sendable {
 
     /// Sign, encode, and transmit a packet. Dispatches signing + encoding to
     /// the encryption queue to keep the main thread free.
-    func sendPacket(_ packet: Packet) async throws {
+    func sendPacket(_ packet: Packet, allowBroadcastFallback: Bool = true) async throws {
         guard let transport else {
             DebugLogger.emit("TX", "SEND FAILED: no transport available", isError: true)
             throw MessageServiceError.noTransportAvailable
@@ -1047,9 +1047,14 @@ final class MessageService: @unchecked Sendable {
                 try transport.send(data: wireData, to: recipientID)
                 DebugLogger.emit("TX", "SENT \(wireData.count)B → \(recipientHex) (peer-specific)", level: .verbose)
             } catch {
-                DebugLogger.emit("TX", "SEND FAILED to \(recipientHex): \(error) — fallback broadcast", isError: true)
-                transport.broadcast(data: wireData)
-                DebugLogger.emit("TX", "BROADCAST fallback \(wireData.count)B", level: .verbose)
+                if allowBroadcastFallback {
+                    DebugLogger.emit("TX", "SEND FAILED to \(recipientHex): \(error) — fallback broadcast", isError: true)
+                    transport.broadcast(data: wireData)
+                    DebugLogger.emit("TX", "BROADCAST fallback \(wireData.count)B", level: .verbose)
+                } else {
+                    DebugLogger.emit("TX", "SEND FAILED to \(recipientHex): \(error)", isError: true)
+                    throw error
+                }
             }
         } else {
             transport.broadcast(data: wireData)

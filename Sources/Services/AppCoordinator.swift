@@ -282,6 +282,7 @@ final class AppCoordinator {
         self.storeViewModel = StoreViewModel(modelContainer: modelContainer)
         self.sosViewModel = SOSViewModel(
             modelContainer: modelContainer,
+            bleService: ble,
             locationService: locationService,
             messageService: msgService,
             notificationService: notificationService
