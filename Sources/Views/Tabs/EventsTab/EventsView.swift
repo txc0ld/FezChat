@@ -15,17 +15,8 @@ private enum EventsViewL10n {
     static let syncingTitle = String(localized: "events.syncing.title", defaultValue: "Event data is still syncing to this device.")
     static let outOfRangeTitle = String(localized: "events.out_of_range.title", defaultValue: "Out of event range")
     static let limitedAccess = String(localized: "events.out_of_range.trailing", defaultValue: "Limited access")
-    static let loadingEvents = String(localized: "events.loading.directory_title", defaultValue: "Loading events...")
-    static let loadingEventsSubtitle = String(localized: "events.loading.directory_subtitle", defaultValue: "Checking for nearby event manifests and cached events.")
-    static let couldntLoad = String(localized: "events.error.load_failed", defaultValue: "Couldn't load events")
-    static let noEventJoined = String(localized: "events.empty.title", defaultValue: "No Event Joined")
-    static let noEventJoinedSubtitle = String(localized: "events.empty.subtitle", defaultValue: "Browse the event directory or enter a geofenced venue to unlock the live map, schedule, and announcements.")
-    static let refreshDirectory = String(localized: "events.empty.cta", defaultValue: "Refresh Event Directory")
     static let eventMode = String(localized: "events.title.fallback", defaultValue: "Event Mode")
     static let anyEvent = String(localized: "events.share.any_event", defaultValue: "an event")
-    static let loadingDescription = String(localized: "events.empty.loading_description", defaultValue: "Looking for nearby event manifests and any locally cached events.")
-    static let noManifestDescription = String(localized: "events.empty.no_manifest_description", defaultValue: "Event mode stays visible now, but this device does not have a event manifest cached yet.")
-    static let noEventDescription = String(localized: "events.empty.description", defaultValue: "Pick up a event manifest or enter a geofenced site to unlock the live map, schedule, and announcements.")
     static let map = String(localized: "events.section.map", defaultValue: "Map")
     static let schedule = String(localized: "events.section.schedule", defaultValue: "Schedule")
     static let announcements = String(localized: "events.section.announcements", defaultValue: "Announcements")
@@ -431,72 +422,6 @@ struct EventsView: View {
         )
     }
 
-    // MARK: - No Event State
-
-    @ViewBuilder
-    private var noEventState: some View {
-        if eventsViewModel?.discoveryState == .fetching {
-            // Loading state — glassmorphism card with progress
-            VStack(spacing: BlipSpacing.lg) {
-                Spacer()
-                GlassCard(thickness: .ultraThin) {
-                    VStack(spacing: BlipSpacing.md) {
-                        ProgressView()
-                            .tint(.blipAccentPurple)
-                            .scaleEffect(1.2)
-                        Text(EventsViewL10n.loadingEvents)
-                            .font(theme.typography.secondary)
-                            .foregroundStyle(theme.colors.text)
-                        Text(EventsViewL10n.loadingEventsSubtitle)
-                            .font(theme.typography.caption)
-                            .foregroundStyle(theme.colors.mutedText)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .padding(.horizontal, BlipSpacing.md)
-                Spacer()
-            }
-            .transition(.opacity.animation(SpringConstants.accessiblePageEntrance))
-        } else if let failed = eventsViewModel?.discoveryState,
-                  case let .failed(message) = failed {
-            // Error state — glass error card with retry
-            VStack(spacing: BlipSpacing.lg) {
-                Spacer()
-                ErrorStateView(
-                    title: EventsViewL10n.couldntLoad,
-                    subtitle: message
-                ) {
-                    Task {
-                        await eventsViewModel?.fetchEvents()
-                        await loadEventData()
-                    }
-                }
-                .padding(.horizontal, BlipSpacing.md)
-                Spacer()
-            }
-            .transition(.opacity.animation(SpringConstants.accessiblePageEntrance))
-        } else {
-            // Empty state — no events available
-            VStack(spacing: BlipSpacing.lg) {
-                Spacer()
-                EmptyStateView(
-                    icon: "calendar.badge.plus",
-                    title: EventsViewL10n.noEventJoined,
-                    subtitle: EventsViewL10n.noEventJoinedSubtitle,
-                    ctaTitle: EventsViewL10n.refreshDirectory
-                ) {
-                    Task {
-                        await eventsViewModel?.fetchEvents()
-                        await loadEventData()
-                    }
-                }
-                Spacer()
-            }
-            .transition(.opacity.animation(SpringConstants.accessiblePageEntrance))
-        }
-    }
-
     private func eventStatusBanner(
         icon: String,
         title: String,
@@ -574,27 +499,6 @@ struct EventsView: View {
         }
 
         return eventsViewModel?.availableEvents.first?.radius ?? 3_000
-    }
-
-    private var availableEventNames: [String] {
-        Array((eventsViewModel?.availableEvents ?? []).map(\.name).prefix(3))
-    }
-
-    private var noEventDescription: String {
-        if eventsViewModel?.discoveryState == .fetching {
-            return EventsViewL10n.loadingDescription
-        }
-
-        if let failed = eventsViewModel?.discoveryState,
-           case let .failed(message) = failed {
-            return message
-        }
-
-        if availableEventNames.isEmpty {
-            return EventsViewL10n.noManifestDescription
-        }
-
-        return EventsViewL10n.noEventDescription
     }
 }
 

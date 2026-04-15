@@ -29,12 +29,6 @@ struct QRCodeSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Handle
-            Capsule()
-                .fill(theme.colors.mutedText.opacity(0.3))
-                .frame(width: 36, height: 4)
-                .padding(.top, BlipSpacing.sm)
-
             // Header
             HStack {
                 Text(QRCodeSheetL10n.title)

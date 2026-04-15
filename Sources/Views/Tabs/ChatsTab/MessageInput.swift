@@ -64,7 +64,6 @@ struct MessageInput: View {
     @State private var isSendMode = false
     @State private var isPTTActive = false
     @State private var showAttachmentMenu = false
-    @State private var textEditorHeight: CGFloat = 36
     @FocusState private var isTextFieldFocused: Bool
 
     @Environment(\.theme) private var theme

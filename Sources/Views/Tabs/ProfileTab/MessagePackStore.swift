@@ -14,7 +14,6 @@ private enum MessagePackStoreL10n {
     static let currentBalance = String(localized: "store.message_pack.balance.title", defaultValue: "Current Balance")
     static let unlimited = String(localized: "store.message_pack.balance.unlimited", defaultValue: "Unlimited")
     static let messages = String(localized: "store.message_pack.balance.unit", defaultValue: "messages")
-    static let runningLow = String(localized: "store.message_pack.balance.running_low", defaultValue: "Running low!")
     static let buyMessages = String(localized: "store.message_pack.buy_messages", defaultValue: "Buy Messages")
     static let unavailableNow = String(localized: "store.message_pack.unavailable.title", defaultValue: "Message packs are unavailable right now")
     static let unavailableSubtitle = String(localized: "store.message_pack.unavailable.subtitle", defaultValue: "The App Store catalog did not load on this device. Retry when network and StoreKit are available.")
@@ -199,18 +198,6 @@ struct MessagePackStore: View {
                         .foregroundStyle(theme.colors.mutedText)
                 }
 
-                // TODO: BDEV-136 — show warning when message balance is low (replace with real threshold)
-                if false {
-                    HStack(spacing: BlipSpacing.xs) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(BlipColors.adaptive.statusAmber)
-
-                        Text(MessagePackStoreL10n.runningLow)
-                            .font(theme.typography.caption)
-                            .foregroundStyle(BlipColors.adaptive.statusAmber)
-                    }
-                }
             }
             .frame(maxWidth: .infinity)
         }

@@ -47,7 +47,6 @@ struct SetTimeCell: View {
     var onShareGoing: (() -> Void)?
 
     @Environment(\.theme) private var theme
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: BlipSpacing.md) {

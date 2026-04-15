@@ -883,18 +883,6 @@ private struct BeaconAnnotationView: View {
 
 extension FriendFinderMapView {
 
-    /// Sample crowd density data for simulator testing.
-    static let sampleCrowdPulse: [CrowdPulseCell] = [
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0048, longitude: -2.5862), level: .packed, peerCount: 320, geohash: "gcpu2e1"),
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0055, longitude: -2.5845), level: .busy, peerCount: 180, geohash: "gcpu2e2"),
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0040, longitude: -2.5870), level: .moderate, peerCount: 80, geohash: "gcpu2e3"),
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0060, longitude: -2.5830), level: .quiet, peerCount: 15, geohash: "gcpu2e4"),
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0035, longitude: -2.5855), level: .busy, peerCount: 150, geohash: "gcpu2e5"),
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0050, longitude: -2.5840), level: .moderate, peerCount: 65, geohash: "gcpu2e6"),
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0042, longitude: -2.5880), level: .packed, peerCount: 280, geohash: "gcpu2e7"),
-        CrowdPulseCell(id: UUID(), coordinate: CLLocationCoordinate2D(latitude: 51.0058, longitude: -2.5855), level: .quiet, peerCount: 22, geohash: "gcpu2e8"),
-    ]
-
     static let sampleFriends: [FriendMapPin] = [
         FriendMapPin(
             id: UUID(), displayName: FriendFinderMapViewL10n.previewSarahChen,

@@ -26,6 +26,7 @@ struct StatusBadge: View {
     let tintColor: Color?
 
     @State private var animationTrigger = false
+    @State private var dotAnimating: [Bool] = [false, false, false]
     @Environment(\.theme) private var theme
 
     enum DeliveryStatus: Sendable, Equatable {
@@ -77,10 +78,33 @@ struct StatusBadge: View {
 
     private var composingDots: some View {
         HStack(spacing: 2) {
-            ForEach(0..<3, id: \.self) { _ in
+            ForEach(0..<3, id: \.self) { index in
                 Circle()
                     .fill(resolvedColor)
                     .frame(width: size * 0.3, height: size * 0.3)
+                    .scaleEffect(dotAnimating[index] ? 1.3 : 0.7)
+                    .opacity(dotAnimating[index] ? 1.0 : 0.4)
+            }
+        }
+        .onAppear {
+            startDotAnimation()
+        }
+    }
+
+    private func startDotAnimation() {
+        guard !SpringConstants.isReduceMotionEnabled else {
+            dotAnimating = [true, true, true]
+            return
+        }
+
+        let staggerOffset: Double = 0.15
+        for index in 0..<3 {
+            withAnimation(
+                .easeInOut(duration: 0.4)
+                .repeatForever(autoreverses: true)
+                .delay(staggerOffset * Double(index))
+            ) {
+                dotAnimating[index] = true
             }
         }
     }
