@@ -273,7 +273,8 @@ final class AppCoordinator {
         self.eventsViewModel = EventsViewModel(
             modelContainer: modelContainer,
             locationService: locationService,
-            notificationService: notificationService
+            notificationService: notificationService,
+            bleService: bleService
         )
         self.profileViewModel = ProfileViewModel(
             modelContainer: modelContainer,

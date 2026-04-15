@@ -364,32 +364,41 @@ private struct BeaconPinView: View {
     @State private var isPulsing = false
 
     var body: some View {
-        ZStack {
-            // Pulse ring
-            if !SpringConstants.isReduceMotionEnabled {
-                Circle()
-                    .stroke(.blipAccentPurple.opacity(0.3), lineWidth: 1)
-                    .frame(width: 36, height: 36)
-                    .scaleEffect(isPulsing ? 1.5 : 1.0)
-                    .opacity(isPulsing ? 0 : 0.5)
-            }
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let minutesLeft = max(0, Int(beacon.expiresAt.timeIntervalSince(context.date) / 60))
 
-            // Pin
-            VStack(spacing: 0) {
-                Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(.blipAccentPurple)
+            ZStack {
+                // Pulse ring
+                if !SpringConstants.isReduceMotionEnabled {
+                    Circle()
+                        .stroke(.blipAccentPurple.opacity(0.3), lineWidth: 1)
+                        .frame(width: 36, height: 36)
+                        .scaleEffect(isPulsing ? 1.5 : 1.0)
+                        .opacity(isPulsing ? 0 : 0.5)
+                }
 
-                Text(beacon.label)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, BlipSpacing.xs)
-                    .padding(.vertical, BlipSpacing.xxs)
-                    .background(
-                        Capsule()
-                            .fill(.blipAccentPurple)
-                    )
+                // Pin
+                VStack(spacing: 0) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.blipAccentPurple)
+
+                    Text(beacon.label)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, BlipSpacing.xs)
+                        .padding(.vertical, BlipSpacing.xxs)
+                        .background(
+                            Capsule()
+                                .fill(.blipAccentPurple)
+                        )
+
+                    Text("\(minutesLeft)m left")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(countdownColor(minutesLeft: minutesLeft))
+                }
             }
+            .accessibilityLabel("Beacon: \(beacon.label), expires in \(minutesLeft) minutes")
         }
         .onAppear {
             guard !SpringConstants.isReduceMotionEnabled else { return }
@@ -398,7 +407,12 @@ private struct BeaconPinView: View {
                 isPulsing = true
             }
         }
-        .accessibilityLabel(FriendFinderMapL10n.beacon(beacon.label))
+    }
+
+    private func countdownColor(minutesLeft: Int) -> Color {
+        if minutesLeft < 1 { return .red }
+        if minutesLeft < 5 { return .orange }
+        return .white.opacity(0.7)
     }
 }
 
