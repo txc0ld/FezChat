@@ -26,6 +26,7 @@ struct QRCodeSheet: View {
     @State private var showScanner = false
     @State private var showAddFriend = false
     @State private var scannedUsername = ""
+    @State private var cachedQRImage: UIImage?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,7 +59,7 @@ struct QRCodeSheet: View {
 
             // QR Code card — centered and contained
             VStack(spacing: BlipSpacing.md) {
-                if let qrImage = generateQRCode(for: "heyblip://user/\(user.username)") {
+                if let qrImage = cachedQRImage {
                     Image(uiImage: qrImage)
                         .interpolation(.none)
                         .resizable()
@@ -92,7 +93,7 @@ struct QRCodeSheet: View {
             Spacer().frame(height: BlipSpacing.lg)
 
             // Share button
-            if let qrImage = generateQRCode(for: "heyblip://user/\(user.username)") {
+            if let qrImage = cachedQRImage {
                 ShareLink(
                     item: Image(uiImage: qrImage),
                     preview: SharePreview(QRCodeSheetL10n.shareTitle, image: Image(uiImage: qrImage))
@@ -151,6 +152,9 @@ struct QRCodeSheet: View {
         }
         .sheet(isPresented: $showAddFriend) {
             AddFriendByUsernameSheet(initialUsername: scannedUsername)
+        }
+        .task {
+            cachedQRImage = generateQRCode(for: "heyblip://user/\(user.username)")
         }
     }
 

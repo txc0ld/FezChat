@@ -565,6 +565,11 @@ struct EventsView: View {
             )
         }
 
+        // Fall back to user's current location instead of Null Island (0, 0)
+        if let userLocation = coordinator.locationService.currentLocation {
+            return userLocation.coordinate
+        }
+
         return CLLocationCoordinate2D(latitude: 0, longitude: 0)
     }
 
