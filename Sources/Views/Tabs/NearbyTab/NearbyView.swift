@@ -276,7 +276,7 @@ struct NearbyView: View {
                     // Animated peer count
                     VStack(alignment: .leading, spacing: BlipSpacing.xs) {
                         Text("\(peerCount)")
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .font(theme.typography.display)
                             .foregroundStyle(.blipAccentPurple)
                             .contentTransition(.numericText())
 
@@ -290,7 +290,7 @@ struct NearbyView: View {
                     // Signal indicator
                     VStack(spacing: BlipSpacing.xs) {
                         Image(systemName: resolvedMeshViewModel?.isBLEActive == true ? "wave.3.right" : "wave.3.right.circle")
-                            .font(.system(size: 24, weight: .medium))
+                            .font(.custom(BlipFontName.medium, size: 24, relativeTo: .title3))
                             .foregroundStyle(.blipAccentPurple)
                             .symbolEffect(.pulse, options: .repeating)
 
@@ -308,7 +308,7 @@ struct NearbyView: View {
             Button(action: { toggleVisibility() }) {
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: isVisible ? "eye.fill" : "eye.slash.fill")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.custom(BlipFontName.medium, size: 14, relativeTo: .footnote))
 
                     Text(isVisible ? NearbyL10n.visible : NearbyL10n.hidden)
                         .font(theme.typography.secondary)
@@ -317,7 +317,7 @@ struct NearbyView: View {
                     Spacer()
 
                     Text(isVisible ? NearbyL10n.on : NearbyL10n.off)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.custom(BlipFontName.bold, size: 12, relativeTo: .caption2))
                         .foregroundStyle(isVisible ? .white : theme.colors.mutedText)
                         .padding(.horizontal, BlipSpacing.sm)
                         .padding(.vertical, BlipSpacing.xs)
@@ -346,7 +346,7 @@ struct NearbyView: View {
             VStack(alignment: .leading, spacing: BlipSpacing.md) {
                 HStack {
                     Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.custom(BlipFontName.medium, size: 14, relativeTo: .footnote))
                         .foregroundStyle(.blipAccentPurple)
 
                     Text(NearbyL10n.peopleNearbyTitle)
@@ -392,7 +392,7 @@ struct NearbyView: View {
         VStack(alignment: .leading, spacing: BlipSpacing.md) {
             HStack {
                 Image(systemName: "person.2.fill")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.custom(BlipFontName.medium, size: 14, relativeTo: .footnote))
                     .foregroundStyle(.blipAccentPurple)
 
                 Text(NearbyL10n.friendsNearbyTitle)
@@ -453,7 +453,7 @@ struct NearbyView: View {
                 GlassCard(thickness: .ultraThin) {
                     VStack(spacing: BlipSpacing.sm) {
                         Image(systemName: "person.2.slash")
-                            .font(.system(size: 24))
+                            .font(.custom(BlipFontName.regular, size: 24, relativeTo: .title3))
                             .foregroundStyle(theme.colors.mutedText)
 
                         Text(NearbyL10n.noFriendsNearby)
@@ -570,7 +570,7 @@ struct NearbyView: View {
         VStack(alignment: .leading, spacing: BlipSpacing.md) {
             HStack {
                 Image(systemName: "map.fill")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.custom(BlipFontName.medium, size: 14, relativeTo: .footnote))
                     .foregroundStyle(.blipAccentPurple)
 
                 Text(NearbyL10n.friendFinder)
@@ -658,7 +658,7 @@ struct NearbyView: View {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: icon)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.custom(BlipFontName.medium, size: 14, relativeTo: .footnote))
                         .foregroundStyle(.blipAccentPurple)
 
                     Text(title)

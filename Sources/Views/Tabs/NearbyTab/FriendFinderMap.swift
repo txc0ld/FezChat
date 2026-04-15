@@ -179,7 +179,7 @@ struct FriendFinderMap: View {
                 // Navigate button
                 Button(action: { onNavigateToFriend?(friend) }) {
                     Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(.custom(BlipFontName.medium, size: 18, relativeTo: .body))
                         .foregroundStyle(.white)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                         .background(
@@ -192,7 +192,7 @@ struct FriendFinderMap: View {
                 // Dismiss
                 Button(action: { selectedFriend = nil }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.custom(BlipFontName.bold, size: 12, relativeTo: .caption2))
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 }
@@ -210,7 +210,7 @@ struct FriendFinderMap: View {
             }
         }) {
             Image(systemName: "location.fill")
-                .font(.system(size: 16, weight: .medium))
+                .font(.custom(BlipFontName.medium, size: 16, relativeTo: .callout))
                 .foregroundStyle(.blipAccentPurple)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .background(
@@ -231,7 +231,7 @@ struct FriendFinderMap: View {
     private var dropBeaconButton: some View {
         Button(action: { showBeaconConfirm = true }) {
             Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 16, weight: .medium))
+                .font(.custom(BlipFontName.medium, size: 16, relativeTo: .callout))
                 .foregroundStyle(.white)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .background(
@@ -305,7 +305,7 @@ private struct FriendPinView: View {
                         // Name label when selected
                         if isSelected {
                             Text(friend.displayName)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.custom(BlipFontName.semiBold, size: 10, relativeTo: .caption2))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -360,11 +360,11 @@ private struct BeaconPinView: View {
             // Pin
             VStack(spacing: 0) {
                 Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 24))
+                    .font(.custom(BlipFontName.regular, size: 24, relativeTo: .title3))
                     .foregroundStyle(.blipAccentPurple)
 
                 Text(beacon.label)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.custom(BlipFontName.semiBold, size: 9, relativeTo: .caption2))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)

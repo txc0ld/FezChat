@@ -128,7 +128,7 @@ struct MedicalDashboardView: View {
         GlassCard(thickness: .regular) {
             VStack(spacing: BlipSpacing.md) {
                 Image(systemName: "cross.case.circle.fill")
-                    .font(.system(size: 42))
+                    .font(theme.typography.display)
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(MedicalDashboardL10n.notResponderTitle)
@@ -335,7 +335,7 @@ struct MedicalDashboardView: View {
     private func infoRow(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: BlipSpacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 13))
+                .font(.custom(BlipFontName.regular, size: 13, relativeTo: .footnote))
                 .foregroundStyle(theme.colors.mutedText)
                 .frame(width: 18)
             Text(text)
