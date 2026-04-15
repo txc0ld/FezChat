@@ -3,6 +3,7 @@ import SwiftData
 import CoreLocation
 import os.log
 import BlipCrypto
+import BlipMesh
 
 // MARK: - Event Discovery State
 
@@ -88,6 +89,24 @@ final class EventsViewModel {
         }
     }
 
+    // MARK: - Peer Density Suggestion
+
+    /// Number of BLE peers currently connected.
+    var nearbyPeerCount: Int = 0
+
+    /// Whether the user has dismissed the peer density suggestion this session.
+    var suggestedEventDismissed: Bool = false
+
+    /// True when enough peers are nearby, no event is active, and the user hasn't dismissed.
+    var showPeerDensitySuggestion: Bool {
+        nearbyPeerCount >= 5 && activeEvent == nil && !suggestedEventDismissed
+    }
+
+    /// Dismiss the peer density suggestion for this session.
+    func dismissPeerDensitySuggestion() {
+        suggestedEventDismissed = true
+    }
+
     // MARK: - Supporting Types
 
     enum EventCategory: String, CaseIterable, Sendable {
@@ -168,9 +187,11 @@ final class EventsViewModel {
     private let context: ModelContext
     private let locationService: LocationService
     private let notificationService: NotificationService
+    private let bleService: BLEService?
     private var previousAnnouncementIDs: Set<UUID> = []
     @ObservationIgnored nonisolated(unsafe) private var geofenceObservation: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var announcementObservation: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var peerStateObservation: NSObjectProtocol?
 
     // MARK: - Constants
 
@@ -188,20 +209,24 @@ final class EventsViewModel {
     init(
         modelContainer: ModelContainer,
         locationService: LocationService,
-        notificationService: NotificationService
+        notificationService: NotificationService,
+        bleService: BLEService? = nil
     ) {
         self.modelContainer = modelContainer
         self.context = ModelContext(modelContainer)
         self.locationService = locationService
         self.notificationService = notificationService
+        self.bleService = bleService
 
         setupGeofenceObserver()
         setupAnnouncementObserver()
+        setupPeerStateObserver()
     }
 
     deinit {
         if let obs = geofenceObservation { NotificationCenter.default.removeObserver(obs) }
         if let obs = announcementObservation { NotificationCenter.default.removeObserver(obs) }
+        if let obs = peerStateObservation { NotificationCenter.default.removeObserver(obs) }
     }
 
     // MARK: - Event Discovery
@@ -1195,6 +1220,18 @@ final class EventsViewModel {
     }
 
     // MARK: - Private: Geofence Observer
+
+    private func setupPeerStateObserver() {
+        peerStateObservation = NotificationCenter.default.addObserver(
+            forName: .meshPeerStateChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.nearbyPeerCount = self?.bleService?.connectedPeers.count ?? 0
+            }
+        }
+    }
 
     private func setupGeofenceObserver() {
         // The LocationService notifies via its delegate; here we observe via the location service

@@ -81,7 +81,13 @@ struct EventsView: View {
                 if hasJoinedEvent {
                     eventContent
                 } else {
-                    EventDiscoveryView(eventsViewModel: eventsViewModel)
+                    VStack(spacing: 0) {
+                        if eventsViewModel?.showPeerDensitySuggestion == true {
+                            peerDensityBanner
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                        EventDiscoveryView(eventsViewModel: eventsViewModel)
+                    }
                 }
             }
             .navigationTitle(eventTitle)
@@ -409,6 +415,45 @@ struct EventsView: View {
                 .padding(.horizontal, BlipSpacing.md)
             }
         }
+    }
+
+    // MARK: - Peer Density Banner
+
+    private var peerDensityBanner: some View {
+        GlassCard(thickness: .regular, cornerRadius: BlipCornerRadius.xl) {
+            HStack(spacing: BlipSpacing.md) {
+                Image(systemName: "person.3.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(.blipAccentPurple)
+
+                VStack(alignment: .leading, spacing: BlipSpacing.xxs) {
+                    Text("\(eventsViewModel?.nearbyPeerCount ?? 0) people nearby")
+                        .font(theme.typography.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(theme.colors.text)
+
+                    Text("Looks like there's something happening!")
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.mutedText)
+                }
+
+                Spacer()
+
+                Button(action: {
+                    withAnimation(SpringConstants.accessiblePageEntrance) {
+                        eventsViewModel?.dismissPeerDensitySuggestion()
+                    }
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(theme.colors.mutedText)
+                        .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
+                }
+                .accessibilityLabel("Dismiss")
+            }
+        }
+        .padding(.horizontal, BlipSpacing.md)
+        .padding(.vertical, BlipSpacing.sm)
     }
 
     // MARK: - Out of Range Banner
