@@ -13,6 +13,7 @@ private enum SOSConfirmationL10n {
     static let helpRequested = String(localized: "sos.confirmation.sent.title", defaultValue: "Help Requested")
     static let helpRequestedSubtitle = String(localized: "sos.confirmation.sent.subtitle", defaultValue: "Medical responders have been alerted. Stay where you are.")
     static let cancelSOS = String(localized: "sos.confirmation.sent.cancel", defaultValue: "Cancel SOS")
+    static let noPeersWarning = String(localized: "sos.confirmation.no_peers_warning", defaultValue: "No nearby peers detected. Your alert will be sent via relay if available.")
     static let pickUpPhone = String(localized: "sos.confirmation.proximity.title", defaultValue: "Pick Up Your Phone")
     static let pickUpPhoneSubtitle = String(localized: "sos.confirmation.proximity.subtitle", defaultValue: "Your phone appears to be face-down or in a pocket. Pick it up to confirm your SOS request.")
     static let captchaTitle = String(localized: "sos.confirmation.captcha.title", defaultValue: "Confirm This is Real")
@@ -156,6 +157,10 @@ struct SOSConfirmationSheet: View {
 
             // Confirmation area
             confirmationArea
+
+            if sosViewModel?.noPeersWarningShown == true {
+                noPeersWarningBanner
+            }
 
             if let sendError {
                 Text(sendError)
@@ -365,6 +370,10 @@ struct SOSConfirmationSheet: View {
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
 
+            if sosViewModel?.noPeersWarningShown == true {
+                noPeersWarningBanner
+            }
+
             // Cancel banner
             GlassCard(thickness: .regular) {
                 HStack(spacing: BlipSpacing.md) {
@@ -412,6 +421,27 @@ struct SOSConfirmationSheet: View {
                 .foregroundStyle(theme.colors.mutedText)
                 .multilineTextAlignment(.center)
         }
+    }
+
+    private var noPeersWarningBanner: some View {
+        GlassCard(thickness: .regular) {
+            HStack(alignment: .top, spacing: BlipSpacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(theme.colors.statusAmber)
+                    .padding(.top, 2)
+
+                Text(SOSConfirmationL10n.noPeersWarning)
+                    .font(theme.typography.caption)
+                    .foregroundStyle(theme.colors.text)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 0)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: BlipCornerRadius.xl, style: .continuous)
+                .stroke(theme.colors.statusAmber.opacity(0.35), lineWidth: BlipSizing.hairline)
+        )
     }
 
     // MARK: - False Alarm Captcha

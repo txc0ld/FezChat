@@ -108,6 +108,9 @@ final class SOSViewModel {
     /// Countdown seconds remaining for false-alarm-delayed users.
     var confirmationCountdown: Int = 0
 
+    /// Whether the latest SOS confirmation detected zero nearby BLE peers.
+    var noPeersWarningShown = false
+
     // MARK: - Supporting Types
 
     struct SOSAlertInfo: Identifiable, Sendable {
@@ -130,6 +133,7 @@ final class SOSViewModel {
 
     private let modelContainer: ModelContainer
     private let context: ModelContext
+    private let bleService: BLEService
     private let locationService: LocationService
     private let messageService: MessageService
     private let notificationService: NotificationService
@@ -155,12 +159,14 @@ final class SOSViewModel {
 
     init(
         modelContainer: ModelContainer,
+        bleService: BLEService,
         locationService: LocationService,
         messageService: MessageService,
         notificationService: NotificationService
     ) {
         self.modelContainer = modelContainer
         self.context = ModelContext(modelContainer)
+        self.bleService = bleService
         self.locationService = locationService
         self.messageService = messageService
         self.notificationService = notificationService
@@ -184,6 +190,7 @@ final class SOSViewModel {
         flowState = .selectingSeverity
         selectedSeverity = nil
         alertDescription = ""
+        noPeersWarningShown = false
     }
 
     /// Select a severity level and move to confirmation.
@@ -204,6 +211,15 @@ final class SOSViewModel {
         guard let severity = selectedSeverity else {
             flowState = .error("No severity selected")
             return
+        }
+
+        noPeersWarningShown = false
+        if bleService.connectedPeers.isEmpty {
+            noPeersWarningShown = true
+            DebugLogger.shared.log(
+                "SOS",
+                "WARNING: No BLE peers in range — SOS will broadcast but may not reach anyone"
+            )
         }
 
         // Acquire GPS
@@ -272,7 +288,6 @@ final class SOSViewModel {
 
         // Broadcast SOS packet
         await broadcastSOSAlert(alert, severity: severity, fuzzyGeohash: fuzzyGeohash)
-        await broadcastSOSPreciseLocation(alert)
 
         flowState = .active(alertID: alert.id)
     }
@@ -285,6 +300,7 @@ final class SOSViewModel {
         selectedSeverity = nil
         alertDescription = ""
         confirmationCountdown = 0
+        noPeersWarningShown = false
     }
 
     /// Cancel an active alert (user false alarm).
@@ -549,7 +565,7 @@ final class SOSViewModel {
 
         let packet = Packet(
             type: .sosAlert,
-            ttl: 7, // Maximum TTL for SOS
+            ttl: 2,
             timestamp: Packet.currentTimestamp(),
             flags: .sosPriority,
             senderID: identity.peerID,
@@ -609,7 +625,7 @@ final class SOSViewModel {
         }
     }
 
-    private func broadcastSOSPreciseLocation(_ alert: SOSAlert) async {
+    private func broadcastSOSPreciseLocation(_ alert: SOSAlert, recipientID: PeerID? = nil) async {
         let identity: Identity
         do {
             guard let loaded = try KeyManager.shared.loadIdentity() else {
@@ -632,24 +648,34 @@ final class SOSViewModel {
         var longitudeBits = alert.preciseLocationLongitude.bitPattern.littleEndian
         withUnsafeBytes(of: &longitudeBits) { payload.append(contentsOf: $0) }
 
+        var flags: PacketFlags = .sosPriority
+        if recipientID != nil {
+            flags.insert(.hasRecipient)
+        }
+
         let packet = Packet(
             type: .sosPreciseLocation,
-            ttl: 7,
+            ttl: 1,
             timestamp: Packet.currentTimestamp(),
-            flags: .sosPriority,
+            flags: flags,
             senderID: identity.peerID,
+            recipientID: recipientID,
             payload: payload
         )
 
         do {
-            let data = try PacketSerializer.encode(packet)
-            NotificationCenter.default.post(
-                name: .shouldBroadcastPacket,
-                object: nil,
-                userInfo: ["data": data, "priority": "sos"]
-            )
+            if recipientID != nil {
+                try await messageService.sendPacket(packet, allowBroadcastFallback: false)
+            } else {
+                let data = try PacketSerializer.encode(packet)
+                NotificationCenter.default.post(
+                    name: .shouldBroadcastPacket,
+                    object: nil,
+                    userInfo: ["data": data, "priority": "sos"]
+                )
+            }
         } catch {
-            logger.error("Failed to encode SOS precise location packet: \(error.localizedDescription)")
+            logger.error("Failed to send SOS precise location packet: \(error.localizedDescription)")
         }
     }
 
@@ -804,7 +830,7 @@ final class SOSViewModel {
                 responderName: "Responder \(packet.senderID.description.prefix(8))"
             )
             if let activeAlert {
-                await broadcastSOSPreciseLocation(activeAlert)
+                await broadcastSOSPreciseLocation(activeAlert, recipientID: packet.senderID)
             }
         }
 
