@@ -152,6 +152,11 @@ struct MeetingPointSheet: View {
                     .focused($isLabelFocused)
                     .submitLabel(.done)
                     .accessibilityLabel(MeetingPointL10n.labelAccessibility)
+                    .onChange(of: label) { _, newValue in
+                        if newValue.count > 50 {
+                            label = String(newValue.prefix(50))
+                        }
+                    }
 
                 Text("\(label.count)/50")
                     .font(theme.typography.caption)

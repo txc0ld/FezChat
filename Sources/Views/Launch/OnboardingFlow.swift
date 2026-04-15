@@ -70,6 +70,7 @@ struct OnboardingFlow: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(SpringConstants.accessiblePageEntrance, value: currentStep)
+                .gesture(DragGesture())
 
                 // Custom page indicator
                 pageIndicator

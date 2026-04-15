@@ -82,6 +82,7 @@ struct MedicalDashboardView: View {
 
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.theme) private var theme
+    @Environment(\.openURL) private var openURL
     @State private var showResolveDialog = false
 
     private var sosViewModel: SOSViewModel? { coordinator.sosViewModel }
@@ -306,8 +307,9 @@ struct MedicalDashboardView: View {
 
             HStack(spacing: BlipSpacing.sm) {
                 Button {
-                    let url = URL(string: "maps://?daddr=\(alert.preciseLocationLatitude),\(alert.preciseLocationLongitude)&dirflg=w")
-                    if let url { UIApplication.shared.open(url) }
+                    if let url = URL(string: "maps://?daddr=\(alert.preciseLocationLatitude),\(alert.preciseLocationLongitude)&dirflg=w") {
+                        openURL(url)
+                    }
                 } label: {
                     Label(MedicalDashboardL10n.navigate, systemImage: "location.fill").font(theme.typography.body).fontWeight(.semibold)
                         .frame(maxWidth: .infinity).padding(.vertical, BlipSpacing.sm)

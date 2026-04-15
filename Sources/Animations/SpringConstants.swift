@@ -4,6 +4,10 @@ import SwiftUI
 
 /// Shared spring animation configurations used throughout Blip.
 /// All animations respect `UIAccessibility.isReduceMotionEnabled`.
+///
+/// Note: View-level animations should prefer @Environment(\.accessibilityReduceMotion)
+/// for reactive updates. SpringConstants.isReduceMotionEnabled is used as a static
+/// fallback for non-View contexts and computed properties.
 enum SpringConstants {
 
     // MARK: - Spring parameters

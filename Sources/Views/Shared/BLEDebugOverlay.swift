@@ -380,8 +380,12 @@ struct BLEDebugOverlay: View {
 
                 // Server sync status
                 HStack {
-                    let user = fetchLocalUser()
-                    let synced = user != nil && !user!.noisePublicKey.isEmpty
+                    let synced: Bool = {
+                        if let user = fetchLocalUser(), !user.noisePublicKey.isEmpty {
+                            return true
+                        }
+                        return false
+                    }()
                     statusDot(synced ? .green : .orange)
                     Text("Keys in User model:")
                         .foregroundStyle(.gray)

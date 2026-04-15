@@ -358,7 +358,7 @@ private struct LostFoundMessageBubble: View {
     }
 
     private var messageText: String {
-        String(data: message.rawPayload, encoding: .utf8) ?? ""
+        String(data: message.rawPayload, encoding: .utf8) ?? String(localized: "lost_and_found.unreadable_message", defaultValue: "[Unable to display message]")
     }
 }
 
