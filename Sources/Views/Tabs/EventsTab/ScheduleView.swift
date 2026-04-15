@@ -41,7 +41,6 @@ struct ScheduleView: View {
 
     @State private var filter: ScheduleFilter = .all
     @State private var expandedStages: Set<UUID> = []
-    @State private var searchText: String = ""
 
     @Environment(\.theme) private var theme
 

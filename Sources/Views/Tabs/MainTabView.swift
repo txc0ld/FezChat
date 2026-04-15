@@ -1,12 +1,6 @@
 import SwiftUI
 
 private enum MainTabViewL10n {
-    static let nearbyTitle = String(localized: "main_tab.placeholder.nearby.title", defaultValue: "Nearby")
-    static let nearbySubtitle = String(localized: "main_tab.placeholder.nearby.subtitle", defaultValue: "Discover people and channels nearby.")
-    static let eventTitle = String(localized: "main_tab.placeholder.event.title", defaultValue: "Event")
-    static let eventSubtitle = String(localized: "main_tab.placeholder.event.subtitle", defaultValue: "Stage map, schedule, and announcements.")
-    static let profileTitle = String(localized: "main_tab.placeholder.profile.title", defaultValue: "Profile")
-    static let profileSubtitle = String(localized: "main_tab.placeholder.profile.subtitle", defaultValue: "Your profile, friends, and settings.")
     static let chatsTab = String(localized: "main_tab.tab.chats", defaultValue: "Chats")
     static let nearbyTab = String(localized: "main_tab.tab.nearby", defaultValue: "Nearby")
     static let eventTab = String(localized: "main_tab.tab.event", defaultValue: "Event")
@@ -193,52 +187,6 @@ struct MainTabView: View {
 
     private let tabBarHeight: CGFloat = 70
 
-    // MARK: - Placeholder Views
-
-    private var nearbyPlaceholder: some View {
-        VStack(spacing: BlipSpacing.lg) {
-            Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(.system(size: 48))
-                .foregroundStyle(theme.colors.mutedText)
-            Text(MainTabViewL10n.nearbyTitle)
-                .font(theme.typography.headline)
-                .foregroundStyle(theme.colors.text)
-            Text(MainTabViewL10n.nearbySubtitle)
-                .font(theme.typography.secondary)
-                .foregroundStyle(theme.colors.mutedText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var eventPlaceholder: some View {
-        VStack(spacing: BlipSpacing.lg) {
-            Image(systemName: "music.note.house.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(theme.colors.mutedText)
-            Text(MainTabViewL10n.eventTitle)
-                .font(theme.typography.headline)
-                .foregroundStyle(theme.colors.text)
-            Text(MainTabViewL10n.eventSubtitle)
-                .font(theme.typography.secondary)
-                .foregroundStyle(theme.colors.mutedText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var profilePlaceholder: some View {
-        VStack(spacing: BlipSpacing.lg) {
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(theme.colors.mutedText)
-            Text(MainTabViewL10n.profileTitle)
-                .font(theme.typography.headline)
-                .foregroundStyle(theme.colors.text)
-            Text(MainTabViewL10n.profileSubtitle)
-                .font(theme.typography.secondary)
-                .foregroundStyle(theme.colors.mutedText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
 }
 
 // MARK: - Tab enum

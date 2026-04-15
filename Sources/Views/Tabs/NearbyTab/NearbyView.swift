@@ -38,9 +38,6 @@ private enum NearbyL10n {
     static let noSharedLocationsSubtitle = String(localized: "nearby.friend_finder.no_shared_locations_subtitle", defaultValue: "Nearby mesh peers can appear above without GPS sharing. The map fills in only when friends opt into location sharing.")
     static let tapToExpand = String(localized: "nearby.friend_finder.tap_to_expand", defaultValue: "Tap to expand")
     static let openFullMap = String(localized: "nearby.friend_finder.open_full_map", defaultValue: "Open full friend finder map")
-    static let bluetoothNotActive = String(localized: "nearby.empty.bluetooth_not_active", defaultValue: "Bluetooth discovery is not active yet.")
-    static let friendRequestPending = String(localized: "nearby.peer.friend_request_pending", defaultValue: "friend request pending")
-    static let openProfile = String(localized: "nearby.peer.open_profile", defaultValue: "open nearby profile")
     static let previewSarahChen = "Sarah Chen"
     static let previewJakeMorrison = "Jake Morrison"
     static let previewPriyaPatel = "Priya Patel"
@@ -57,13 +54,6 @@ private enum NearbyL10n {
         String(format: String(localized: "nearby.header.accessibility", defaultValue: "%1$d people nearby. Transport: %2$@."), locale: Locale.current, peerCount, transportState)
     }
 
-    static func peerAccessibility(name: String, pending: Bool) -> String {
-        let template = pending
-            ? String(localized: "nearby.peer.accessibility.pending", defaultValue: "%1$@, %2$@")
-            : String(localized: "nearby.peer.accessibility.profile", defaultValue: "%1$@, %2$@")
-        let suffix = pending ? friendRequestPending : openProfile
-        return String(format: template, locale: Locale.current, name, suffix)
-    }
 }
 
 // MARK: - NearbyView
@@ -692,25 +682,6 @@ struct NearbyView: View {
         )
     }
 
-    private var emptyNearbyStateText: String {
-        if let locationError = resolvedLocationViewModel?.errorMessage {
-            return locationError
-        }
-
-        if resolvedMeshViewModel?.isBLEActive != true {
-            return NearbyL10n.bluetoothNotActive
-        }
-
-        return NearbyL10n.scanningTitle
-    }
-
-    private func peerAccessibilityLabel(_ peer: MeshViewModel.NearbyPeer) -> String {
-        let name = peer.displayName ?? peer.username ?? NearbyL10n.unknown
-        return NearbyL10n.peerAccessibility(
-            name: name,
-            pending: peer.friendStatus == .pending || friendRequestSent.contains(peer.id)
-        )
-    }
 }
 
 // MARK: - Peer Card Data
