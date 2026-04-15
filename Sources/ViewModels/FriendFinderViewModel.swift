@@ -1,6 +1,7 @@
 import Foundation
 import CoreLocation
 import SwiftUI
+import SwiftData
 import CryptoKit
 import BlipProtocol
 import BlipMesh
@@ -33,6 +34,8 @@ final class FriendFinderViewModel {
     // MARK: - Dependencies
 
     private let locationService: LocationService
+    private let modelContainer: ModelContainer
+    private let proximityAlertService: ProximityAlertService
     private let logger = Logger(subsystem: "com.blip", category: "FriendFinder")
 
     /// Tracked peer locations: PeerID hex → most recent location data.
@@ -50,8 +53,14 @@ final class FriendFinderViewModel {
 
     // MARK: - Init
 
-    init(locationService: LocationService = LocationService()) {
+    init(
+        locationService: LocationService = LocationService(),
+        modelContainer: ModelContainer,
+        proximityAlertService: ProximityAlertService
+    ) {
         self.locationService = locationService
+        self.modelContainer = modelContainer
+        self.proximityAlertService = proximityAlertService
         setupObservers()
         startCleanupTimer()
     }
@@ -185,6 +194,8 @@ final class FriendFinderViewModel {
                 isOutOfRange: entry.payload.age > LocationPayload.updateInterval * 2
             )
         }
+
+        evaluateProximityAlerts()
     }
 
     // MARK: - Stale Cleanup
@@ -318,6 +329,27 @@ final class FriendFinderViewModel {
     /// Update user's own coordinate from LocationService.
     func updateUserLocation(_ location: CLLocation) {
         userLocation = location.coordinate
+        evaluateProximityAlerts()
+    }
+
+    private func evaluateProximityAlerts() {
+        guard let userLocation else { return }
+
+        do {
+            let context = ModelContext(modelContainer)
+            let preferences = try context.fetch(FetchDescriptor<UserPreferences>()).first ?? UserPreferences()
+            proximityAlertService.checkProximity(
+                friendPins: friends,
+                userLocation: userLocation,
+                preferences: preferences
+            )
+        } catch {
+            DebugLogger.shared.log(
+                "PROXIMITY",
+                "Failed to load preferences for proximity alerts: \(error.localizedDescription)",
+                isError: true
+            )
+        }
     }
 
     private func stableUUID(for peerID: PeerID) -> UUID {
