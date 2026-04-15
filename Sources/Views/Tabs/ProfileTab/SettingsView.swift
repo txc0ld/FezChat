@@ -65,12 +65,14 @@ struct SettingsView: View {
     @State private var exportFileURL: URL?
     @State private var actionErrorMessage: String?
     @State private var isHydratingPreferences = false
+    @State private var showResponderRegistration = false
     @State private var showExportPasswordPrompt = false
     @State private var exportPassword: String = ""
     @State private var exportPasswordConfirm: String = ""
 
     @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppCoordinator.self) private var coordinator
 
     var body: some View {
         ZStack {
@@ -104,8 +106,17 @@ struct SettingsView: View {
                     SecuritySettings()
                         .staggeredReveal(index: 5)
 
+                    ResponderSettingsRow(
+                        isMedicalResponder: coordinator.sosViewModel?.isMedicalResponder ?? false,
+                        callsign: coordinator.sosViewModel?.responderCallsign,
+                        isOnDuty: coordinator.sosViewModel?.isOnDuty ?? false,
+                        onRegister: { showResponderRegistration = true },
+                        onToggleDuty: { Task { await coordinator.sosViewModel?.toggleOnDuty() } }
+                    )
+                    .staggeredReveal(index: 6)
+
                     AboutSettings()
-                        .staggeredReveal(index: 6)
+                        .staggeredReveal(index: 7)
 
                     AccountSettings(
                         showSignOutConfirm: $showSignOutConfirm,
@@ -114,7 +125,7 @@ struct SettingsView: View {
                         onExportData: startAccountExport,
                         onDeleteAccount: { showDeleteAccountConfirm = true }
                     )
-                        .staggeredReveal(index: 7)
+                        .staggeredReveal(index: 8)
 
                     Spacer().frame(height: BlipSpacing.xxl)
                 }
@@ -200,6 +211,11 @@ struct SettingsView: View {
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showResponderRegistration) {
+            ResponderRegistrationView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -521,6 +537,65 @@ private struct AccountExportShareSheet: View {
 }
 #endif
 
+// MARK: - Responder Settings Row
+
+/// Settings section for medical responder registration and on-duty toggle.
+private struct ResponderSettingsRow: View {
+
+    let isMedicalResponder: Bool
+    let callsign: String?
+    let isOnDuty: Bool
+    let onRegister: () -> Void
+    let onToggleDuty: () -> Void
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        SettingsComponents.settingsGroup(title: "Medical Responder", icon: "cross.circle.fill", theme: theme) {
+            if isMedicalResponder {
+                HStack {
+                    VStack(alignment: .leading, spacing: BlipSpacing.xs) {
+                        Text(callsign ?? "Responder")
+                            .font(theme.typography.body)
+                            .foregroundStyle(theme.colors.text)
+
+                        Text("Registered medical responder")
+                            .font(theme.typography.caption)
+                            .foregroundStyle(theme.colors.mutedText)
+                    }
+
+                    Spacer()
+
+                    Toggle("On Duty", isOn: Binding(
+                        get: { isOnDuty },
+                        set: { _ in onToggleDuty() }
+                    ))
+                    .labelsHidden()
+                    .tint(.blipAccentPurple)
+                }
+                .frame(minHeight: BlipSizing.minTapTarget)
+                .accessibilityLabel("On Duty toggle for \(callsign ?? "responder")")
+            } else {
+                Button(action: onRegister) {
+                    HStack {
+                        Text("Register as Medical Responder")
+                            .font(theme.typography.body)
+                            .foregroundStyle(theme.colors.text)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(theme.colors.mutedText)
+                    }
+                }
+                .frame(minHeight: BlipSizing.minTapTarget)
+                .accessibilityLabel("Register as Medical Responder")
+            }
+        }
+    }
+}
+
 // MARK: - Preview
 
 #Preview("Settings") {
@@ -529,6 +604,7 @@ private struct AccountExportShareSheet: View {
     }
     .preferredColorScheme(.dark)
     .blipTheme()
+    .environment(AppCoordinator())
 }
 
 #Preview("Settings - Light") {

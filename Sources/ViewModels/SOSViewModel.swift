@@ -355,6 +355,24 @@ final class SOSViewModel {
         }
     }
 
+    /// Register as a new medical responder.
+    func registerResponder(callsign: String, accessCodeHash: String) async {
+        let responder = MedicalResponder(
+            accessCodeHash: accessCodeHash,
+            callsign: callsign
+        )
+        context.insert(responder)
+
+        do {
+            try context.save()
+            isMedicalResponder = true
+            responderCallsign = callsign
+            DebugLogger.shared.log("SOS", "Registered as medical responder: \(DebugLogger.redact(callsign))")
+        } catch {
+            logger.error("Failed to register responder: \(error.localizedDescription)")
+        }
+    }
+
     /// Toggle responder on-duty status.
     func toggleOnDuty() async {
         let context = self.context

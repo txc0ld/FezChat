@@ -191,7 +191,7 @@ final class FriendFinderViewModel {
                 accuracyMeters: accuracy,
                 distanceFromUser: distance,
                 rssiMeters: rssiMeters,
-                isOutOfRange: entry.payload.age > LocationPayload.updateInterval * 2
+                isOutOfRange: entry.payload.age > LocationPayload.updateInterval * 3
             )
         }
 
@@ -210,7 +210,7 @@ final class FriendFinderViewModel {
     }
 
     private func cleanupStalePeers() {
-        let staleThreshold = LocationPayload.updateInterval * 2 // 60s
+        let staleThreshold = LocationPayload.updateInterval * 3 // 90s
         let now = Date()
 
         let before = peerLocations.count
