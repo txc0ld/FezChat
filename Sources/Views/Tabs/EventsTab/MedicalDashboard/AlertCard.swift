@@ -186,7 +186,7 @@ struct AlertCard: View {
                 .foregroundStyle(alert.accuracy.color)
         }
         .padding(.horizontal, BlipSpacing.sm)
-        .padding(.vertical, 2)
+        .padding(.vertical, BlipSpacing.xxs)
         .background(Capsule().fill(alert.accuracy.color.opacity(0.12)))
     }
 
@@ -295,7 +295,7 @@ struct AlertCard: View {
 
     private func startPulseIfCritical() {
         guard alert.severity == .red, !SpringConstants.isReduceMotionEnabled else { return }
-        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: false)) {
+        withAnimation(SpringConstants.gentleAnimation.repeatForever(autoreverses: false)) {
             isPulsing = true
         }
     }
