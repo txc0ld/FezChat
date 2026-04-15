@@ -404,12 +404,14 @@ final class EventsViewModel {
         do {
             if let event = try fetchEvent(for: eventId, context: context) {
                 ensureLostAndFoundChannel(for: event, context: context)
+                createStageChannels(for: event)
             }
             try context.save()
             joinedEventIds.insert(eventId)
             if let index = discoveryEvents.firstIndex(where: { $0.id == eventId }) {
                 discoveryEvents[index].isJoined = true
             }
+            NotificationCenter.default.post(name: .channelListDidChange, object: nil)
             DebugLogger.shared.log("EVENT", "Joined event \(eventId)")
         } catch {
             DebugLogger.shared.log("EVENT", "Failed to join event: \(error)", isError: true)
@@ -429,9 +431,96 @@ final class EventsViewModel {
             if let index = discoveryEvents.firstIndex(where: { $0.id == eventId }) {
                 discoveryEvents[index].isJoined = false
             }
+            NotificationCenter.default.post(name: .channelListDidChange, object: nil)
             DebugLogger.shared.log("EVENT", "Left event \(eventId)")
         } catch {
             DebugLogger.shared.log("EVENT", "Failed to leave event: \(error)", isError: true)
+        }
+    }
+
+    func createStageChannels(for event: Event) {
+        do {
+            var stageChannels = try context.fetch(FetchDescriptor<Channel>())
+                .filter { $0.type == .stageChannel }
+            let eventRetention = max(event.endDate.timeIntervalSince(event.startDate), 300)
+
+            if event.stages.isEmpty {
+                if let existingAnnouncements = stageChannels.first(where: {
+                    normalizedChannelName($0.name) == normalizedChannelName("Announcements") &&
+                    ($0.event?.id == event.id || $0.event == nil)
+                }) {
+                    existingAnnouncements.event = event
+                    existingAnnouncements.isAutoJoined = true
+                    existingAnnouncements.maxRetention = eventRetention
+                } else {
+                    let channel = Channel(
+                        type: .stageChannel,
+                        name: "Announcements",
+                        event: event,
+                        maxRetention: eventRetention,
+                        isAutoJoined: true
+                    )
+                    context.insert(channel)
+                    DebugLogger.shared.log("EVENT", "Created stage channel: Announcements")
+                }
+                return
+            }
+
+            for stage in event.stages {
+                let existingChannel = stageChannels.first(where: {
+                    normalizedChannelName($0.name) == normalizedChannelName(stage.name) &&
+                    $0.event?.id == event.id
+                }) ?? stageChannels.first(where: {
+                    normalizedChannelName($0.name) == normalizedChannelName(stage.name) &&
+                    $0.event == nil
+                })
+
+                if let existingChannel {
+                    existingChannel.event = event
+                    existingChannel.isAutoJoined = true
+                    existingChannel.maxRetention = eventRetention
+                    stage.channel = existingChannel
+                    continue
+                }
+
+                let channel = Channel(
+                    id: stage.id,
+                    type: .stageChannel,
+                    name: stage.name,
+                    event: event,
+                    maxRetention: eventRetention,
+                    isAutoJoined: true
+                )
+                context.insert(channel)
+                stage.channel = channel
+                stageChannels.append(channel)
+                DebugLogger.shared.log("EVENT", "Created stage channel: \(stage.name)")
+            }
+        } catch {
+            DebugLogger.shared.log("EVENT", "Failed to create stage channels: \(error)", isError: true)
+        }
+    }
+
+    func stageChannel(named name: String) -> Channel? {
+        do {
+            let stageChannels = try context.fetch(FetchDescriptor<Channel>())
+                .filter { $0.type == .stageChannel }
+            let normalizedName = normalizedChannelName(name)
+
+            if let activeEventID = activeEvent?.id,
+               let eventScopedMatch = stageChannels.first(where: {
+                   normalizedChannelName($0.name) == normalizedName &&
+                   $0.event?.id == activeEventID
+               }) {
+                return eventScopedMatch
+            }
+
+            return stageChannels.first(where: {
+                normalizedChannelName($0.name) == normalizedName
+            })
+        } catch {
+            DebugLogger.shared.log("EVENT", "Failed to resolve stage channel \(name): \(error)", isError: true)
+            return nil
         }
     }
 
@@ -714,7 +803,8 @@ final class EventsViewModel {
             let descriptor = FetchDescriptor<Channel>(
                 predicate: #Predicate { $0.typeRaw == "stageChannel" }
             )
-            guard let channel = try context.fetch(descriptor).first else {
+            let stageChannels = try context.fetch(descriptor)
+            guard let channel = preferredAnnouncementChannel(from: stageChannels) else {
                 announcements = []
                 return
             }
@@ -793,6 +883,20 @@ final class EventsViewModel {
                 normalized.hasPrefix("\(keyword) ") ||
                 normalized.hasPrefix("[\(keyword)]")
         }
+    }
+
+    private func preferredAnnouncementChannel(from channels: [Channel]) -> Channel? {
+        channels.sorted(by: announcementChannelSort).first
+    }
+
+    private func announcementChannelSort(_ lhs: Channel, _ rhs: Channel) -> Bool {
+        announcementChannelSortKey(lhs) < announcementChannelSortKey(rhs)
+    }
+
+    private func announcementChannelSortKey(_ channel: Channel) -> (Int, String) {
+        let normalizedName = normalizedChannelName(channel.name)
+        let priority = normalizedName == normalizedChannelName("Announcements") ? 0 : 1
+        return (priority, normalizedName)
     }
 
     private func setupAnnouncementObserver() {
@@ -903,6 +1007,14 @@ final class EventsViewModel {
         guard let eventUUID = UUID(uuidString: eventId) else { return nil }
         let descriptor = FetchDescriptor<Event>(predicate: #Predicate { $0.id == eventUUID })
         return try context.fetch(descriptor).first
+    }
+
+    private func normalizedChannelName(_ name: String?) -> String {
+        name?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            ?? ""
     }
 
     private func ensureLostAndFoundChannel(for event: Event, context: ModelContext) {
@@ -1084,6 +1196,10 @@ final class EventsViewModel {
         errorMessage = nil
         successMessage = nil
     }
+}
+
+extension Notification.Name {
+    static let channelListDidChange = Notification.Name("com.blip.channelListDidChange")
 }
 
 // MARK: - JSON Decoder Extension

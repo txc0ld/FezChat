@@ -902,14 +902,7 @@ extension MessageService {
     func handleOrgAnnouncement(_ packet: Packet, ingressTransport: PeerIngressTransport) async throws {
         let context = self.context
 
-        let channel: Channel
-        let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "stageChannel" })
-        if let existing = try context.fetch(descriptor).first {
-            channel = existing
-        } else {
-            channel = Channel(type: .stageChannel, name: "Announcements", isAutoJoined: true)
-            context.insert(channel)
-        }
+        let channel = try resolveAnnouncementChannel(context: context)
 
         let message = Message(
             channel: channel,
@@ -925,6 +918,35 @@ extension MessageService {
         try context.save()
 
         delegate?.messageService(self, didReceiveMessageID: message.id, channelID: channel.id)
+    }
+
+    @MainActor
+    private func resolveAnnouncementChannel(context: ModelContext) throws -> Channel {
+        let descriptor = FetchDescriptor<Channel>(predicate: #Predicate { $0.typeRaw == "stageChannel" })
+        let stageChannels = try context.fetch(descriptor)
+            .sorted(by: announcementChannelSort)
+
+        if let existing = stageChannels.first {
+            return existing
+        }
+
+        let fallback = Channel(type: .stageChannel, name: "Announcements", isAutoJoined: true)
+        context.insert(fallback)
+        return fallback
+    }
+
+    private func announcementChannelSort(_ lhs: Channel, _ rhs: Channel) -> Bool {
+        announcementChannelSortKey(lhs) < announcementChannelSortKey(rhs)
+    }
+
+    private func announcementChannelSortKey(_ channel: Channel) -> (Int, String) {
+        let normalizedName = channel.name?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            ?? ""
+        let priority = normalizedName == "announcements" ? 0 : 1
+        return (priority, normalizedName)
     }
 
 
