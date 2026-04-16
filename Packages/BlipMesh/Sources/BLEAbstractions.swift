@@ -5,6 +5,12 @@ import Foundation
 protocol BLEPeripheralProxy: AnyObject {
     var identifier: UUID { get }
     var name: String? { get }
+    var proxyState: CBPeripheralState { get }
+    /// Mirror of `CBPeripheral.canSendWriteWithoutResponse`. When `false`,
+    /// the system's transmit buffer is full; callers must defer further
+    /// `.withoutResponse` writes until `peripheralIsReadyToSendWriteWithoutResponse`
+    /// fires.
+    var proxyCanSendWriteWithoutResponse: Bool { get }
     func discoverServices(_ serviceUUIDs: [CBUUID]?)
     func discoverCharacteristics(_ characteristicUUIDs: [CBUUID]?, for service: CBService)
     func writeValue(_ data: Data, for characteristic: CBCharacteristic, type: CBCharacteristicWriteType)
@@ -12,7 +18,10 @@ protocol BLEPeripheralProxy: AnyObject {
     func maximumWriteValueLength(for type: CBCharacteristicWriteType) -> Int
 }
 
-extension CBPeripheral: BLEPeripheralProxy {}
+extension CBPeripheral: BLEPeripheralProxy {
+    var proxyState: CBPeripheralState { state }
+    var proxyCanSendWriteWithoutResponse: Bool { canSendWriteWithoutResponse }
+}
 
 /// Protocol abstracting CBCentralManager for dependency injection in tests.
 protocol BLECentralManaging: AnyObject {

@@ -167,31 +167,50 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     }
 
     public func send(data: Data, to peerID: PeerID) throws {
-        guard state == .running else {
-            throw TransportError.notStarted
-        }
-
-        guard let task = webSocketTask else {
-            throw TransportError.unavailable("WebSocket not connected")
+        // State and task capture must happen inside the same lock acquisition
+        // to prevent a TOCTOU race where a disconnect lands between the two
+        // checks. That window caused addressed DMs to throw `.unavailable` and
+        // the mesh layer would catch the throw and silently fall back to
+        // broadcast — privacy leak *and* symptom generator.
+        let task: URLSessionWebSocketTask = try lock.withLock {
+            guard isConnected, state == .running else {
+                if state != .running {
+                    throw TransportError.notStarted
+                }
+                throw TransportError.unavailable("WebSocket not connected")
+            }
+            guard let task = webSocketTask else {
+                throw TransportError.unavailable("WebSocket task missing")
+            }
+            return task
         }
 
         // Wrap as binary frame.
         let message = URLSessionWebSocketTask.Message.data(data)
         task.send(message) { [weak self] error in
-            if let error = error {
-                self?.logger.error("WebSocket send error: \(error.localizedDescription)")
-            }
+            guard let self, let error else { return }
+            self.logger.error("WebSocket send error: \(error.localizedDescription)")
+            // Surface the failure to the delegate so the mesh layer can
+            // re-route the packet instead of assuming success. Without this,
+            // send errors during the reconnect window were silently dropped.
+            self.delegate?.transport(self, didFailDelivery: data, to: peerID)
         }
     }
 
     public func broadcast(data: Data) {
-        guard state == .running, let task = webSocketTask else { return }
+        let task: URLSessionWebSocketTask? = lock.withLock {
+            guard isConnected, state == .running else { return nil }
+            return webSocketTask
+        }
+        guard let task else { return }
 
         let message = URLSessionWebSocketTask.Message.data(data)
         task.send(message) { [weak self] error in
-            if let error = error {
-                self?.logger.error("WebSocket broadcast error: \(error.localizedDescription)")
-            }
+            guard let self, let error else { return }
+            self.logger.error("WebSocket broadcast error: \(error.localizedDescription)")
+            // Broadcast has no specific recipient; we signal `to: nil` so the
+            // mesh layer can log and, if desired, re-queue.
+            self.delegate?.transport(self, didFailDelivery: data, to: nil)
         }
     }
 
@@ -420,12 +439,15 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
             // Extract the actual sender PeerID from the packet header (bytes 16-23).
             // This ensures handshake sessions, sender binding, and response routing
             // use the real peer identity rather than the relay pseudo-peer.
-            let senderPeerID: PeerID
-            if data.count >= 24,
-               let extracted = PeerID(bytes: Data(data[16 ..< 24])) {
-                senderPeerID = extracted
-            } else {
-                senderPeerID = serverPeerID
+            //
+            // A malformed <24-byte frame must *not* be attributed to the relay
+            // pseudo-peer. Previous behaviour let forged/undersized frames look
+            // like authenticated relay traffic; instead, drop them outright.
+            guard data.count >= 24,
+                  let senderPeerID = PeerID(bytes: Data(data[16 ..< 24]))
+            else {
+                logger.warning("WS dropping undersized/malformed frame (\(data.count)B)")
+                return
             }
             logger.debug("WS received \(data.count)B from \(senderPeerID)")
             delegate?.transport(self, didReceiveData: data, from: senderPeerID)
