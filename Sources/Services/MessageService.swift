@@ -112,6 +112,20 @@ final class MessageService: @unchecked Sendable {
     /// Control packets queued while waiting for a Noise handshake to complete.
     var pendingHandshakeControlMessages: [Data: [PendingEncryptedControlMessage]] = [:]
 
+    /// Timeout + retry Tasks for in-flight handshakes, keyed by peer ID bytes.
+    ///
+    /// Previously these Tasks were fire-and-forget, which meant:
+    ///   1. On logout / MessageService deinit, they continued running and
+    ///      touched a service that was about to be deallocated.
+    ///   2. When a session established before the 30s timeout, the timeout
+    ///      Task kept sleeping and later ran `handleHandshakeTimeout` on a
+    ///      peer that was already done — noisy at best, buggy at worst.
+    ///
+    /// Storing handles lets us cancel them deterministically from
+    /// `onSessionEstablished`, `handleHandshakeTimeout`, and `deinit`.
+    var handshakeTimeoutTasks: [Data: Task<Void, Never>] = [:]
+    var handshakeRetryTasks: [Data: Task<Void, Never>] = [:]
+
     /// A message waiting for a Noise session to be established before it can be encrypted.
     struct PendingEncryptedMessage {
         let payload: Data
@@ -209,11 +223,33 @@ final class MessageService: @unchecked Sendable {
                 self?.handleDeliveryFailureNotification(notification)
             }
         }
+
+        // Surface LRU-evicted incomplete reassemblies to the debug overlay
+        // instead of dropping them silently — useful when chasing "why did
+        // this voice note arrive truncated?" reports at scale.
+        self.fragmentAssembler.onEviction = { key, received, total in
+            let senderHex = key.senderID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+            let fragHex = key.fragmentID.prefix(2).map { String(format: "%02x", $0) }.joined()
+            DebugLogger.emit(
+                "RX",
+                "FRAGMENT evicted by LRU from \(senderHex) id=\(fragHex) (\(received)/\(total))",
+                isError: true
+            )
+        }
     }
 
     deinit {
         if let deliveryFailureObservation {
             NotificationCenter.default.removeObserver(deliveryFailureObservation)
+        }
+        // Cancel any in-flight handshake timeout + retry Tasks so they stop
+        // touching `self` after the service is torn down (e.g. on logout).
+        // lock.withLock here is safe in deinit because we're the last owner.
+        lock.withLock {
+            for task in handshakeTimeoutTasks.values { task.cancel() }
+            for task in handshakeRetryTasks.values { task.cancel() }
+            handshakeTimeoutTasks.removeAll()
+            handshakeRetryTasks.removeAll()
         }
     }
 
@@ -1254,7 +1290,10 @@ final class MessageService: @unchecked Sendable {
         DebugLogger.emit("RX", "FRAGMENT from \(senderHex): id=\(fragIDHex) \(fragment.index + 1)/\(fragment.total)")
 
         do {
-            let result = try fragmentAssembler.receive(fragment)
+            // Per-peer keying prevents cross-peer fragment contamination when
+            // two peers happen to generate the same random 4-byte fragmentID
+            // within the 30s assembly window.
+            let result = try fragmentAssembler.receive(fragment, from: peerID)
             switch result {
             case .incomplete(let received, let total):
                 DebugLogger.emit("RX", "FRAGMENT assembly \(fragIDHex): \(received)/\(total)")

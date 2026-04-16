@@ -147,14 +147,20 @@ extension MessageService {
             }
             if needsTimeout {
                 let peerBytes = recipientPeerID.bytes
-                Task { @MainActor in
+                let task = Task { @MainActor [weak self] in
                     do {
                         try await Task.sleep(for: .seconds(30))
                     } catch {
-                        DebugLogger.shared.log("NOISE", "Handshake timeout sleep cancelled: \(error)")
+                        // Sleep cancellation is the expected path when the
+                        // handshake completes early. Don't log as an error.
                         return
                     }
+                    guard let self, !Task.isCancelled else { return }
                     self.handleHandshakeTimeout(peerIDBytes: peerBytes)
+                }
+                lock.withLock {
+                    handshakeTimeoutTasks[peerBytes]?.cancel()
+                    handshakeTimeoutTasks[peerBytes] = task
                 }
             }
             return true
@@ -185,15 +191,18 @@ extension MessageService {
         // This handles relay paths where the recipient may connect after the first attempt.
         let peerBytes = recipientPeerID.bytes
         let retryPeerID = recipientPeerID
-        Task { @MainActor in
+        let retryTask = Task { @MainActor [weak self] in
             let retryDelays: [Duration] = [.seconds(60), .seconds(60), .seconds(60), .seconds(60)]
             for (attempt, delay) in retryDelays.enumerated() {
                 do {
                     try await Task.sleep(for: delay)
                 } catch {
-                    DebugLogger.shared.log("NOISE", "Handshake retry sleep cancelled: \(error)")
+                    // Cancelled — expected when the handshake succeeds or the
+                    // service tears down.
                     return
                 }
+
+                guard let self, !Task.isCancelled else { return }
 
                 // Check if session was established while we waited.
                 if self.noiseSessionManager?.hasSession(for: retryPeerID) == true {
@@ -241,6 +250,10 @@ extension MessageService {
                 }
             }
         }
+        lock.withLock {
+            handshakeRetryTasks[peerBytes]?.cancel()
+            handshakeRetryTasks[peerBytes] = retryTask
+        }
 
         return true
     }
@@ -250,10 +263,17 @@ extension MessageService {
     func onSessionEstablished(with peerID: PeerID) {
         let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         DebugLogger.shared.log("NOISE", "✅ E2E session established with \(peerHex)")
-        lock.lock()
-        let pending = pendingHandshakeMessages.removeValue(forKey: peerID.bytes) ?? []
-        let pendingControls = pendingHandshakeControlMessages.removeValue(forKey: peerID.bytes) ?? []
-        lock.unlock()
+        // Cancel any outstanding timeout + retry Tasks for this peer — the
+        // session is live now, those Tasks would otherwise fire later and
+        // run handshake retries / timeouts over an already-established session.
+        let (pending, pendingControls): ([PendingEncryptedMessage], [PendingEncryptedControlMessage])
+        (pending, pendingControls) = lock.withLock {
+            let msgs = pendingHandshakeMessages.removeValue(forKey: peerID.bytes) ?? []
+            let controls = pendingHandshakeControlMessages.removeValue(forKey: peerID.bytes) ?? []
+            handshakeTimeoutTasks.removeValue(forKey: peerID.bytes)?.cancel()
+            handshakeRetryTasks.removeValue(forKey: peerID.bytes)?.cancel()
+            return (msgs, controls)
+        }
 
         guard !pending.isEmpty || !pendingControls.isEmpty else {
             DebugLogger.shared.log("NOISE", "Session with \(peerHex) ready (no queued payloads)")
@@ -311,10 +331,17 @@ extension MessageService {
     /// Handle handshake timeout — mark pending messages as queued (retry via normal path).
     @MainActor
     func handleHandshakeTimeout(peerIDBytes: Data) {
-        lock.lock()
-        let pending = pendingHandshakeMessages.removeValue(forKey: peerIDBytes)
-        let pendingControls = pendingHandshakeControlMessages.removeValue(forKey: peerIDBytes)
-        lock.unlock()
+        let pending: [PendingEncryptedMessage]?
+        let pendingControls: [PendingEncryptedControlMessage]?
+        (pending, pendingControls) = lock.withLock {
+            let msgs = pendingHandshakeMessages.removeValue(forKey: peerIDBytes)
+            let controls = pendingHandshakeControlMessages.removeValue(forKey: peerIDBytes)
+            // Cancel the sibling retry Task — we've given up. Discard the
+            // stored timeout Task reference too so we don't leak it.
+            handshakeRetryTasks.removeValue(forKey: peerIDBytes)?.cancel()
+            _ = handshakeTimeoutTasks.removeValue(forKey: peerIDBytes)
+            return (msgs, controls)
+        }
 
         let peerHex = peerIDBytes.prefix(4).map { String(format: "%02x", $0) }.joined()
         if let pendingControls, !pendingControls.isEmpty {
@@ -704,18 +731,36 @@ extension MessageService {
     ) async throws {
         let context = self.context
 
-        guard data.count >= 16 else { return }
+        // Parse using the symmetric parser — the encoder writes a 36-byte UTF-8 UUID
+        // string (not raw 16 bytes), a 0x00 terminator, optional 8-byte duration for
+        // voice notes only, then the media bytes.
+        let parsed = MessagePayloadBuilder.parseMediaPayload(data, hasDuration: type == .voiceNote)
+        let messageID = parsed.messageID
+        let mediaData = parsed.media
 
-        // First 16 bytes: message UUID
-        let uuidBytes = data.prefix(16)
-        let messageID = UUID(uuidString: uuidBytes.map { String(format: "%02x", $0) }.joined()) ?? UUID()
-        let mediaData = data.dropFirst(16)
+        guard !mediaData.isEmpty else {
+            let senderHex = senderPeerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+            DebugLogger.shared.log(
+                "RX",
+                "Dropped media message from \(senderHex): empty media payload",
+                isError: true
+            )
+            return
+        }
 
         let (channel, senderUser) = try resolveChannel(
             for: type == .voiceNote ? .voiceNote : .imageMessage,
             senderPeerID: senderPeerID,
             context: context
         )
+
+        // Dedup: a media message may arrive via BLE and relay nearly simultaneously.
+        let targetID = messageID
+        let duplicateDescriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == targetID })
+        if !(try context.fetch(duplicateDescriptor)).isEmpty {
+            DebugLogger.shared.log("DM", "MEDIA DUPLICATE msgID=\(messageID) — skipping")
+            return
+        }
 
         let attachmentType: AttachmentType = type == .voiceNote ? .voiceNote : .image
         let mimeType = type == .voiceNote ? "audio/opus" : "image/jpeg"
@@ -734,7 +779,7 @@ extension MessageService {
         let attachment = Attachment(
             message: message,
             type: attachmentType,
-            fullData: Data(mediaData),
+            fullData: mediaData,
             sizeBytes: mediaData.count,
             mimeType: mimeType
         )
