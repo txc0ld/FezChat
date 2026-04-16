@@ -32,6 +32,30 @@ swift test --package-path Packages/BlipMesh
 
 Always use `-quiet` flag on xcodebuild to prevent context overflow from verbose build output.
 
+**App-level tests** live in `Tests/` (`ServiceTests/`, `ViewModelTests/`, `SwiftDataSchemaValidationTests.swift`) and only run through the `BlipTests` target — they depend on the `Blip` app target and cannot run via `swift test`. CI does not currently execute these; they run locally via Xcode's test action on the `Blip` scheme. If you touch code covered by these tests, run them in Xcode before delivering.
+
+**Strict concurrency:** `project.yml` sets `SWIFT_STRICT_CONCURRENCY: complete`, so local builds surface all concurrency warnings. CI's final app-build step overrides this to `minimal` (`-Xfrontend -strict-concurrency=minimal`) — don't rely on CI to catch concurrency issues; fix them locally.
+
+**Schemes and BLE UUID:** Two schemes exist with different BLE service UUIDs to avoid colliding on the same physical hardware:
+
+| Scheme | Config | `BLE_SERVICE_UUID` env |
+|---|---|---|
+| `Blip` (default) | Debug, also sets `-DBLE_UUID_DEBUG` | `FC000001-0000-1000-8000-00805F9B34FA` |
+| `Blip-Release` | Release | `FC000001-0000-1000-8000-00805F9B34FB` |
+
+The `...FB` UUID is the production/characteristic UUID in the protocol spec. Use the default `Blip` scheme for dev; devs running debug + release builds side-by-side will see them on separate mesh UUIDs.
+
+## CI
+
+Pipeline: `.github/workflows/ci.yml` (runs on PR and push to `main`). Two jobs:
+
+- **`ios`** (macos-15, Xcode 16.x): `brew install xcodegen libsodium` → `xcodegen generate` → all three `swift test --package-path ...` (BlipMesh retries once on failure) → `xcodebuild` app build with `-strict-concurrency=minimal`.
+- **`server-tests`** (ubuntu-latest): `npm ci && npm test` inside `server/auth/`. `server/cdn/` and `server/relay/` don't have test suites.
+
+Also: `.github/workflows/deploy-testflight.yml` handles TestFlight deploys.
+
+When making PR-ready changes, locally reproduce what CI does: run the three `swift test` commands + the `xcodebuild` command from the Build Configuration section above.
+
 ## XcodeGen
 
 The project uses XcodeGen — `project.yml` is the source of truth for the Xcode project, not the `.xcodeproj`.
