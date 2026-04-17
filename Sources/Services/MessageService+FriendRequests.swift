@@ -142,13 +142,17 @@ extension MessageService {
         let peerData = peerID.bytes
         do {
             if let peerInfo = peerStore.findPeer(byPeerIDBytes: peerData) {
-                let remoteUser = try resolveOrCreateUser(for: peerInfo, context: context)
-                try createOrUpdateFriend(
-                    user: remoteUser,
-                    status: .pending,
-                    direction: .outgoing,
-                    context: context
-                )
+                if let remoteUser = try resolveOrCreateUser(for: peerInfo, context: context) {
+                    try createOrUpdateFriend(
+                        user: remoteUser,
+                        status: .pending,
+                        direction: .outgoing,
+                        context: context
+                    )
+                } else {
+                    let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
+                    DebugLogger.shared.log("TX", "FRIEND_REQ: peer \(shortID) has no username — Friend record not created locally")
+                }
             } else {
                 let shortID = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
                 DebugLogger.shared.log("TX", "FRIEND_REQ: no PeerInfo for \(shortID) — Friend record not created locally")
@@ -290,10 +294,18 @@ extension MessageService {
         let foundPeer = peerStore.findPeer(byPeerIDBytes: peerData)
         DebugLogger.shared.log("DM", "FRIEND_REQ: PeerStore=\(foundPeer != nil ? "found" : "NOT FOUND") noiseKey=\(foundPeer?.noisePublicKey.count ?? 0)B")
 
-        // Create or find User for the sender
-        let senderUser: User
+        // Create or find User for the sender.
+        // resolveOrCreateUser returns nil if the peer has no real username AND no
+        // existing User matches by noise key — in that case fall through to the
+        // payload-username path below rather than persisting a synthetic name.
+        var resolvedViaPeerStore: User?
         if let foundPeer {
-            senderUser = try resolveOrCreateUser(for: foundPeer, context: context)
+            resolvedViaPeerStore = try resolveOrCreateUser(for: foundPeer, context: context)
+        }
+
+        let senderUser: User
+        if let user = resolvedViaPeerStore {
+            senderUser = user
             // Update username/display name from payload
             if let name = senderUsername, !name.isEmpty {
                 senderUser.username = name
@@ -302,10 +314,15 @@ extension MessageService {
                 senderUser.displayName = display
             }
         } else if let username = senderUsername, !username.isEmpty {
-            // No peer found by peerID — try by username for key lookup
-            var fallbackNoiseKey = Data()
-            var fallbackSigningKey = Data()
-            if let peerByUsername = peerStore.peer(byUsername: username) {
+            // Either no peer matched by peerID, or the matched peer had no
+            // announced username. Prefer the matched peer's keys — they map
+            // directly to the sender's peerID — and fall back to a by-username
+            // lookup only when foundPeer carries no keys.
+            var fallbackNoiseKey = foundPeer?.noisePublicKey ?? Data()
+            var fallbackSigningKey = foundPeer?.signingPublicKey ?? Data()
+            if !fallbackNoiseKey.isEmpty {
+                DebugLogger.shared.log("RX", "FRIEND_REQ: using foundPeer keys for fallback User \(DebugLogger.redact(username))")
+            } else if let peerByUsername = peerStore.peer(byUsername: username) {
                 fallbackNoiseKey = peerByUsername.noisePublicKey
                 fallbackSigningKey = peerByUsername.signingPublicKey
                 DebugLogger.shared.log("RX", "FRIEND_REQ: pulled keys from PeerStore for fallback User \(DebugLogger.redact(username))")
@@ -681,8 +698,12 @@ extension MessageService {
     // MARK: - Private: Friend Helpers
 
     /// Resolve or create a User record from a PeerInfo.
+    ///
+    /// Returns `nil` when the peer has no real username AND no existing User record
+    /// already exists for its noise key. Synthetic `peer_<shortID>` identifiers are
+    /// never persisted — unnamed BLE peers stay transient until they announce.
     @MainActor
-    func resolveOrCreateUser(for peerInfo: PeerInfo, context: ModelContext) throws -> User {
+    func resolveOrCreateUser(for peerInfo: PeerInfo, context: ModelContext) throws -> User? {
         // Try matching by noisePublicKey
         let peerKey = peerInfo.noisePublicKey
         let keyDesc = FetchDescriptor<User>(predicate: #Predicate { $0.noisePublicKey == peerKey })
@@ -702,10 +723,14 @@ extension MessageService {
             }
         }
 
-        // Create new User
-        let shortID = peerInfo.peerID.prefix(4).map { String(format: "%02x", $0) }.joined()
+        guard let username = peerInfo.username, !username.isEmpty else {
+            let shortID = peerInfo.peerID.prefix(4).map { String(format: "%02x", $0) }.joined()
+            DebugLogger.shared.log("PEER", "Refusing to create User for unnamed peer \(shortID)")
+            return nil
+        }
+
         let user = User(
-            username: peerInfo.username ?? "peer_\(shortID)",
+            username: username,
             displayName: peerInfo.username,
             emailHash: "",
             noisePublicKey: peerInfo.noisePublicKey,
