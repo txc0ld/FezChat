@@ -364,49 +364,79 @@ final class EventsViewModel {
 
     // MARK: - Event Discovery
 
-    /// Fetch browsable events from the manifest and load joined state.
+    /// Fetch browsable events from the manifest and load joined state. Falls back to the
+    /// bundled `events.json` on any remote failure so the UI is never empty when the CDN
+    /// is unreachable or mis-seeded. Only surfaces `.failed` if the bundled path also fails.
     func fetchDiscoveryEvents() async {
         discoveryState = .fetching
 
-        guard let url = URL(string: ServerConfig.eventsManifestURL) else {
-            discoveryState = .failed("Invalid manifest URL")
-            DebugLogger.shared.log("APP", "Invalid events manifest URL: \(ServerConfig.eventsManifestURL)", isError: true)
+        if let events = await fetchRemoteDiscoveryEvents() {
+            await applyDiscoveryEvents(events, source: "remote")
             return
+        }
+
+        if let events = await loadBundledDiscoveryEvents() {
+            await applyDiscoveryEvents(events, source: "bundle")
+            return
+        }
+
+        discoveryState = .failed("Failed to fetch events")
+    }
+
+    private func fetchRemoteDiscoveryEvents() async -> [DiscoveryManifestEvent]? {
+        guard let url = URL(string: ServerConfig.eventsManifestURL) else {
+            DebugLogger.shared.log("APP", "Invalid events manifest URL: \(ServerConfig.eventsManifestURL)", isError: true)
+            return nil
         }
 
         do {
             let (data, response) = try await ServerConfig.pinnedSession.data(from: url)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                discoveryState = .failed("Failed to fetch events")
-                DebugLogger.shared.log("APP", "Events manifest returned non-200", isError: true)
-                return
+                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                DebugLogger.shared.log("APP", "Events manifest HTTP \(status), falling back to bundle", isError: true)
+                return nil
             }
-
-            let events = try decodeDiscoveryManifestEvents(from: data)
-            await loadJoinedEventIds()
-
-            discoveryEvents = events.map { event in
-                DiscoverableEvent(
-                    id: event.id.uuidString,
-                    name: event.name,
-                    location: event.location ?? "Unknown location",
-                    startDate: event.startDate,
-                    endDate: event.endDate,
-                    description: event.description ?? "",
-                    imageURL: event.imageURL,
-                    attendeeCount: event.attendeeCount ?? 0,
-                    category: eventCategory(for: event.category),
-                    isJoined: joinedEventIds.contains(event.id.uuidString)
-                )
-            }
-
-            discoveryState = discoveryEvents.isEmpty ? .idle : .loaded
-            DebugLogger.shared.log("EVENT", "Loaded \(discoveryEvents.count) discovery events from manifest")
-
+            return try decodeDiscoveryManifestEvents(from: data)
         } catch {
-            discoveryState = .failed("Fetch error: \(error.localizedDescription)")
-            DebugLogger.shared.log("APP", "Failed to fetch discovery events: \(error)", isError: true)
+            DebugLogger.shared.log("APP", "Discovery remote fetch failed, falling back to bundle: \(error)", isError: true)
+            return nil
         }
+    }
+
+    private func loadBundledDiscoveryEvents() async -> [DiscoveryManifestEvent]? {
+        guard let url = Bundle.main.url(forResource: "events", withExtension: "json") else {
+            DebugLogger.shared.log("EVENT", "Bundled events.json not found", isError: true)
+            return nil
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            return try decodeDiscoveryManifestEvents(from: data)
+        } catch {
+            DebugLogger.shared.log("EVENT", "Failed to decode bundled events: \(error)", isError: true)
+            return nil
+        }
+    }
+
+    private func applyDiscoveryEvents(_ events: [DiscoveryManifestEvent], source: String) async {
+        await loadJoinedEventIds()
+
+        discoveryEvents = events.map { event in
+            DiscoverableEvent(
+                id: event.id.uuidString,
+                name: event.name,
+                location: event.location ?? "Unknown location",
+                startDate: event.startDate,
+                endDate: event.endDate,
+                description: event.description ?? "",
+                imageURL: event.imageURL,
+                attendeeCount: event.attendeeCount ?? 0,
+                category: eventCategory(for: event.category),
+                isJoined: joinedEventIds.contains(event.id.uuidString)
+            )
+        }
+
+        discoveryState = discoveryEvents.isEmpty ? .idle : .loaded
+        DebugLogger.shared.log("EVENT", "Loaded \(discoveryEvents.count) discovery events from \(source)")
     }
 
     /// Load joined event IDs from SwiftData.
