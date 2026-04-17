@@ -6,7 +6,10 @@ compatibility_date = "2025-03-01"
 CORS_ORIGIN = "http://localhost:3000"
 MAX_AVATAR_BYTES = "2097152"
 
-# Set JWT_SECRET via `wrangler secret put JWT_SECRET`
+# Set via wrangler:
+#   wrangler secret put JWT_SECRET
+#   wrangler secret put DATABASE_URL
+#   wrangler secret put INTERNAL_API_KEY
 
 [[r2_buckets]]
 binding = "AVATARS"
