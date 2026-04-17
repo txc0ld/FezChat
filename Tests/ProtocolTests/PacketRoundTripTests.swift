@@ -224,7 +224,7 @@ final class PacketRoundTripTests: XCTestCase {
             XCTAssertEqual(parsed.total, fragment.total)
             XCTAssertEqual(parsed.data, fragment.data)
 
-            let result = try assembler.receive(parsed)
+            let result = try assembler.receive(parsed, from: makePeerID(0xAA))
             switch result {
             case .complete(let data):
                 reassembled = data
@@ -254,7 +254,7 @@ final class PacketRoundTripTests: XCTestCase {
         let serialized = fragments[0].serialize()
         let parsed = Fragment.parse(serialized)!
         let assembler = FragmentAssembler()
-        let result = try assembler.receive(parsed)
+        let result = try assembler.receive(parsed, from: makePeerID(0xAA))
 
         if case .complete(let data) = result {
             XCTAssertEqual(data, smallPayload)
@@ -273,7 +273,7 @@ final class PacketRoundTripTests: XCTestCase {
         var reassembled: Data?
 
         for fragment in fragments.reversed() {
-            let result = try assembler.receive(fragment)
+            let result = try assembler.receive(fragment, from: makePeerID(0xAA))
             if case .complete(let data) = result {
                 reassembled = data
             }

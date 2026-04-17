@@ -96,7 +96,20 @@ enum MessagePayloadBuilder {
 
     // MARK: - Media Payloads
 
-    /// Build a media payload: [messageID(36B) 0x00 duration?(8B) mediaData]
+    /// Build a media payload.
+    ///
+    /// Wire format: `[messageID: UTF-8 UUID string (36B)][0x00][duration: 8 little-endian
+    /// bytes, if `hasDuration`][mediaData...]`.
+    ///
+    /// The leading messageID is encoded as a 36-byte UTF-8 UUID string (not raw 16 bytes)
+    /// to match the text payload encoding and keep all message IDs uniformly parseable via
+    /// `parseLeadingMessageID`. A 0x00 terminator separates the ID from the binary tail.
+    ///
+    /// - Parameters:
+    ///   - data: Raw media bytes (Opus frames or JPEG data).
+    ///   - messageID: UUID identifying this message for dedup + ack routing.
+    ///   - duration: Optional duration in seconds (voice notes include it; images don't).
+    ///     When non-nil, emitted as 8 raw bytes of a little-endian `TimeInterval`.
     static func buildMediaPayload(data: Data, messageID: UUID, duration: TimeInterval?) -> Data {
         var payload = Data()
         payload.append(messageID.uuidString.data(using: .utf8) ?? Data())
@@ -107,6 +120,70 @@ enum MessagePayloadBuilder {
         }
         payload.append(data)
         return payload
+    }
+
+    /// Parsed media payload.
+    struct ParsedMediaPayload {
+        /// UUID decoded from the leading UTF-8 string. `parseMediaPayload` returns
+        /// `nil` rather than fabricating one when the wire is malformed — see the
+        /// dedup discussion in `parseMediaPayload`.
+        let messageID: UUID?
+        /// Duration in seconds (voice notes only), or `nil` for images.
+        let duration: TimeInterval?
+        /// Raw media bytes (Opus frames or JPEG data).
+        let media: Data
+
+        /// Backwards-compatible accessor: a synthesised UUID for callers that
+        /// previously expected a non-optional `messageID`. New callers should
+        /// branch on `messageID` directly so they can drop malformed packets
+        /// instead of indexing them under a never-deduplicable random UUID.
+        var resolvedMessageID: UUID { messageID ?? UUID() }
+    }
+
+    /// Parse a media payload produced by ``buildMediaPayload(data:messageID:duration:)``.
+    ///
+    /// Symmetric with `buildMediaPayload`: find the 0x00 terminator, decode the 36-byte
+    /// leading UTF-8 UUID string, optionally read 8 bytes of duration, and return the
+    /// remaining bytes as the media payload.
+    ///
+    /// **Malformed-input contract**: when the leading UUID is missing, truncated, or
+    /// non-UTF-8, `messageID` is `nil`. The previous implementation manufactured a fresh
+    /// UUID in that case, which broke the receive-side dedup: every retransmit got its
+    /// own ID and was inserted as a duplicate row. Callers should now drop the message
+    /// when `messageID == nil`.
+    ///
+    /// - Parameters:
+    ///   - data: Full decrypted media payload.
+    ///   - hasDuration: Whether the payload was built with a duration (voice notes = true,
+    ///     images = false). The wire format gives no self-describing flag, so the caller
+    ///     must know the message type from the `EncryptedSubType` envelope.
+    static func parseMediaPayload(_ data: Data, hasDuration: Bool) -> ParsedMediaPayload {
+        let bytes = [UInt8](data)
+        guard let separatorIndex = bytes.firstIndex(of: 0x00) else {
+            return ParsedMediaPayload(messageID: nil, duration: nil, media: Data())
+        }
+        let idBytes = Data(bytes[0 ..< separatorIndex])
+        let messageID = String(data: idBytes, encoding: .utf8).flatMap(UUID.init)
+        var cursor = separatorIndex + 1
+
+        let duration: TimeInterval?
+        if hasDuration {
+            // Strict bounds check — without it a truncated payload (cursor + n where n < 8)
+            // would either crash on the unsafe load or read uninitialised stack bytes.
+            guard cursor + 8 <= bytes.count else {
+                return ParsedMediaPayload(messageID: messageID, duration: nil, media: Data())
+            }
+            let durationBytes = Data(bytes[cursor ..< cursor + 8])
+            duration = durationBytes.withUnsafeBytes { raw -> TimeInterval in
+                raw.load(as: TimeInterval.self)
+            }
+            cursor += 8
+        } else {
+            duration = nil
+        }
+
+        let media = cursor <= bytes.count ? Data(bytes[cursor ..< bytes.count]) : Data()
+        return ParsedMediaPayload(messageID: messageID, duration: duration, media: media)
     }
 
     // MARK: - Friend Payloads

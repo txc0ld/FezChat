@@ -203,6 +203,24 @@ extension MessageService {
                     DebugLogger.shared.log("DB", "Failed to save backfilled keys: \(error.localizedDescription)", isError: true)
                 }
                 DebugLogger.shared.log("DM", "Backfilled keys for \(DebugLogger.redact(friendUsername)) before createDMChannel")
+
+                // If we have an existing Noise session whose remote static key
+                // does not match the backfilled key, the session is stale —
+                // destroy it so the next DM forces a fresh handshake. Without
+                // this, future DMs would encrypt under a session that the
+                // friend's client can't decrypt (key mismatch), producing
+                // silent drops that are hard to diagnose.
+                if let sessionManager = noiseSessionManager,
+                   let candidatePeerID = PeerID(bytes: peerInfo.peerID),
+                   let existingSession = sessionManager.getSession(for: candidatePeerID),
+                   existingSession.remoteStaticKey.rawRepresentation != peerInfo.noisePublicKey {
+                    DebugLogger.shared.log(
+                        "NOISE",
+                        "Destroying stale session for \(DebugLogger.redact(friendUsername)) — backfilled key differs from session remote static key",
+                        isError: true
+                    )
+                    sessionManager.destroySession(for: candidatePeerID)
+                }
             }
         }
 

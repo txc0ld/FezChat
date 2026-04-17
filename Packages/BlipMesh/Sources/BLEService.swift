@@ -69,6 +69,26 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
     /// Negotiated MTU per connected peripheral UUID.
     var peripheralMTU: [UUID: Int] = [:]
 
+    // MARK: - Broadcast backpressure queues
+
+    /// Broadcasts deferred because `bleUpdateValue` returned `false` (system
+    /// transmit buffer full). Drained via
+    /// `peripheralManagerIsReady(toUpdateSubscribers:)`.
+    ///
+    /// Bounded by `maxPendingBroadcasts`; oldest entries are dropped when the
+    /// queue overflows rather than growing without limit.
+    private var pendingNotifyBroadcasts: [Data] = []
+
+    /// Broadcasts deferred per connected peripheral because
+    /// `canSendWriteWithoutResponse` was false. Drained via
+    /// `peripheralIsReadyToSendWriteWithoutResponse(_:)`.
+    private var pendingWriteWithoutResponseBroadcasts: [UUID: [Data]] = [:]
+
+    /// Cap on queued broadcasts per target (central or peripheral).
+    /// Broadcasts are best-effort announcements/fragments; dropping oldest is
+    /// preferable to unbounded growth.
+    private static let maxPendingBroadcasts = 32
+
     /// Consecutive connection failure count per peripheral for exponential backoff.
     private var failureCounts: [UUID: Int] = [:]
     /// Timestamp when a peripheral's backoff period started, for expiry calculation.
@@ -261,61 +281,230 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             throw TransportError.payloadTooLarge(size: data.count, max: peerMTU)
         }
 
-        var sent = false
+        let peerHex = peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined()
 
-        // Try sending via central connection (write to peripheral's characteristic)
-        lock.lock()
-        if let peripheral = peerIDToPeripheral[peerID],
-           let char = peripheralCharacteristics[peripheral.identifier] {
-            lock.unlock()
+        // --- Path 1: central-to-peripheral write (we're the client) ---
+        //
+        // Capture peripheral + characteristic under lock, then validate the
+        // peripheral is still connected before releasing. We can't hold the
+        // lock across `writeValue` because the CoreBluetooth queue serializes
+        // calls itself and blocking here would deadlock, but we *can* close
+        // the TOCTOU window by re-checking peripheral.proxyState.
+        if let (peripheral, char) = resolveCentralWriteTarget(for: peerID) {
+            // writeValue(..., type: .withResponse) is reliable — the BLE stack
+            // retries and surfaces errors via didWriteValueFor. No backpressure
+            // check needed for the withResponse path.
             peripheral.writeValue(data, for: char, type: .withResponse)
             lock.withLock { lastDataExchange[peripheral.identifier] = Date() }
-            sent = true
-        } else {
-            lock.unlock()
+            transportEventHandler?("BLE", "SENT \(data.count)B to \(peerHex) [write]")
+            return
         }
 
-        // Try sending via peripheral manager (notify subscribed central)
-        if !sent {
-            lock.lock()
-            let matchingCentral = centralToPeerID.first(where: { $0.value == peerID })?.key
-            let central = subscribedCentrals.first(where: { $0.identifier == matchingCentral })
-            lock.unlock()
+        // --- Path 2: peripheral-to-central notify (we're the server) ---
+        if let (central, char) = resolveNotifyTarget(for: peerID) {
+            // `bleUpdateValue` returns false when the system transmit buffer
+            // is full. Propagate that to the caller as `.unavailable` so the
+            // mesh layer can retry or route via relay instead of silently
+            // losing the packet.
+            let delivered = peripheralManager?.bleUpdateValue(
+                data,
+                for: char,
+                onSubscribedCentrals: [central]
+            ) ?? false
 
-            if let central = central, let char = characteristic {
-                _ = peripheralManager?.bleUpdateValue(data, for: char, onSubscribedCentrals: [central])
-                if let uuid = matchingCentral {
-                    lock.withLock { lastDataExchange[uuid] = Date() }
-                }
-                sent = true
+            if !delivered {
+                transportEventHandler?("BLE", "SEND BACKPRESSURE: notify buffer full to \(peerHex) [\(data.count)B] — unavailable")
+                throw TransportError.unavailable("BLE notify buffer full")
             }
+
+            lock.withLock { lastDataExchange[central.identifier] = Date() }
+            transportEventHandler?("BLE", "SENT \(data.count)B to \(peerHex) [notify]")
+            return
         }
 
-        if !sent {
-            transportEventHandler?("BLE", "SEND FAILED: peer not connected \(peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined())")
-            throw TransportError.peerNotConnected(peerID)
-        } else {
-            transportEventHandler?("BLE", "SENT \(data.count)B to \(peerID.bytes.prefix(4).map { String(format: "%02x", $0) }.joined())")
+        transportEventHandler?("BLE", "SEND FAILED: peer not connected \(peerHex)")
+        throw TransportError.peerNotConnected(peerID)
+    }
+
+    /// Resolve the peripheral + characteristic pair to write to for an addressed
+    /// send. Returns `nil` if the peripheral is no longer connected or has no
+    /// discovered characteristic yet.
+    private func resolveCentralWriteTarget(
+        for peerID: PeerID
+    ) -> (peripheral: any BLEPeripheralProxy, char: CBCharacteristic)? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let peripheral = peerIDToPeripheral[peerID],
+              let char = peripheralCharacteristics[peripheral.identifier]
+        else { return nil }
+
+        // Guard against stale references from a peer that disconnected after
+        // the map lookup but before we grabbed the lock.
+        guard peripheral.proxyState == .connected else {
+            transportEventHandler?(
+                "BLE",
+                "SEND skipped: peripheral \(peripheral.identifier.uuidString.prefix(8)) state=\(peripheral.proxyState.rawValue) (not connected)"
+            )
+            return nil
         }
+
+        return (peripheral, char)
+    }
+
+    /// Resolve the subscribed central + mutable characteristic for an addressed
+    /// notify. Returns `nil` if the central has unsubscribed.
+    private func resolveNotifyTarget(
+        for peerID: PeerID
+    ) -> (central: CBCentral, char: CBMutableCharacteristic)? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let matchingCentral = centralToPeerID.first(where: { $0.value == peerID })?.key
+        guard let uuid = matchingCentral,
+              let central = subscribedCentrals.first(where: { $0.identifier == uuid }),
+              let char = characteristic
+        else { return nil }
+        return (central, char)
     }
 
     public func broadcast(data: Data) {
         guard state == .running else { return }
 
-        // Notify all subscribed centrals via peripheral manager
-        if let char = characteristic, !subscribedCentrals.isEmpty {
-            _ = peripheralManager?.bleUpdateValue(data, for: char, onSubscribedCentrals: subscribedCentrals)
+        // --- Notify fan-out to subscribed centrals ---
+        //
+        // Honor the `bleUpdateValue` return value: when the system transmit
+        // buffer is full the call returns false *and* iOS stops buffering any
+        // further updates until `peripheralManagerIsReady(toUpdateSubscribers:)`
+        // fires. If we ignore the return value, subsequent broadcasts are
+        // silently dropped by CoreBluetooth, not just this one — so queueing
+        // here is essential for reliability.
+        let hasSubscribers = lock.withLock { !subscribedCentrals.isEmpty }
+        if let char = characteristic, hasSubscribers {
+            let delivered = peripheralManager?.bleUpdateValue(
+                data,
+                for: char,
+                onSubscribedCentrals: nil  // nil = all subscribed centrals
+            ) ?? false
+            if !delivered {
+                enqueueNotifyBroadcast(data)
+            }
         }
 
-        // Write to all connected peripherals via central manager
-        lock.lock()
-        let peripherals = Array(connectedPeripheralRefs.values)
-        let chars = peripheralCharacteristics
-        lock.unlock()
+        // --- Writes-without-response to connected peripherals ---
+        //
+        // Per-peripheral we must check `canSendWriteWithoutResponse`; iOS drops
+        // writes silently if the flag is false, the same backpressure pattern
+        // as notify fan-out. Peripherals that can't accept the write right now
+        // get their data queued for `peripheralIsReadyToSendWriteWithoutResponse`.
+        let (peripherals, chars) = lock.withLock {
+            (Array(connectedPeripheralRefs.values), peripheralCharacteristics)
+        }
 
         for peripheral in peripherals {
-            if let char = chars[peripheral.identifier] {
+            guard let char = chars[peripheral.identifier] else { continue }
+            guard peripheral.proxyState == .connected else { continue }
+            if peripheral.proxyCanSendWriteWithoutResponse {
                 peripheral.writeValue(data, for: char, type: .withoutResponse)
+            } else {
+                enqueueWriteWithoutResponseBroadcast(data, for: peripheral.identifier)
+            }
+        }
+    }
+
+    // MARK: - Backpressure queueing
+
+    private func enqueueNotifyBroadcast(_ data: Data) {
+        lock.withLock {
+            if pendingNotifyBroadcasts.count >= Self.maxPendingBroadcasts {
+                pendingNotifyBroadcasts.removeFirst()
+            }
+            pendingNotifyBroadcasts.append(data)
+        }
+        transportEventHandler?("BLE", "BACKPRESSURE queued notify broadcast (\(data.count)B)")
+    }
+
+    private func enqueueWriteWithoutResponseBroadcast(_ data: Data, for peripheralUUID: UUID) {
+        lock.withLock {
+            var queue = pendingWriteWithoutResponseBroadcasts[peripheralUUID] ?? []
+            if queue.count >= Self.maxPendingBroadcasts {
+                queue.removeFirst()
+            }
+            queue.append(data)
+            pendingWriteWithoutResponseBroadcasts[peripheralUUID] = queue
+        }
+        transportEventHandler?(
+            "BLE",
+            "BACKPRESSURE queued writeNoResponse broadcast (\(data.count)B) for \(peripheralUUID.uuidString.prefix(8))"
+        )
+    }
+
+    /// Drain the pending notify broadcast queue until either (a) empty or
+    /// (b) `bleUpdateValue` returns false again. Invoked from
+    /// `peripheralManagerIsReady(toUpdateSubscribers:)`. Internal for tests.
+    func drainPendingNotifyBroadcasts() {
+        guard let char = characteristic else { return }
+
+        while true {
+            let next: Data? = lock.withLock {
+                pendingNotifyBroadcasts.isEmpty ? nil : pendingNotifyBroadcasts.removeFirst()
+            }
+            guard let data = next else { return }
+
+            let delivered = peripheralManager?.bleUpdateValue(
+                data,
+                for: char,
+                onSubscribedCentrals: nil
+            ) ?? false
+
+            if !delivered {
+                // Re-queue at the front so ordering is preserved and wait for
+                // the next ready callback.
+                lock.withLock {
+                    pendingNotifyBroadcasts.insert(data, at: 0)
+                }
+                transportEventHandler?("BLE", "BACKPRESSURE drain paused — notify buffer still full")
+                return
+            }
+
+            transportEventHandler?("BLE", "BACKPRESSURE drained notify broadcast (\(data.count)B)")
+        }
+    }
+
+    /// Drain pending writes-without-response for a specific peripheral. Invoked
+    /// from `peripheralIsReadyToSendWriteWithoutResponse(_:)`. Internal for tests.
+    func drainPendingWriteWithoutResponseBroadcasts(
+        for peripheral: any BLEPeripheralProxy
+    ) {
+        let (queue, char): ([Data], CBCharacteristic?) = lock.withLock {
+            let queue = pendingWriteWithoutResponseBroadcasts[peripheral.identifier] ?? []
+            pendingWriteWithoutResponseBroadcasts[peripheral.identifier] = nil
+            return (queue, peripheralCharacteristics[peripheral.identifier])
+        }
+        guard let char else { return }
+        guard peripheral.proxyState == .connected else { return }
+
+        var remaining: [Data] = []
+        for data in queue {
+            if peripheral.proxyCanSendWriteWithoutResponse {
+                peripheral.writeValue(data, for: char, type: .withoutResponse)
+                transportEventHandler?(
+                    "BLE",
+                    "BACKPRESSURE drained writeNoResponse broadcast (\(data.count)B) to \(peripheral.identifier.uuidString.prefix(8))"
+                )
+            } else {
+                remaining.append(data)
+                // Don't try to push more after we saw backpressure — preserve order.
+                break
+            }
+        }
+
+        if !remaining.isEmpty {
+            lock.withLock {
+                // Keep any we couldn't send, plus whatever was re-queued while
+                // we were iterating outside the lock.
+                let later = pendingWriteWithoutResponseBroadcasts[peripheral.identifier] ?? []
+                pendingWriteWithoutResponseBroadcasts[peripheral.identifier] = remaining + later
             }
         }
     }
@@ -733,6 +922,10 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             peripheralMTU.removeValue(forKey: uuid)
             lastDataExchange.removeValue(forKey: uuid)
             connectingPeripherals.remove(uuid)
+            // Drop any deferred broadcasts — a disconnected peripheral cannot
+            // drain them, and keeping them would leak memory until the next
+            // stop() or resetPeerTracking().
+            pendingWriteWithoutResponseBroadcasts.removeValue(forKey: uuid)
 
             // Clear dedup entry so a genuine reconnect fires a new CONNECTED event
             if let pid = pid {
@@ -877,6 +1070,8 @@ public final class BLEService: NSObject, Transport, @unchecked Sendable {
             timedOutPeripherals.removeAll()
             failureCounts.removeAll()
             backoffUntil.removeAll()
+            pendingNotifyBroadcasts.removeAll()
+            pendingWriteWithoutResponseBroadcasts.removeAll()
         }
     }
 }
@@ -1039,6 +1234,13 @@ extension BLEService: CBPeripheralDelegate {
             peripheralRSSI[peripheral.identifier] = rssiValue
         }
     }
+
+    public func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+        // CoreBluetooth tells us this peripheral's transmit buffer has drained
+        // enough to accept another `.withoutResponse` write. Flush any data we
+        // queued while it was full.
+        drainPendingWriteWithoutResponseBroadcasts(for: peripheral)
+    }
 }
 
 // MARK: - CBPeripheralManagerDelegate
@@ -1175,7 +1377,11 @@ extension BLEService: CBPeripheralManagerDelegate {
     }
 
     public func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-        logger.debug("Peripheral manager ready to update subscribers")
+        // CoreBluetooth pauses notify delivery when the transmit queue is full.
+        // This callback fires when the queue has drained enough to accept more,
+        // so drain our deferred notify broadcasts in-order.
+        logger.debug("Peripheral manager ready to update subscribers — draining backpressure queue")
+        drainPendingNotifyBroadcasts()
     }
 }
 

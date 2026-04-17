@@ -399,7 +399,8 @@ struct PacketSerializerTests {
         #expect(fragments.count == 2)
 
         let assembler = FragmentAssembler()
-        let result1 = try assembler.receive(fragments[0])
+        let senderPeer = PeerID(noisePublicKey: Data(repeating: 0xAA, count: 32))
+        let result1 = try assembler.receive(fragments[0], from: senderPeer)
         guard case .incomplete(let received, let total) = result1 else {
             Issue.record("Expected incomplete after first fragment")
             return
@@ -407,7 +408,7 @@ struct PacketSerializerTests {
         #expect(received == 1)
         #expect(total == 2)
 
-        let result2 = try assembler.receive(fragments[1])
+        let result2 = try assembler.receive(fragments[1], from: senderPeer)
         guard case .complete(let reassembled) = result2 else {
             Issue.record("Expected complete after second fragment")
             return

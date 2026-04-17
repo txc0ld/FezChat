@@ -32,6 +32,30 @@ swift test --package-path Packages/BlipMesh
 
 Always use `-quiet` flag on xcodebuild to prevent context overflow from verbose build output.
 
+**App-level tests** live in `Tests/` (`ServiceTests/`, `ViewModelTests/`, `SwiftDataSchemaValidationTests.swift`) and only run through the `BlipTests` target — they depend on the `Blip` app target and cannot run via `swift test`. CI does not currently execute these; they run locally via Xcode's test action on the `Blip` scheme. If you touch code covered by these tests, run them in Xcode before delivering.
+
+**Strict concurrency:** `project.yml` sets `SWIFT_STRICT_CONCURRENCY: complete`, so local builds surface all concurrency warnings. CI's final app-build step overrides this to `minimal` (`-Xfrontend -strict-concurrency=minimal`) — don't rely on CI to catch concurrency issues; fix them locally.
+
+**Schemes and BLE UUID:** Two schemes exist with different BLE service UUIDs to avoid colliding on the same physical hardware:
+
+| Scheme | Config | `BLE_SERVICE_UUID` env |
+|---|---|---|
+| `Blip` (default) | Debug, also sets `-DBLE_UUID_DEBUG` | `FC000001-0000-1000-8000-00805F9B34FA` |
+| `Blip-Release` | Release | `FC000001-0000-1000-8000-00805F9B34FB` |
+
+The `...FB` UUID is the production/characteristic UUID in the protocol spec. Use the default `Blip` scheme for dev; devs running debug + release builds side-by-side will see them on separate mesh UUIDs.
+
+## CI
+
+Pipeline: `.github/workflows/ci.yml` (runs on PR and push to `main`). Two jobs:
+
+- **`ios`** (macos-15, Xcode 16.x): `brew install xcodegen libsodium` → `xcodegen generate` → all three `swift test --package-path ...` (BlipMesh retries once on failure) → `xcodebuild` app build with `-strict-concurrency=minimal`.
+- **`server-tests`** (ubuntu-latest): `npm ci && npm test` inside `server/auth/`. `server/cdn/` and `server/relay/` don't have test suites.
+
+Also: `.github/workflows/deploy-testflight.yml` handles TestFlight deploys.
+
+When making PR-ready changes, locally reproduce what CI does: run the three `swift test` commands + the `xcodebuild` command from the Build Configuration section above.
+
 ## XcodeGen
 
 The project uses XcodeGen — `project.yml` is the source of truth for the Xcode project, not the `.xcodeproj`.
@@ -111,8 +135,11 @@ Database: Neon Postgres (managed by Tay). `blip-auth` and `blip-relay` connect v
 These files are touched by multiple features and PRs simultaneously. Before making changes, check if anyone else has an open PR touching the same file:
 
 - **`Sources/Services/AppCoordinator.swift`** — app lifecycle, service initialization, key sync. Highest conflict risk.
-- **`Sources/Services/MessageService.swift`** — core message send/receive, encryption routing, relay transport (~1,490 lines after decomposition). Extensions in `MessageService+FriendRequests.swift` and `MessageService+Handshake.swift`. Still a hot file but conflict risk is reduced.
-- **`Sources/Services/BLEService.swift`** — BLE peripheral/central management, connection state
+- **`Sources/Services/MessageService.swift`** — core message send/receive, encryption routing, relay transport. Extensions in `MessageService+FriendRequests.swift` and `MessageService+Handshake.swift`. Still a hot file but conflict risk is reduced.
+- **`Packages/BlipMesh/Sources/BLEService.swift`** — BLE peripheral/central management, connection state, broadcast backpressure queues. Note: lives in `Packages/BlipMesh/`, not `Sources/Services/`.
+- **`Packages/BlipMesh/Sources/WebSocketTransport.swift`** — relay client, reconnection, token refresh.
+- **`Packages/BlipCrypto/Sources/NoiseSessionManager.swift`** — handshake state machine, tiebreaker, session cache.
+- **`Packages/BlipProtocol/Sources/FragmentAssembler.swift`** — fragment reassembly; public API now takes `(fragment, from: PeerID)` to avoid cross-peer contamination.
 - **`Sources/Models/` shared models** — any SwiftData model changes affect multiple views
 
 If your task touches a hot file and you're rebasing against main, expect merge conflicts in these files. Resolve carefully — don't drop other people's changes.
@@ -184,10 +211,22 @@ The debug overlay (accessible in-app) displays these logs in real time — usefu
 - **Byte order:** All multi-byte integers are big-endian (network byte order)
 - **Packet header:** 16 bytes fixed (see spec Section 6.1)
 - **Fragmentation threshold:** 416 bytes (worst case: addressed + signed)
+- **Fragment reassembly:** keyed by `(senderPeerID, fragmentID)` — never by `fragmentID` alone. Two peers picking the same random 4-byte fragmentID must not cross-contaminate. Public API: `FragmentAssembler.receive(_ fragment: Fragment, from senderID: PeerID)`.
+- **Media payload format:** `buildMediaPayload`/`parseMediaPayload` symmetric pair — `[UUID UTF-8 (36B)][0x00][duration 8B, voice notes only][mediaBytes]`. The parser is *not* self-describing for duration; callers pass `hasDuration:` matching the subType (voice notes yes, images no). `ParsedMediaPayload.messageID` is `Optional<UUID>` — when the leading prefix is missing/non-UTF-8, the parser returns `nil` and the receive pipeline drops the message rather than indexing it under a synthesised UUID (the old behaviour broke dedup on every retransmit).
 - **Encryption:** Noise_XX_25519_ChaChaPoly_SHA256 via CryptoKit + swift-sodium for Ed25519
 - **BLE Service UUID:** `FC000001-0000-1000-8000-00805F9B34FB`
 - **BLE Characteristic UUID:** `FC000002-0000-1000-8000-00805F9B34FB`
-- **WebSocket relay:** `WebSocketTransport` in BlipMesh handles off-mesh delivery via `blip-relay` worker. Messages route through the relay when BLE peers aren't directly reachable. The relay uses Durable Objects for store-and-forward — queued packets drain automatically when the recipient connects via per-peer serialized drain (promise chaining prevents duplicate delivery on rapid reconnect). Sender PeerID is verified against the authenticated WebSocket connection (bytes 16-23 of packet header must match). Non-addressed packets are broadcast to all other connected peers via fan-out. JWT authentication required (legacy base64 key fallback supported).
+- **BLE backpressure:** `BLEService.broadcast` honours `bleUpdateValue` return value and `canSendWriteWithoutResponse`. Deferred broadcasts are queued (bounded to `maxPendingBroadcasts = 32`) and flushed on `peripheralManagerIsReady(toUpdateSubscribers:)` / `peripheralIsReady(toSendWriteWithoutResponse:)`. Addressed sends surface notify-path backpressure via `TransportError.unavailable` rather than pretending success.
+- **WebSocket client send:** `state` + `webSocketTask` are captured in a single `lock.withLock` to avoid a TOCTOU race that previously caused addressed DMs to throw `.unavailable` → the mesh layer would fall back to *broadcast*. That fallback has been removed; send errors are now surfaced via `TransportDelegate.transport(_:didFailDelivery:to:)` so the mesh layer can re-route instead of silently leaking DMs.
+- **WebSocket relay:** `WebSocketTransport` in BlipMesh handles off-mesh delivery via `blip-relay` worker. Messages route through the relay when BLE peers aren't directly reachable. The relay uses Durable Objects for store-and-forward — queued packets drain automatically when the recipient connects via per-peer serialized drain (promise chaining prevents duplicate delivery on rapid reconnect). Sender PeerID is verified against the authenticated WebSocket connection (bytes 16-23 of packet header must match). Non-addressed packets are broadcast to every peer whose **PeerID hex** differs from the sender (not by WebSocket object identity — that breaks under rapid reconnect). JWT authentication required; legacy base64-key auth is gated behind the server-side `ALLOW_LEGACY_AUTH` env flag and must not be set in production.
+- **Noise handshake Task lifecycle:** timeout + retry Tasks are stored in `handshakeTimeoutTasks` / `handshakeRetryTasks` on `MessageService` and are deterministically cancelled on session establishment, timeout, and `deinit`. Never spawn an unstored `Task {}` for handshake work.
+- **Persistence on receive:** `ChatViewModel.handleReceivedMessage` and `applyStatusChange` MUST save the SwiftData context after mutating `Channel.lastActivityAt`, `Channel.unreadCount`, or `Message.statusRaw`. Without the save, the chat-list ordering, unread badges, and delivery/read indicators all roll back on cold launch. Status updates that arrive while a different channel is open also persist via fetch-then-save instead of only mutating `activeMessages[idx]`.
+- **Foreground notification suppression:** `NotificationService.setActiveChannel(_:)` is set by `ChatViewModel.openConversation` and cleared by `closeConversation` / `clearTransientConversationState`. The `willPresent` delegate suppresses the banner (badge-only) when an incoming `newMessage` payload's `channelID` matches the active one — the user is already looking at the bubble. SOS is unconditional — it always interrupts.
+- **Voice note playback singleton:** `VoiceNotePlaybackCoordinator.shared` issues a token to whichever bubble starts playing. Other bubbles observe `activePlayerToken` and stop themselves on mismatch. Each bubble still owns its own `AudioService` (per-bubble UI state), but the coordinator guarantees a single audio session is driving output. Don't bypass the coordinator — overlapping voice notes was the symptom we're guarding against.
+- **AudioService lifecycle observers:** `installSystemObservers` (called lazily from `configureAudioSession`) subscribes to `AVAudioSession.interruptionNotification`, `routeChangeNotification`, and `UIApplication.didEnterBackgroundNotification`. Recording is cancelled on interruption-began, app-background, and (for playback) old-device-unavailable route changes. Timer creation is lock-protected so a rapid cancel→start doesn't observe a stale-but-still-firing timer.
+- **Image bubble memory:** `ChatView.messages` only forwards `attachment.thumbnail` to `MessageBubble`. Full-resolution bytes are loaded on demand via `imageDataForViewer(messageID:)` when the user taps a bubble and the `ImageViewer` is presented. Don't pass `attachment.fullData` into the chat scroll — long histories of 500KB+ images blow memory linearly.
+- **Friend action race guard:** `FriendsListView` keeps an `actionsInFlight: Set<UUID>` keyed by `Friend.id`. `acceptFriendRequest` / `removeFriend` / `blockFriend` / `unblockFriend` / `declineFriend` all `claimAction(for:)` first, returning early if a previous async run is still pending. This stops Accept-then-Decline double-taps from racing two flows against the same record.
+- **Tap-to-DM from Nearby:** `AppCoordinator.openDM(withUsername:)` resolves a username to a SwiftData `User`, asks `ChatViewModel.createDMChannel(with:)` to find/create the thread, then sets `pendingNotificationNavigation = .conversation(channelID:)`. `MainTabView` switches to `.chats` and `ChatListView` pushes the chat — this is the same plumbing notification taps use.
 
 ## Dependencies (4 only)
 
