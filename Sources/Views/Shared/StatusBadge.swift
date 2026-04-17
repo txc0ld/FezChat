@@ -113,6 +113,7 @@ struct StatusBadge: View {
 
     private var queuedIcon: some View {
         Image(systemName: "clock")
+            // typography: intentional SF default (SF Symbol sizing)
             .font(.system(size: size, weight: .medium))
             .foregroundStyle(resolvedColor)
             .scaleEffect(animationTrigger ? 1.0 : 0.5)
@@ -124,6 +125,7 @@ struct StatusBadge: View {
 
     private var encryptingIcon: some View {
         Image(systemName: "lock")
+            // typography: intentional SF default (SF Symbol sizing)
             .font(.system(size: size, weight: .medium))
             .foregroundStyle(resolvedColor)
             .scaleEffect(animationTrigger ? 1.0 : 0.5)
@@ -133,6 +135,7 @@ struct StatusBadge: View {
 
     private var failedIcon: some View {
         Image(systemName: "exclamationmark.circle.fill")
+            // typography: intentional SF default (SF Symbol sizing)
             .font(.system(size: size, weight: .semibold))
             .foregroundStyle(resolvedColor)
             .scaleEffect(animationTrigger ? 1.0 : 0.5)
@@ -144,6 +147,7 @@ struct StatusBadge: View {
 
     private var sentIcon: some View {
         Image(systemName: "checkmark")
+            // typography: intentional SF default (SF Symbol sizing)
             .font(.system(size: size, weight: .medium))
             .foregroundStyle(resolvedColor)
             .scaleEffect(animationTrigger ? 1.0 : 0.5)
@@ -156,11 +160,13 @@ struct StatusBadge: View {
     private var deliveredIcon: some View {
         ZStack {
             Image(systemName: "checkmark")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: size, weight: .medium))
                 .foregroundStyle(resolvedColor)
                 .offset(x: -size * 0.15)
 
             Image(systemName: "checkmark")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: size, weight: .medium))
                 .foregroundStyle(resolvedColor)
                 .offset(x: size * 0.15)
@@ -175,11 +181,13 @@ struct StatusBadge: View {
     private var readIcon: some View {
         ZStack {
             Image(systemName: "checkmark")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: size, weight: .bold))
                 .foregroundStyle(readColor)
                 .offset(x: -size * 0.15)
 
             Image(systemName: "checkmark")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: size, weight: .bold))
                 .foregroundStyle(readColor)
                 .offset(x: size * 0.15)
@@ -244,7 +252,7 @@ struct StatusBadge: View {
         ) { status in
             HStack {
                 Text("\(String(describing: status))")
-                    .font(.system(size: 14))
+                    .font(.custom(BlipFontName.regular, size: 14, relativeTo: .subheadline))
                     .foregroundStyle(.white)
                     .frame(width: 100, alignment: .leading)
                 StatusBadge(status: status)

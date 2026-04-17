@@ -115,7 +115,7 @@ struct SetTimeCell: View {
 
                 if isLive {
                     Text(SetTimeCellL10n.live)
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.custom(BlipFontName.bold, size: 9, relativeTo: .caption2))
                         .foregroundStyle(.white)
                         .padding(.horizontal, BlipSpacing.sm)
                         .padding(.vertical, BlipSpacing.xxs)
@@ -129,6 +129,7 @@ struct SetTimeCell: View {
 
             HStack(spacing: BlipSpacing.xs) {
                 Image(systemName: "music.note.house")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 10))
                     .foregroundStyle(theme.colors.mutedText)
 
@@ -150,6 +151,7 @@ struct SetTimeCell: View {
             // Save/star button
             Button(action: { onSave?() }) {
                 Image(systemName: isSaved ? "star.fill" : "star")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 16))
                     .foregroundStyle(isSaved ? .blipAccentPurple : theme.colors.mutedText)
                     .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -161,6 +163,7 @@ struct SetTimeCell: View {
             // Reminder toggle
             Button(action: { onToggleReminder?() }) {
                 Image(systemName: hasReminder ? "bell.fill" : "bell")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 14))
                     .foregroundStyle(hasReminder ? .blipAccentPurple : theme.colors.mutedText)
                     .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -172,6 +175,7 @@ struct SetTimeCell: View {
             // "I'm going" share
             Button(action: { onShareGoing?() }) {
                 Image(systemName: "hand.thumbsup.fill")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 14))
                     .foregroundStyle(theme.colors.mutedText)
                     .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)

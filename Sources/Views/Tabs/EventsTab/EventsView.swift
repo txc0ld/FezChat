@@ -278,6 +278,7 @@ struct EventsView: View {
         }) {
             HStack(spacing: BlipSpacing.xs) {
                 Image(systemName: section.iconName)
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 12, weight: .medium))
 
                 Text(section.displayName)
@@ -363,6 +364,7 @@ struct EventsView: View {
                     withAnimation { showCrowdPulse.toggle() }
                 }) {
                     Image(systemName: showCrowdPulse ? "eye.fill" : "eye.slash.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 14))
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
@@ -372,6 +374,7 @@ struct EventsView: View {
                 // Drop meeting point
                 Button(action: { showMeetingPointSheet = true }) {
                     Image(systemName: "mappin.and.ellipse")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 14))
                         .foregroundStyle(.blipAccentPurple)
                         .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
@@ -423,6 +426,7 @@ struct EventsView: View {
         GlassCard(thickness: .regular, cornerRadius: BlipCornerRadius.xl) {
             HStack(spacing: BlipSpacing.md) {
                 Image(systemName: "person.3.fill")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(.blipAccentPurple)
 
@@ -445,6 +449,7 @@ struct EventsView: View {
                     }
                 }) {
                     Image(systemName: "xmark")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -475,6 +480,7 @@ struct EventsView: View {
     ) -> some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: icon)
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 14))
                 .foregroundStyle(tint)
 

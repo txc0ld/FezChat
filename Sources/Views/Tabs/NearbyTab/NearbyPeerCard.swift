@@ -161,6 +161,7 @@ struct NearbyPeerCard: View {
                     .frame(width: 12, height: 12)
                     .overlay(
                         Image(systemName: "person.fill")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 6, weight: .bold))
                             .foregroundStyle(.white)
                     )
@@ -281,6 +282,7 @@ struct NearbyPeerCard: View {
                 .accessibilityLabel(NearbyPeerCardL10n.pendingAccessibility)
         case .friends:
             Image(systemName: "checkmark.circle.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 18))
                 .foregroundStyle(Color.blipMint)
                 .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)

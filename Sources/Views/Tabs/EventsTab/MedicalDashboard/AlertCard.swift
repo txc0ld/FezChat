@@ -168,6 +168,7 @@ struct AlertCard: View {
     private var locationRow: some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: "location.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 12))
                 .foregroundStyle(severityColor)
 
@@ -185,6 +186,7 @@ struct AlertCard: View {
     private var accuracyBadge: some View {
         HStack(spacing: BlipSpacing.xs) {
             Image(systemName: alert.accuracy.iconName)
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 10))
                 .foregroundStyle(alert.accuracy.color)
 
@@ -202,6 +204,7 @@ struct AlertCard: View {
     private func acceptedBadge(callsign: String) -> some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: "person.badge.shield.checkmark.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 14))
                 .foregroundStyle(.blipAccentPurple)
 

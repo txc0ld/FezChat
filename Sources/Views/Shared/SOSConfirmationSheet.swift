@@ -135,6 +135,7 @@ struct SOSConfirmationSheet: View {
             // Title
             VStack(spacing: BlipSpacing.sm) {
                 Image(systemName: "cross.circle.fill")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 40))
                     .foregroundStyle(.red)
 
@@ -205,6 +206,7 @@ struct SOSConfirmationSheet: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 20))
                         .foregroundStyle(severityColor(severity))
                 }
@@ -275,6 +277,7 @@ struct SOSConfirmationSheet: View {
                 .frame(width: 48, height: 48)
                 .overlay(
                     Image(systemName: "chevron.right.2")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
                 )
@@ -321,12 +324,14 @@ struct SOSConfirmationSheet: View {
                 // Center content
                 VStack(spacing: 2) {
                     Image(systemName: "cross.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(theme.colors.statusRed)
 
                     if redIsHolding {
                         Text("\(Int((1.0 - redHoldProgress) * redHoldDuration) + 1)s")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .font(.custom(BlipFontName.bold, size: 12, relativeTo: .caption2))
+                            .monospacedDigit()
                             .foregroundStyle(theme.colors.statusRed)
                             .contentTransition(.numericText())
                     }
@@ -358,6 +363,7 @@ struct SOSConfirmationSheet: View {
     private var sentConfirmation: some View {
         VStack(spacing: BlipSpacing.lg) {
             Image(systemName: "checkmark.circle.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 60))
                 .foregroundStyle(severityColor(selectedSeverity))
 
@@ -409,6 +415,7 @@ struct SOSConfirmationSheet: View {
     private var proximityWarning: some View {
         VStack(spacing: BlipSpacing.lg) {
             Image(systemName: "iphone.gen3.slash")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText)
 
@@ -449,6 +456,7 @@ struct SOSConfirmationSheet: View {
     private var falseAlarmCaptcha: some View {
         VStack(spacing: BlipSpacing.lg) {
             Image(systemName: "exclamationmark.triangle.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 40))
                 .foregroundStyle(theme.colors.statusAmber)
 
@@ -477,6 +485,7 @@ struct SOSConfirmationSheet: View {
                     .frame(width: 48, height: 48)
                     .overlay(
                         Image(systemName: "chevron.right.2")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
                     )

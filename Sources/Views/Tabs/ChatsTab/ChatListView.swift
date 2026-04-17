@@ -84,6 +84,7 @@ struct ChatListView: View {
                         showMessageSearch = true
                     } label: {
                         Image(systemName: "magnifyingglass")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.blipAccentPurple)
                     }
@@ -94,6 +95,7 @@ struct ChatListView: View {
                         showAddFriend = true
                     } label: {
                         Image(systemName: "person.badge.plus")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.blipAccentPurple)
                     }
@@ -208,6 +210,7 @@ struct ChatListView: View {
                 .frame(height: BlipSpacing.xxl * 2)
 
             Image(systemName: "bubble.left.and.bubble.right")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
 
@@ -260,6 +263,7 @@ struct ChatListView: View {
             }
         } label: {
             Image(systemName: "plus.bubble.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(.white)
                 .frame(width: 56, height: 56)
@@ -287,6 +291,7 @@ struct ChatListView: View {
                 if availableFriends.isEmpty {
                     VStack(spacing: BlipSpacing.lg) {
                         Image(systemName: "person.2.slash")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 48))
                             .foregroundStyle(theme.colors.mutedText)
 
@@ -344,6 +349,7 @@ struct ChatListView: View {
                                         Spacer()
 
                                         Image(systemName: "chevron.right")
+                                            // typography: intentional SF default (SF Symbol sizing)
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(theme.colors.mutedText)
                                     }
@@ -381,6 +387,7 @@ struct ChatListView: View {
                 .frame(height: BlipSpacing.xxl * 2)
 
             Image(systemName: "exclamationmark.triangle")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
 
@@ -688,6 +695,7 @@ extension ConversationPreview: Hashable {
                     VStack(spacing: BlipSpacing.lg) {
                         Spacer().frame(height: BlipSpacing.xxl * 2)
                         Image(systemName: "bubble.left.and.bubble.right")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 48))
                             .foregroundStyle(Color.white.opacity(0.3))
                         Text(ChatListL10n.emptyTitle)

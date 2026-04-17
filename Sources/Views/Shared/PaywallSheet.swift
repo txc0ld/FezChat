@@ -136,6 +136,7 @@ struct PaywallSheet: View {
     private var headerSection: some View {
         VStack(spacing: BlipSpacing.sm) {
             Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 40))
                 .foregroundStyle(
                     LinearGradient(
@@ -182,6 +183,7 @@ struct PaywallSheet: View {
                 GlassCard(thickness: .ultraThin) {
                     VStack(spacing: BlipSpacing.sm) {
                         Image(systemName: "cart.badge.questionmark")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 28))
                             .foregroundStyle(theme.colors.mutedText)
 

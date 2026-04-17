@@ -210,7 +210,7 @@ struct NearbyView: View {
                     // Animated friend count (friends reachable on mesh)
                     VStack(alignment: .leading, spacing: BlipSpacing.xs) {
                         Text("\(friendsNearbyCount)")
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .font(theme.typography.display)
                             .foregroundStyle(.blipAccentPurple)
                             .contentTransition(.numericText())
 
@@ -224,6 +224,7 @@ struct NearbyView: View {
                     // Signal indicator
                     VStack(spacing: BlipSpacing.xs) {
                         Image(systemName: resolvedMeshViewModel?.isBLEActive == true ? "wave.3.right" : "wave.3.right.circle")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 24, weight: .medium))
                             .foregroundStyle(.blipAccentPurple)
                             .symbolEffect(.pulse, options: .repeating)
@@ -242,6 +243,7 @@ struct NearbyView: View {
             Button(action: { toggleVisibility() }) {
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: isVisible ? "eye.fill" : "eye.slash.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 14, weight: .medium))
 
                     Text(isVisible ? NearbyL10n.visible : NearbyL10n.hidden)
@@ -251,7 +253,7 @@ struct NearbyView: View {
                     Spacer()
 
                     Text(isVisible ? NearbyL10n.on : NearbyL10n.off)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.custom(BlipFontName.bold, size: 12, relativeTo: .caption))
                         .foregroundStyle(isVisible ? .white : theme.colors.mutedText)
                         .padding(.horizontal, BlipSpacing.sm)
                         .padding(.vertical, BlipSpacing.xs)
@@ -293,6 +295,7 @@ struct NearbyView: View {
     private var sectionHeader: some View {
         HStack {
             Image(systemName: "person.2.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.blipAccentPurple)
 
@@ -313,6 +316,7 @@ struct NearbyView: View {
 
             Button(action: { withAnimation(SpringConstants.gentleAnimation) { showMap.toggle() } }) {
                 Image(systemName: showMap ? "map.fill" : "map")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.blipAccentPurple)
                     .padding(BlipSpacing.xs)
@@ -424,6 +428,7 @@ struct NearbyView: View {
                 GlassCard(thickness: .ultraThin) {
                     VStack(spacing: BlipSpacing.sm) {
                         Image(systemName: "person.2.slash")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 24))
                             .foregroundStyle(theme.colors.mutedText)
 
@@ -529,6 +534,7 @@ struct NearbyView: View {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: icon)
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.blipAccentPurple)
 
