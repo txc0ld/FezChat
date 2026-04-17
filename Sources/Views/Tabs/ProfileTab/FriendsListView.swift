@@ -544,10 +544,32 @@ struct FriendsListView: View {
             let allFriends = try context.fetch(FetchDescriptor<Friend>())
                 .sorted(by: { $0.addedAt > $1.addedAt })
 
+            // One-time cleanup: older builds persisted synthetic "peer_<8-hex>"
+            // Users when a friend request arrived with no username. Delete the
+            // Friend record so it no longer appears in the list. The underlying
+            // User record is left intact in case it is referenced by other
+            // relationships (e.g. Channel participants).
+            let syntheticFriends = allFriends.filter { friend in
+                guard let user = friend.user else { return false }
+                return Self.isSyntheticPeerUsername(user.username)
+            }
+            if !syntheticFriends.isEmpty {
+                for friend in syntheticFriends {
+                    context.delete(friend)
+                }
+                do {
+                    try context.save()
+                    DebugLogger.shared.log("DB", "Removed \(syntheticFriends.count) Friend record(s) with synthetic peer_<hex> usernames")
+                } catch {
+                    DebugLogger.shared.log("DB", "Failed to delete synthetic Friend records: \(error.localizedDescription)", isError: true)
+                }
+            }
+            let cleanFriends = allFriends.filter { !syntheticFriends.contains($0) }
+
             // Check which friends are online via PeerStore
             let connectedKeys = Set(coordinator.peerStore.connectedPeers().map(\.noisePublicKey))
 
-            friends = allFriends.compactMap { friend -> FriendListItem? in
+            friends = cleanFriends.compactMap { friend -> FriendListItem? in
                 guard let user = friend.user else {
                     DebugLogger.shared.log("DB", "Friend \(friend.id) has nil User — excluded from list")
                     return nil
@@ -567,6 +589,13 @@ struct FriendsListView: View {
         } catch {
             DebugLogger.shared.log("DB", "Failed to load friends: \(error.localizedDescription)", isError: true)
         }
+    }
+
+    /// Matches the exact synthetic format once produced by `resolveOrCreateUser`:
+    /// `peer_` followed by 8 lowercase hex characters derived from `peerID.prefix(4)`.
+    static func isSyntheticPeerUsername(_ username: String) -> Bool {
+        guard username.count == 13, username.hasPrefix("peer_") else { return false }
+        return username.dropFirst(5).allSatisfy { $0.isHexDigit }
     }
 
     private func resolveFriend(id: UUID, context: ModelContext) throws -> Friend {
