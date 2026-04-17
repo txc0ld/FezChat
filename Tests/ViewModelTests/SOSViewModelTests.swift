@@ -4,6 +4,7 @@ import CoreLocation
 @testable import Blip
 @testable import BlipCrypto
 import BlipProtocol
+import BlipMesh
 
 // MARK: - Tests
 
@@ -31,6 +32,7 @@ final class SOSViewModelTests: XCTestCase {
 
         vm = SOSViewModel(
             modelContainer: container,
+            bleService: BLEService(),
             locationService: locationService,
             messageService: messageService,
             notificationService: notificationService
@@ -132,6 +134,7 @@ final class SOSViewModelTests: XCTestCase {
 
         let hydratedViewModel = SOSViewModel(
             modelContainer: container,
+            bleService: BLEService(),
             locationService: locationService,
             messageService: messageService,
             notificationService: notificationService
