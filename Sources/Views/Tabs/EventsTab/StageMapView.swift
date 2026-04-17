@@ -56,6 +56,7 @@ struct StageMapView: View {
             // Recenter control
             Button(action: recenter) {
                 Image(systemName: "scope")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.blipAccentPurple)
                     .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -127,6 +128,7 @@ struct StageMapView: View {
                     Button(action: { onMeetingPointTap?(point) }) {
                         VStack(spacing: 0) {
                             Image(systemName: "flag.fill")
+                                // typography: intentional SF default (SF Symbol sizing)
                                 .font(.system(size: 18))
                                 .foregroundStyle(.blipAccentPurple)
 
@@ -192,12 +194,13 @@ private struct StageHotspotView: View {
         Button(action: onTap) {
             VStack(spacing: 2) {
                 Image(systemName: "music.note.house.fill")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: isSelected ? 22 : 18, weight: .bold))
                     .foregroundStyle(.blipAccentPurple)
                     .shadow(color: .blipAccentPurple.opacity(0.5), radius: isSelected ? 6 : 2)
 
                 Text(stage.name)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.custom(BlipFontName.bold, size: 12, relativeTo: .caption))
                     .foregroundStyle(theme.colors.text)
                     .lineLimit(1)
                     .truncationMode(.tail)

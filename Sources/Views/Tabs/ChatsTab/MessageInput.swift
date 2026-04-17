@@ -105,6 +105,7 @@ struct MessageInput: View {
     private var editBar: some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: "pencil")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.blipAccentPurple)
 
@@ -119,6 +120,7 @@ struct MessageInput: View {
                 onCancelEdit()
             } label: {
                 Image(systemName: "xmark")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -160,6 +162,7 @@ struct MessageInput: View {
                 onClearReply()
             } label: {
                 Image(systemName: "xmark")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(theme.colors.mutedText)
             }
@@ -184,6 +187,7 @@ struct MessageInput: View {
             showAttachmentMenu = true
         } label: {
             Image(systemName: "plus.circle.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 24, weight: .medium))
                 .foregroundStyle(theme.colors.mutedText)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -283,6 +287,7 @@ struct MessageInput: View {
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .overlay(
                     Image(systemName: "mic.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(
                             isPTTActive ? .white : theme.colors.mutedText

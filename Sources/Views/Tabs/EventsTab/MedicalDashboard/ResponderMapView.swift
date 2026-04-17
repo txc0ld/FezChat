@@ -162,6 +162,7 @@ struct ResponderMapView: View {
                     onNavigateToAlert?(alert)
                 }) {
                     Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 18))
                         .foregroundStyle(.white)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -171,6 +172,7 @@ struct ResponderMapView: View {
 
                 Button(action: { selectedAlert = nil }) {
                     Image(systemName: "xmark")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -185,6 +187,7 @@ struct ResponderMapView: View {
     private var recenterButton: some View {
         Button(action: recenter) {
             Image(systemName: "scope")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.blipAccentPurple)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -214,6 +217,7 @@ struct ResponderMapView: View {
             }
         } label: {
             Image(systemName: "info.circle")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(theme.colors.mutedText)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -273,6 +277,7 @@ private struct SOSPinView: View {
                     .frame(width: 16, height: 16)
                     .overlay(
                         Image(systemName: "cross.fill")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(.white)
                     )
@@ -317,6 +322,7 @@ private struct MedicalTentPinView: View {
     var body: some View {
         VStack(spacing: 0) {
             Image(systemName: "cross.case.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 18))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
@@ -326,7 +332,7 @@ private struct MedicalTentPinView: View {
                 )
 
             Text(tent.name)
-                .font(.system(size: 8, weight: .bold))
+                .font(.custom(BlipFontName.bold, size: 8, relativeTo: .caption2))
                 .foregroundStyle(.red)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
@@ -345,11 +351,12 @@ private struct ResponderPinView: View {
     var body: some View {
         VStack(spacing: 0) {
             Image(systemName: "person.badge.shield.checkmark.fill")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 16))
                 .foregroundStyle(.blipAccentPurple)
 
             Text(responder.callsign)
-                .font(.system(size: 8, weight: .bold))
+                .font(.custom(BlipFontName.bold, size: 8, relativeTo: .caption2))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)

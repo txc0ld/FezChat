@@ -118,6 +118,7 @@ struct EventDetailView: View {
     private func detailRow(icon: String, label: String, value: String) -> some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: icon)
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 14))
                 .foregroundStyle(.blipAccentPurple)
                 .frame(width: 24)
@@ -141,6 +142,7 @@ struct EventDetailView: View {
         GlassCard(thickness: .ultraThin) {
             VStack(spacing: BlipSpacing.sm) {
                 Image(systemName: "map")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 32))
                     .foregroundStyle(theme.colors.mutedText.opacity(0.5))
                 Text(EventDetailL10n.mapUnavailable)

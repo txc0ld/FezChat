@@ -104,6 +104,7 @@ struct EventCard: View {
     private var dateRow: some View {
         HStack(spacing: BlipSpacing.xs) {
             Image(systemName: "calendar")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 12))
                 .foregroundStyle(theme.colors.mutedText)
             Text(formattedDateRange)
@@ -117,6 +118,7 @@ struct EventCard: View {
     private var locationRow: some View {
         HStack(spacing: BlipSpacing.xs) {
             Image(systemName: "mappin.and.ellipse")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 12))
                 .foregroundStyle(theme.colors.mutedText)
             Text(event.location)
@@ -132,6 +134,7 @@ struct EventCard: View {
         HStack {
             HStack(spacing: BlipSpacing.xs) {
                 Image(systemName: "person.2.fill")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 12))
                     .foregroundStyle(theme.colors.mutedText)
                 Text("\(event.attendeeCount)")

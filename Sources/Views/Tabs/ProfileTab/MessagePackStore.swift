@@ -136,6 +136,7 @@ struct MessagePackStore: View {
             GlassCard(thickness: .regular) {
                 HStack(spacing: BlipSpacing.md) {
                     Image(systemName: "checkmark.seal.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 28))
                         .foregroundStyle(.blipAccentPurple)
 
@@ -189,7 +190,7 @@ struct MessagePackStore: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: BlipSpacing.xs) {
                     Text(MessagePackStoreL10n.unlimited)
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.custom(BlipFontName.bold, size: 48, relativeTo: .largeTitle))
                         .foregroundStyle(.blipAccentPurple)
                         .contentTransition(.numericText())
 
@@ -228,6 +229,7 @@ struct MessagePackStore: View {
                 GlassCard(thickness: .ultraThin) {
                     VStack(spacing: BlipSpacing.md) {
                         Image(systemName: "cart.badge.questionmark")
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 28))
                             .foregroundStyle(theme.colors.mutedText)
 
@@ -259,6 +261,7 @@ struct MessagePackStore: View {
         }) {
             VStack(spacing: BlipSpacing.md) {
                 Image(systemName: "message.fill")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 24))
                     .foregroundStyle(.blipAccentPurple)
 
@@ -284,7 +287,7 @@ struct MessagePackStore: View {
 
                 if isBestValue {
                     Text(MessagePackStoreL10n.bestValue)
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.custom(BlipFontName.bold, size: 9, relativeTo: .caption2))
                         .foregroundStyle(.white)
                         .padding(.horizontal, BlipSpacing.sm)
                         .padding(.vertical, BlipSpacing.xxs)
@@ -316,6 +319,7 @@ struct MessagePackStore: View {
             VStack(spacing: BlipSpacing.md) {
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: "infinity")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(.blipAccentPurple)
 
@@ -340,6 +344,7 @@ struct MessagePackStore: View {
 
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: "info.circle")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(theme.colors.mutedText)
 
@@ -404,6 +409,7 @@ struct MessagePackStore: View {
     private func infoRow(icon: String, text: String) -> some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: icon)
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 12))
                 .foregroundStyle(theme.colors.mutedText)
                 .frame(width: 20)

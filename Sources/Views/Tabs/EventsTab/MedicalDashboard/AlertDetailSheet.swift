@@ -108,6 +108,7 @@ struct AlertDetailSheet: View {
                         .frame(width: 56, height: 56)
 
                     Image(systemName: "cross.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(severityColor)
                 }
@@ -160,6 +161,7 @@ struct AlertDetailSheet: View {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
                 HStack {
                     Image(systemName: "location.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 14))
                         .foregroundStyle(severityColor)
 
@@ -173,6 +175,7 @@ struct AlertDetailSheet: View {
                     // Accuracy indicator
                     HStack(spacing: BlipSpacing.xs) {
                         Image(systemName: alert.accuracy.iconName)
+                            // typography: intentional SF default (SF Symbol sizing)
                             .font(.system(size: 10))
                         Text(alert.accuracy.label)
                             .font(theme.typography.caption)
@@ -208,6 +211,7 @@ struct AlertDetailSheet: View {
                                 .frame(width: 16, height: 16)
                                 .overlay(
                                     Image(systemName: "cross.fill")
+                                        // typography: intentional SF default (SF Symbol sizing)
                                         .font(.system(size: 8, weight: .bold))
                                         .foregroundStyle(.white)
                                 )
@@ -272,6 +276,7 @@ struct AlertDetailSheet: View {
         GlassCard(thickness: .ultraThin) {
             HStack {
                 Image(systemName: "timer")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 16))
                     .foregroundStyle(theme.colors.mutedText)
 
@@ -282,7 +287,8 @@ struct AlertDetailSheet: View {
                 Spacer()
 
                 Text(formattedTime)
-                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .font(.custom(BlipFontName.bold, size: 20, relativeTo: .title3))
+                    .monospacedDigit()
                     .foregroundStyle(theme.colors.text)
                     .contentTransition(.numericText())
             }

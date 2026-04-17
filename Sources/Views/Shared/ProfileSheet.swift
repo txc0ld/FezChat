@@ -122,7 +122,7 @@ struct ProfileSheet: View {
                     .frame(width: BlipSizing.avatarLarge, height: BlipSizing.avatarLarge)
                     .overlay(
                         Text(String(displayName.prefix(1)).uppercased())
-                            .font(.system(size: 32, weight: .bold))
+                            .font(.custom(BlipFontName.bold, size: 32, relativeTo: .title))
                             .foregroundStyle(.white)
                     )
             }
@@ -189,6 +189,7 @@ struct ProfileSheet: View {
     private func badge(icon: String, text: String, color: Color) -> some View {
         HStack(spacing: BlipSpacing.xs) {
             Image(systemName: icon)
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 10))
                 .foregroundStyle(color)
 

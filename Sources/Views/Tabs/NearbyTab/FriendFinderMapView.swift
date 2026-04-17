@@ -290,6 +290,7 @@ struct FriendFinderMapView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(isAccent ? .white : (isActive ? .white : .blipAccentPurple))
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -368,6 +369,7 @@ struct FriendFinderMapView: View {
     private var emptyFriendListState: some View {
         VStack(spacing: BlipSpacing.sm) {
             Image(systemName: "person.2.slash")
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 24))
                 .foregroundStyle(theme.colors.mutedText)
 
@@ -442,6 +444,7 @@ struct FriendFinderMapView: View {
 
                 if !friend.isOutOfRange {
                     Image(systemName: "location.circle")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 18))
                         .foregroundStyle(.blipAccentPurple)
                 }
@@ -526,6 +529,7 @@ struct FriendFinderMapView: View {
                     ])
                 } label: {
                     Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -537,6 +541,7 @@ struct FriendFinderMapView: View {
                     selectedFriend = nil
                 } label: {
                     Image(systemName: "xmark")
+                        // typography: intentional SF default (SF Symbol sizing)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
@@ -550,6 +555,7 @@ struct FriendFinderMapView: View {
     private func statusBanner(icon: String, title: String, tint: Color) -> some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: icon)
+                // typography: intentional SF default (SF Symbol sizing)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(tint)
 
@@ -807,11 +813,11 @@ private struct FriendFinderPinView: View {
                     if isSelected {
                         VStack(spacing: 1) {
                             Text(friend.displayName)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.custom(BlipFontName.semiBold, size: 10, relativeTo: .caption2))
 
                             if let distance = friend.distanceText {
                                 Text(distance)
-                                    .font(.system(size: 9, weight: .regular))
+                                    .font(.custom(BlipFontName.regular, size: 9, relativeTo: .caption2))
                             }
                         }
                         .foregroundStyle(.white)
@@ -859,11 +865,12 @@ private struct BeaconAnnotationView: View {
 
             VStack(spacing: 0) {
                 Image(systemName: "mappin.circle.fill")
+                    // typography: intentional SF default (SF Symbol sizing)
                     .font(.system(size: 24))
                     .foregroundStyle(.blipAccentPurple)
 
                 Text(beacon.label)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.custom(BlipFontName.semiBold, size: 9, relativeTo: .caption2))
                     .foregroundStyle(.white)
                     .padding(.horizontal, BlipSpacing.xs)
                     .padding(.vertical, BlipSpacing.xxs)
