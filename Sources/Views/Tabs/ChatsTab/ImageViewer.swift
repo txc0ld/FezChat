@@ -83,7 +83,7 @@ struct ImageViewer: View {
             dismiss()
         } label: {
             Image(systemName: "xmark")
-                .blipTextStyle(.callout)
+                .font(theme.typography.callout)
                 .foregroundStyle(.white)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .background(
@@ -109,7 +109,7 @@ struct ImageViewer: View {
                 )
             ) {
                 Image(systemName: "square.and.arrow.up")
-                    .blipTextStyle(.callout)
+                    .font(theme.typography.callout)
                     .foregroundStyle(.white)
                     .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                     .background(

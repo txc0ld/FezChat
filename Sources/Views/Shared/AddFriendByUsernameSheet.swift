@@ -135,7 +135,7 @@ struct AddFriendByUsernameSheet: View {
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 } else {
                     Image(systemName: "magnifyingglass")
-                        .blipTextStyle(.callout)
+                        .font(theme.typography.callout)
                         .foregroundStyle(.white)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                         .background(

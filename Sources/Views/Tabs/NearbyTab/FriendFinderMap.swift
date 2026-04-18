@@ -209,7 +209,7 @@ struct FriendFinderMap: View {
                 // Navigate button
                 Button(action: { onNavigateToFriend?(friend) }) {
                     Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(theme.typography.body)
                         .foregroundStyle(.white)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                         .background(
@@ -222,7 +222,7 @@ struct FriendFinderMap: View {
                 // Dismiss
                 Button(action: { selectedFriend = nil }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 }
@@ -240,7 +240,7 @@ struct FriendFinderMap: View {
             }
         }) {
             Image(systemName: "location.fill")
-                .font(.system(size: 16, weight: .medium))
+                .font(theme.typography.callout)
                 .foregroundStyle(.blipAccentPurple)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .background(
@@ -261,7 +261,7 @@ struct FriendFinderMap: View {
     private var dropBeaconButton: some View {
         Button(action: { showBeaconConfirm = true }) {
             Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 16, weight: .medium))
+                .font(theme.typography.callout)
                 .foregroundStyle(.white)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .background(
@@ -292,6 +292,7 @@ private struct FriendPinView: View {
     let isSelected: Bool
     let onTap: () -> Void
 
+    @Environment(\.theme) private var theme
     @State private var ringPulsing = false
 
     var body: some View {
@@ -335,7 +336,7 @@ private struct FriendPinView: View {
                         // Name label when selected
                         if isSelected {
                             Text(friend.displayName)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(theme.typography.caption2)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, BlipSpacing.sm)
                                 .padding(.vertical, BlipSpacing.xxs)
@@ -375,6 +376,7 @@ private struct BeaconPinView: View {
 
     let beacon: BeaconPin
 
+    @Environment(\.theme) private var theme
     @State private var isPulsing = false
 
     var body: some View {
@@ -394,11 +396,11 @@ private struct BeaconPinView: View {
                 // Pin
                 VStack(spacing: 0) {
                     Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 24))
+                        .font(theme.typography.title2)
                         .foregroundStyle(.blipAccentPurple)
 
                     Text(beacon.label)
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(theme.typography.micro)
                         .foregroundStyle(.white)
                         .padding(.horizontal, BlipSpacing.xs)
                         .padding(.vertical, BlipSpacing.xxs)

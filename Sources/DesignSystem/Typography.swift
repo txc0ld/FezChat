@@ -12,6 +12,9 @@ struct BlipTypography: Sendable {
     /// Large titles — Bold 34pt
     let largeTitle: Font
 
+    /// Primary titles — SemiBold 28pt (alias for title2, kept for legacy callers)
+    let title1: Font
+
     /// Modal / sheet titles — SemiBold 28pt
     let title2: Font
 
@@ -42,6 +45,12 @@ struct BlipTypography: Sendable {
     /// Tiny labels / timestamps — Medium 9pt
     let captionSmall: Font
 
+    /// Small captions — Medium 10pt (alias kept for legacy callers, maps to captionSmall)
+    let caption2: Font
+
+    /// Micro labels / status indicators — Medium 9pt (alias kept for legacy callers)
+    let micro: Font
+
     // MARK: - Default instance
 
     /// Standard typography set using Plus Jakarta Sans with system fallback.
@@ -49,6 +58,7 @@ struct BlipTypography: Sendable {
     static let standard = BlipTypography(
         display: .custom(BlipFontName.bold, size: 40, relativeTo: .largeTitle),
         largeTitle: .custom(BlipFontName.bold, size: 34, relativeTo: .largeTitle),
+        title1: .custom(BlipFontName.semiBold, size: 28, relativeTo: .title),
         title2: .custom(BlipFontName.semiBold, size: 28, relativeTo: .title2),
         title3: .custom(BlipFontName.semiBold, size: 20, relativeTo: .title3),
         headline: .custom(BlipFontName.semiBold, size: 22, relativeTo: .headline),
@@ -58,13 +68,16 @@ struct BlipTypography: Sendable {
         secondary: .custom(BlipFontName.regular, size: 13, relativeTo: .footnote),
         footnote: .custom(BlipFontName.regular, size: 13, relativeTo: .footnote),
         caption: .custom(BlipFontName.medium, size: 11, relativeTo: .caption2),
-        captionSmall: .custom(BlipFontName.medium, size: 9, relativeTo: .caption2)
+        captionSmall: .custom(BlipFontName.medium, size: 9, relativeTo: .caption2),
+        caption2: .custom(BlipFontName.medium, size: 10, relativeTo: .caption2),
+        micro: .custom(BlipFontName.medium, size: 9, relativeTo: .caption2)
     )
 
     /// System font fallback if custom fonts are not available.
     static let system = BlipTypography(
         display: .system(size: 40, weight: .bold, design: .default),
         largeTitle: .system(size: 34, weight: .bold, design: .rounded),
+        title1: .system(size: 28, weight: .semibold, design: .rounded),
         title2: .system(size: 28, weight: .semibold, design: .default),
         title3: .system(size: 20, weight: .semibold, design: .default),
         headline: .system(size: 22, weight: .semibold, design: .rounded),
@@ -74,7 +87,9 @@ struct BlipTypography: Sendable {
         secondary: .system(size: 13, weight: .regular, design: .default),
         footnote: .system(size: 13, weight: .regular, design: .default),
         caption: .system(size: 11, weight: .medium, design: .default),
-        captionSmall: .system(size: 9, weight: .medium, design: .default)
+        captionSmall: .system(size: 9, weight: .medium, design: .default),
+        caption2: .system(size: 10, weight: .medium, design: .default),
+        micro: .system(size: 9, weight: .medium, design: .default)
     )
 }
 
@@ -121,6 +136,7 @@ struct BlipTextStyle: ViewModifier {
     enum Style {
         case display
         case largeTitle
+        case title1
         case title2
         case title3
         case headline
@@ -131,6 +147,8 @@ struct BlipTextStyle: ViewModifier {
         case footnote
         case caption
         case captionSmall
+        case caption2
+        case micro
     }
 
     let style: Style
@@ -142,6 +160,8 @@ struct BlipTextStyle: ViewModifier {
             content.font(theme.typography.display)
         case .largeTitle:
             content.font(theme.typography.largeTitle)
+        case .title1:
+            content.font(theme.typography.title1)
         case .title2:
             content.font(theme.typography.title2)
         case .title3:
@@ -162,6 +182,10 @@ struct BlipTextStyle: ViewModifier {
             content.font(theme.typography.caption)
         case .captionSmall:
             content.font(theme.typography.captionSmall)
+        case .caption2:
+            content.font(theme.typography.caption2)
+        case .micro:
+            content.font(theme.typography.micro)
         }
     }
 }

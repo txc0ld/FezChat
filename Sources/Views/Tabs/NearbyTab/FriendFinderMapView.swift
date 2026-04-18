@@ -310,7 +310,7 @@ struct FriendFinderMapView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
+                .font(theme.typography.callout)
                 .foregroundStyle(isAccent ? .white : (isActive ? .white : .blipAccentPurple))
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .background(
@@ -388,7 +388,7 @@ struct FriendFinderMapView: View {
     private var emptyFriendListState: some View {
         VStack(spacing: BlipSpacing.sm) {
             Image(systemName: "person.2.slash")
-                .font(.system(size: 24))
+                .font(theme.typography.title2)
                 .foregroundStyle(theme.colors.mutedText)
 
             Text(FriendFinderMapViewL10n.noLocations)
@@ -462,7 +462,7 @@ struct FriendFinderMapView: View {
 
                 if !friend.isOutOfRange {
                     Image(systemName: "location.circle")
-                        .font(.system(size: 18))
+                        .font(theme.typography.body)
                         .foregroundStyle(.blipAccentPurple)
                 }
             }
@@ -546,7 +546,7 @@ struct FriendFinderMapView: View {
                     ])
                 } label: {
                     Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(theme.typography.body)
                         .foregroundStyle(.white)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                         .background(Circle().fill(LinearGradient.blipAccent))
@@ -557,7 +557,7 @@ struct FriendFinderMapView: View {
                     selectedFriend = nil
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(theme.typography.caption)
                         .foregroundStyle(theme.colors.mutedText)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 }
@@ -570,7 +570,7 @@ struct FriendFinderMapView: View {
     private func statusBanner(icon: String, title: String, tint: Color) -> some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
+                .font(theme.typography.secondary)
                 .foregroundStyle(tint)
 
             Text(title)
@@ -781,6 +781,7 @@ private struct FriendFinderPinView: View {
     let isSelected: Bool
     let onTap: () -> Void
 
+    @Environment(\.theme) private var theme
     @State private var ringPulsing = false
 
     var body: some View {
@@ -828,11 +829,11 @@ private struct FriendFinderPinView: View {
                     if isSelected {
                         VStack(spacing: 1) {
                             Text(friend.displayName)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(theme.typography.caption2)
 
                             if let distance = friend.distanceText {
                                 Text(distance)
-                                    .font(.system(size: 9, weight: .regular))
+                                    .font(theme.typography.micro)
                             }
                         }
                         .foregroundStyle(.white)
@@ -866,6 +867,7 @@ private struct FriendFinderPinView: View {
 private struct BeaconAnnotationView: View {
 
     let beacon: BeaconPin
+    @Environment(\.theme) private var theme
     @State private var isPulsing = false
 
     var body: some View {
@@ -880,11 +882,11 @@ private struct BeaconAnnotationView: View {
 
             VStack(spacing: 0) {
                 Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 24))
+                    .font(theme.typography.title2)
                     .foregroundStyle(.blipAccentPurple)
 
                 Text(beacon.label)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(theme.typography.micro)
                     .foregroundStyle(.white)
                     .padding(.horizontal, BlipSpacing.xs)
                     .padding(.vertical, BlipSpacing.xxs)

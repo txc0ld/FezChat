@@ -182,7 +182,7 @@ struct PaywallSheet: View {
                 GlassCard(thickness: .ultraThin) {
                     VStack(spacing: BlipSpacing.sm) {
                         Image(systemName: "cart.badge.questionmark")
-                            .blipTextStyle(.title2)
+                            .font(theme.typography.title1)
                             .foregroundStyle(theme.colors.mutedText)
 
                         Text(PaywallSheetL10n.unavailableTitle)
