@@ -102,13 +102,13 @@ struct MeetingPointSheet: View {
                     Annotation(MeetingPointL10n.annotation, coordinate: pinCoordinate) {
                         VStack(spacing: 0) {
                             Image(systemName: "mappin.circle.fill")
-                                .font(.system(size: 30))
+                                .font(.custom(BlipFontName.regular, size: 30))
                                 .foregroundStyle(.blipAccentPurple)
                                 .shadow(color: .blipAccentPurple.opacity(0.4), radius: 4)
 
                             if !label.isEmpty {
                                 Text(label)
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(.custom(BlipFontName.bold, size: 9))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, BlipSpacing.sm)
                                     .padding(.vertical, BlipSpacing.xxs)
@@ -229,7 +229,7 @@ struct MeetingPointSheet: View {
         Button(action: { shareTarget = target }) {
             VStack(spacing: BlipSpacing.xs) {
                 Image(systemName: icon)
-                    .font(.system(size: 18))
+                    .font(.custom(BlipFontName.regular, size: 18))
                     .foregroundStyle(shareTarget == target ? .blipAccentPurple : theme.colors.mutedText)
 
                 Text(label)

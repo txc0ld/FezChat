@@ -63,7 +63,7 @@ struct ProfileView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { showSettings = true }) {
                         Image(systemName: "gearshape.fill")
-                            .font(.system(size: 16))
+                            .font(.custom(BlipFontName.regular, size: 16))
                             .foregroundStyle(theme.colors.mutedText)
                     }
                     .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
@@ -152,7 +152,7 @@ struct ProfileView: View {
     private var emptyState: some View {
         VStack(spacing: BlipSpacing.lg) {
             Image(systemName: "person.circle")
-                .font(.system(size: 48))
+                .font(.custom(BlipFontName.regular, size: 48))
                 .foregroundStyle(theme.colors.mutedText)
 
             Text(ProfileViewL10n.noProfile)
@@ -197,7 +197,7 @@ struct ProfileView: View {
                             .frame(width: BlipSizing.avatarLarge, height: BlipSizing.avatarLarge)
                             .overlay(
                                 Text(String(user.resolvedDisplayName.prefix(1)).uppercased())
-                                    .font(.system(size: 32, weight: .bold))
+                                    .font(.custom(BlipFontName.bold, size: 32))
                                     .foregroundStyle(.white)
                             )
                             .overlay(
@@ -232,7 +232,7 @@ struct ProfileView: View {
                     // Edit button
                     Button(action: { showEditProfile = true }) {
                         Image(systemName: "pencil.circle.fill")
-                            .font(.system(size: 24))
+                            .font(.custom(BlipFontName.regular, size: 24))
                             .foregroundStyle(.blipAccentPurple)
                             .background(Circle().fill(colorScheme == .dark ? .black : .white).frame(width: 22, height: 22))
                     }
@@ -313,7 +313,7 @@ struct ProfileView: View {
             GlassCard(elevation: .raised, cornerRadius: BlipCornerRadius.xl) {
                 VStack(alignment: .leading, spacing: BlipSpacing.sm) {
                     Image(systemName: icon)
-                        .font(.system(size: 22))
+                        .font(.custom(BlipFontName.regular, size: 22))
                         .foregroundStyle(.blipAccentPurple)
 
                     Text(title)
@@ -336,7 +336,7 @@ struct ProfileView: View {
     private var verificationUnavailableNote: some View {
         HStack(spacing: BlipSpacing.xs) {
             Image(systemName: "clock")
-                .font(.system(size: 10, weight: .medium))
+                .font(.custom(BlipFontName.medium, size: 10))
             Text(ProfileViewL10n.verificationSoon)
                 .font(theme.typography.caption)
         }

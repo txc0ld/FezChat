@@ -155,7 +155,7 @@ struct EditProfileView: View {
                             .frame(width: BlipSizing.avatarLarge, height: BlipSizing.avatarLarge)
                             .overlay(
                                 Image(systemName: "camera.fill")
-                                    .font(.system(size: 24))
+                                    .font(.custom(BlipFontName.regular, size: 24))
                                     .foregroundStyle(.white.opacity(0.8))
                             )
                     }
@@ -329,7 +329,7 @@ struct EditProfileView: View {
                             .foregroundStyle(theme.colors.mutedText)
 
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 12))
+                            .font(.custom(BlipFontName.regular, size: 12))
                             .foregroundStyle(BlipColors.adaptive.statusGreen)
                     }
                 }

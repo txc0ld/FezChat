@@ -148,7 +148,7 @@ struct AvatarView: View {
             .fill(initialsGradient)
             .overlay(
                 Text(initials)
-                    .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
+                    .font(.custom(BlipFontName.semiBold, size: size * 0.42))
                     .foregroundStyle(.white)
             )
     }

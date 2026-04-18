@@ -68,7 +68,7 @@ struct GroupInfoView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.custom(BlipFontName.semiBold, size: 14))
                             .foregroundStyle(theme.colors.text)
                     }
                     .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
@@ -100,7 +100,7 @@ struct GroupInfoView: View {
         if sortedMemberships.isEmpty {
             VStack(spacing: BlipSpacing.sm) {
                 Image(systemName: "person.3")
-                    .font(.system(size: 32))
+                    .font(.custom(BlipFontName.regular, size: 32))
                     .foregroundStyle(theme.colors.mutedText)
                 Text(GroupInfoL10n.emptyMembers)
                     .font(theme.typography.body)

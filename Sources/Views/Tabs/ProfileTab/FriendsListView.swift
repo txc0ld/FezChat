@@ -106,7 +106,7 @@ struct FriendsListView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { showAddFriend = true }) {
                     Image(systemName: "person.badge.plus")
-                        .font(.system(size: 16))
+                        .font(.custom(BlipFontName.regular, size: 16))
                         .foregroundStyle(.blipAccentPurple)
                 }
                 .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
@@ -252,7 +252,7 @@ struct FriendsListView: View {
     private var searchBar: some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
+                .font(.custom(BlipFontName.regular, size: 14))
                 .foregroundStyle(theme.colors.mutedText)
 
             TextField(FriendsListL10n.searchPlaceholder, text: $searchText)
@@ -263,7 +263,7 @@ struct FriendsListView: View {
             if !searchText.isEmpty {
                 Button(action: { searchText = "" }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.custom(BlipFontName.regular, size: 14))
                         .foregroundStyle(theme.colors.mutedText)
                 }
                 .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
@@ -306,7 +306,7 @@ struct FriendsListView: View {
 
                 if count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.custom(BlipFontName.bold, size: 10))
                         .foregroundStyle(selectedSection == section ? .white : theme.colors.mutedText)
                 }
             }
@@ -414,7 +414,7 @@ struct FriendsListView: View {
             Spacer().frame(height: BlipSpacing.xxl)
 
             Image(systemName: selectedSection.emptyIcon)
-                .font(.system(size: 40))
+                .font(.custom(BlipFontName.regular, size: 40))
                 .foregroundStyle(theme.colors.mutedText)
 
             Text(selectedSection.emptyMessage)
@@ -648,7 +648,7 @@ private struct FriendRow: View {
                 .frame(width: BlipSizing.avatarSmall, height: BlipSizing.avatarSmall)
                 .overlay(
                     Text(String(friend.displayName.prefix(1)).uppercased())
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.custom(BlipFontName.bold, size: 16))
                         .foregroundStyle(.white)
                 )
 
@@ -703,7 +703,7 @@ private struct FriendRow: View {
             blockedControl
         } else {
             Image(systemName: "chevron.right")
-                .font(.system(size: 12))
+                .font(.custom(BlipFontName.regular, size: 12))
                 .foregroundStyle(theme.colors.mutedText)
         }
     }
@@ -728,7 +728,7 @@ private struct FriendRow: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 18, weight: .regular))
+                    .font(.custom(BlipFontName.regular, size: 18))
                     .foregroundStyle(theme.colors.mutedText)
                     .frame(minWidth: BlipSizing.minTapTarget, minHeight: BlipSizing.minTapTarget)
                     .contentShape(Rectangle())
@@ -736,7 +736,7 @@ private struct FriendRow: View {
             .accessibilityLabel(FriendsListL10n.accessibilityMore(friend.displayName))
         } else {
             Image(systemName: "chevron.right")
-                .font(.system(size: 12))
+                .font(.custom(BlipFontName.regular, size: 12))
                 .foregroundStyle(theme.colors.mutedText)
         }
     }

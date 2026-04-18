@@ -117,7 +117,7 @@ struct MessageBubble: View {
                                     .tint(theme.colors.statusRed)
                             } else {
                                 Image(systemName: "exclamationmark.circle")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.custom(BlipFontName.medium, size: 11))
                                 Text(MessageBubbleL10n.retryText)
                                     .font(.custom(BlipFontName.medium, size: 11, relativeTo: .caption2))
                             }
@@ -289,7 +289,7 @@ struct MessageBubble: View {
                     .frame(width: 200, height: 150)
                     .overlay(
                         Image(systemName: "photo.fill")
-                            .font(.system(size: 24))
+                            .font(.custom(BlipFontName.regular, size: 24))
                             .foregroundStyle(
                                 message.isFromMe
                                     ? Color.white.opacity(0.4)

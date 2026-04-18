@@ -75,7 +75,7 @@ struct ScheduleView: View {
         }) {
             HStack(spacing: BlipSpacing.xs) {
                 Image(systemName: option.iconName)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.custom(BlipFontName.medium, size: 12))
 
                 Text(option.displayName)
                     .font(theme.typography.caption)
@@ -134,7 +134,7 @@ struct ScheduleView: View {
         }) {
             HStack {
                 Image(systemName: "music.note.house.fill")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.custom(BlipFontName.medium, size: 14))
                     .foregroundStyle(.blipAccentPurple)
 
                 Text(stage.name)
@@ -148,7 +148,7 @@ struct ScheduleView: View {
                     .foregroundStyle(theme.colors.mutedText)
 
                 Image(systemName: expandedStages.contains(stage.id) ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.custom(BlipFontName.medium, size: 12))
                     .foregroundStyle(theme.colors.mutedText)
             }
             .padding(.vertical, BlipSpacing.sm)
@@ -190,7 +190,7 @@ struct ScheduleView: View {
         GlassCard(thickness: .ultraThin) {
             VStack(spacing: BlipSpacing.md) {
                 Image(systemName: filter == .saved ? "star" : "music.note")
-                    .font(.system(size: 32))
+                    .font(.custom(BlipFontName.regular, size: 32))
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(filter == .saved

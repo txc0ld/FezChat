@@ -67,7 +67,7 @@ struct EventDiscoveryView: View {
     private var searchBar: some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
+                .font(.custom(BlipFontName.medium, size: 15))
                 .foregroundStyle(theme.colors.mutedText)
             TextField(EventDiscoveryL10n.searchPlaceholder, text: $searchText)
                 .textInputAutocapitalization(.never)
@@ -166,7 +166,7 @@ struct EventDiscoveryView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: BlipSpacing.lg) {
             Spacer()
-            Image(systemName: "exclamationmark.triangle").font(.system(size: 48)).foregroundStyle(theme.colors.mutedText.opacity(0.5))
+            Image(systemName: "exclamationmark.triangle").font(.custom(BlipFontName.regular, size: 48)).foregroundStyle(theme.colors.mutedText.opacity(0.5))
             Text(message).font(theme.typography.secondary).foregroundStyle(theme.colors.mutedText).multilineTextAlignment(.center)
             GlassButton(EventDiscoveryL10n.retry, icon: "arrow.clockwise") { Task { await eventsViewModel?.fetchDiscoveryEvents() } }
             Spacer()
@@ -177,7 +177,7 @@ struct EventDiscoveryView: View {
     private var emptyState: some View {
         VStack(spacing: BlipSpacing.lg) {
             Spacer()
-            Image(systemName: "calendar.badge.plus").font(.system(size: 48)).foregroundStyle(theme.colors.mutedText.opacity(0.5))
+            Image(systemName: "calendar.badge.plus").font(.custom(BlipFontName.regular, size: 48)).foregroundStyle(theme.colors.mutedText.opacity(0.5))
             Text(EventDiscoveryL10n.emptyTitle).font(theme.typography.headline).foregroundStyle(theme.colors.text)
             Text(EventDiscoveryL10n.emptySubtitle).font(theme.typography.secondary).foregroundStyle(theme.colors.mutedText).multilineTextAlignment(.center)
             Spacer()

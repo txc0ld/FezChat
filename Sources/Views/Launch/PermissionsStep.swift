@@ -202,7 +202,7 @@ struct PermissionsStep: View {
 
                 // Center Bluetooth icon
                 Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 36, weight: .medium))
+                    .font(.custom(BlipFontName.medium, size: 36))
                     .foregroundStyle(Color.blipAccentPurple)
             }
         }

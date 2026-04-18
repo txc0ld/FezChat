@@ -194,7 +194,7 @@ struct NewGroupChatSheet: View {
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22, weight: .regular))
+                    .font(.custom(BlipFontName.regular, size: 22))
                     .foregroundStyle(
                         isSelected
                             ? Color.blipAccentPurple
@@ -225,7 +225,7 @@ struct NewGroupChatSheet: View {
     private var emptyState: some View {
         VStack(spacing: BlipSpacing.lg) {
             Image(systemName: "person.2.slash")
-                .font(.system(size: 48))
+                .font(.custom(BlipFontName.regular, size: 48))
                 .foregroundStyle(theme.colors.mutedText)
 
             Text(NewGroupChatL10n.noFriendsTitle)
