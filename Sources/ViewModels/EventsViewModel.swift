@@ -129,6 +129,8 @@ final class EventsViewModel {
         let attendeeCount: Int
         let category: EventCategory
         var isJoined: Bool
+        let latitude: Double
+        let longitude: Double
     }
 
     struct EventInfo: Identifiable, Sendable {
@@ -431,7 +433,9 @@ final class EventsViewModel {
                 imageURL: event.imageURL,
                 attendeeCount: event.attendeeCount ?? 0,
                 category: eventCategory(for: event.category),
-                isJoined: joinedEventIds.contains(event.id.uuidString)
+                isJoined: joinedEventIds.contains(event.id.uuidString),
+                latitude: event.latitude ?? 0,
+                longitude: event.longitude ?? 0
             )
         }
 
@@ -1024,6 +1028,8 @@ final class EventsViewModel {
         let imageURL: String?
         let attendeeCount: Int?
         let category: String?
+        let latitude: Double?
+        let longitude: Double?
 
         init(from manifestEvent: ManifestEvent) {
             self.id = manifestEvent.id
@@ -1035,6 +1041,8 @@ final class EventsViewModel {
             self.imageURL = manifestEvent.imageURL
             self.attendeeCount = manifestEvent.attendeeCount
             self.category = manifestEvent.category
+            self.latitude = manifestEvent.latitude
+            self.longitude = manifestEvent.longitude
         }
     }
 
