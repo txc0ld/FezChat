@@ -975,7 +975,6 @@ extension MessageService {
         )
     }
 
-    @MainActor
     /// Handles an incoming PTT audio packet that was encrypted as `.pttAudio` subType
     /// inside a `.noiseEncrypted` packet. Parses the media payload, stores the message,
     /// and triggers PTTViewModel playback via notification.
