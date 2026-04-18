@@ -136,7 +136,7 @@ struct MessagePackStore: View {
             GlassCard(thickness: .regular) {
                 HStack(spacing: BlipSpacing.md) {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 28))
+                        .blipTextStyle(.title2)
                         .foregroundStyle(.blipAccentPurple)
 
                     VStack(alignment: .leading, spacing: BlipSpacing.xs) {
@@ -228,7 +228,7 @@ struct MessagePackStore: View {
                 GlassCard(thickness: .ultraThin) {
                     VStack(spacing: BlipSpacing.md) {
                         Image(systemName: "cart.badge.questionmark")
-                            .font(.system(size: 28))
+                            .blipTextStyle(.title2)
                             .foregroundStyle(theme.colors.mutedText)
 
                         Text(MessagePackStoreL10n.unavailableNow)

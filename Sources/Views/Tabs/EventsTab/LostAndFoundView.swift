@@ -214,7 +214,7 @@ struct LostAndFoundView: View {
         GlassCard(thickness: .ultraThin) {
             VStack(spacing: BlipSpacing.sm) {
                 Image(systemName: isPostingAvailable ? "tray" : "dot.radiowaves.left.and.right")
-                    .font(.system(size: 28))
+                    .blipTextStyle(.title2)
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(isPostingAvailable ? LostAndFoundL10n.emptyTitle : LostAndFoundL10n.joiningTitle)

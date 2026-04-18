@@ -84,7 +84,7 @@ struct ChatListView: View {
                         showMessageSearch = true
                     } label: {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 15, weight: .semibold))
+                            .blipTextStyle(.subheadline)
                             .foregroundStyle(.blipAccentPurple)
                     }
                     .accessibilityLabel(ChatListL10n.searchMessages)
@@ -94,7 +94,7 @@ struct ChatListView: View {
                         showAddFriend = true
                     } label: {
                         Image(systemName: "person.badge.plus")
-                            .font(.system(size: 15, weight: .semibold))
+                            .blipTextStyle(.subheadline)
                             .foregroundStyle(.blipAccentPurple)
                     }
                     .accessibilityLabel(ChatListL10n.addFriend)

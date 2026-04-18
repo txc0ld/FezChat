@@ -150,7 +150,7 @@ struct SetTimeCell: View {
             // Save/star button
             Button(action: { onSave?() }) {
                 Image(systemName: isSaved ? "star.fill" : "star")
-                    .font(.system(size: 16))
+                    .blipTextStyle(.callout)
                     .foregroundStyle(isSaved ? .blipAccentPurple : theme.colors.mutedText)
                     .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                     .contentShape(Rectangle())
