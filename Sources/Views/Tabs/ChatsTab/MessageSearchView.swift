@@ -100,7 +100,7 @@ struct MessageSearchView: View {
     private var searchBar: some View {
         HStack(spacing: BlipSpacing.sm) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
+                .font(.custom(BlipFontName.medium, size: 15))
                 .foregroundStyle(isFieldFocused ? Color.blipAccentPurple : theme.colors.mutedText)
 
             TextField(MessageSearchL10n.placeholder, text: $searchText)
@@ -116,7 +116,7 @@ struct MessageSearchView: View {
                     searchResults = []
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
+                        .font(.custom(BlipFontName.regular, size: 16))
                         .foregroundStyle(theme.colors.mutedText)
                 }
                 .buttonStyle(.plain)
@@ -162,7 +162,7 @@ struct MessageSearchView: View {
         VStack(spacing: BlipSpacing.lg) {
             Spacer()
             Image(systemName: "text.magnifyingglass")
-                .font(.system(size: 48))
+                .font(.custom(BlipFontName.regular, size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
             Text(MessageSearchL10n.emptyTitle)
                 .font(theme.typography.headline)
@@ -195,7 +195,7 @@ struct MessageSearchView: View {
         VStack(spacing: BlipSpacing.lg) {
             Spacer()
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
+                .font(.custom(BlipFontName.regular, size: 48))
                 .foregroundStyle(theme.colors.mutedText.opacity(0.5))
             Text(MessageSearchL10n.noResults(searchText))
                 .font(theme.typography.headline)

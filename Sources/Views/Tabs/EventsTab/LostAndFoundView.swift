@@ -114,7 +114,7 @@ struct LostAndFoundView: View {
         VStack(alignment: .leading, spacing: BlipSpacing.sm) {
             HStack(spacing: BlipSpacing.sm) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.custom(BlipFontName.medium, size: 14))
                     .foregroundStyle(.blipAccentPurple)
 
                 Text(LostAndFoundL10n.title)
@@ -214,7 +214,7 @@ struct LostAndFoundView: View {
         GlassCard(thickness: .ultraThin) {
             VStack(spacing: BlipSpacing.sm) {
                 Image(systemName: isPostingAvailable ? "tray" : "dot.radiowaves.left.and.right")
-                    .font(.system(size: 28))
+                    .font(.custom(BlipFontName.regular, size: 28))
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(isPostingAvailable ? LostAndFoundL10n.emptyTitle : LostAndFoundL10n.joiningTitle)
@@ -310,7 +310,7 @@ private struct LostFoundMessageBubble: View {
                     .frame(width: 28, height: 28)
                     .overlay(
                         Text(senderInitials)
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.custom(BlipFontName.bold, size: 10))
                             .foregroundStyle(.white)
                     )
             }

@@ -59,7 +59,7 @@ struct AnnouncementFeed: View {
     private var sectionHeader: some View {
         HStack {
             Image(systemName: "megaphone.fill")
-                .font(.system(size: 14, weight: .medium))
+                .font(.custom(BlipFontName.medium, size: 14))
                 .foregroundStyle(.blipAccentPurple)
 
             Text(AnnouncementFeedL10n.title)
@@ -111,7 +111,7 @@ struct AnnouncementFeed: View {
         GlassCard(thickness: .ultraThin) {
             VStack(spacing: BlipSpacing.sm) {
                 Image(systemName: "checkmark.circle")
-                    .font(.system(size: 28))
+                    .font(.custom(BlipFontName.regular, size: 28))
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(AnnouncementFeedL10n.emptyTitle)
@@ -158,7 +158,7 @@ private struct AnnouncementCard: View {
 
                         if announcement.isPinned {
                             Image(systemName: "pin.fill")
-                                .font(.system(size: 10))
+                                .font(.custom(BlipFontName.regular, size: 10))
                                 .foregroundStyle(severityColor)
                         }
                     }
@@ -212,7 +212,7 @@ private struct AnnouncementCard: View {
     private var severityBadge: some View {
         VStack {
             Image(systemName: announcement.severity.iconName)
-                .font(.system(size: 16, weight: .bold))
+                .font(.custom(BlipFontName.bold, size: 16))
                 .foregroundStyle(severityColor)
                 .frame(width: 32, height: 32)
                 .background(

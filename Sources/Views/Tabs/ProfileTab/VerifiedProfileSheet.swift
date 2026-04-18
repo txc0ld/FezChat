@@ -59,7 +59,7 @@ struct VerifiedProfileSheet: View {
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 36))
+                    .font(.custom(BlipFontName.regular, size: 36))
                     .foregroundStyle(.blipAccentPurple)
             }
 
@@ -103,7 +103,7 @@ struct VerifiedProfileSheet: View {
     private func benefitRow(icon: String, title: String, description: String) -> some View {
         HStack(alignment: .top, spacing: BlipSpacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(.custom(BlipFontName.regular, size: 18))
                 .foregroundStyle(.blipAccentPurple)
                 .frame(width: 24)
 
@@ -131,7 +131,7 @@ struct VerifiedProfileSheet: View {
                         .foregroundStyle(theme.colors.mutedText)
 
                     Text("$14.99")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.custom(BlipFontName.bold, size: 28))
                         .foregroundStyle(.blipAccentPurple)
                 }
 

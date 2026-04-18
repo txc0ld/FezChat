@@ -108,7 +108,7 @@ struct AlertDetailSheet: View {
                         .frame(width: 56, height: 56)
 
                     Image(systemName: "cross.fill")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.custom(BlipFontName.bold, size: 22))
                         .foregroundStyle(severityColor)
                 }
 
@@ -160,7 +160,7 @@ struct AlertDetailSheet: View {
             VStack(alignment: .leading, spacing: BlipSpacing.sm) {
                 HStack {
                     Image(systemName: "location.fill")
-                        .font(.system(size: 14))
+                        .font(.custom(BlipFontName.regular, size: 14))
                         .foregroundStyle(severityColor)
 
                     Text(AlertDetailL10n.liveLocation)
@@ -173,7 +173,7 @@ struct AlertDetailSheet: View {
                     // Accuracy indicator
                     HStack(spacing: BlipSpacing.xs) {
                         Image(systemName: alert.accuracy.iconName)
-                            .font(.system(size: 10))
+                            .font(.custom(BlipFontName.regular, size: 10))
                         Text(alert.accuracy.label)
                             .font(theme.typography.caption)
                     }
@@ -208,7 +208,7 @@ struct AlertDetailSheet: View {
                                 .frame(width: 16, height: 16)
                                 .overlay(
                                     Image(systemName: "cross.fill")
-                                        .font(.system(size: 8, weight: .bold))
+                                        .font(.custom(BlipFontName.bold, size: 8))
                                         .foregroundStyle(.white)
                                 )
                                 .shadow(color: severityColor.opacity(0.5), radius: 4)
@@ -272,7 +272,7 @@ struct AlertDetailSheet: View {
         GlassCard(thickness: .ultraThin) {
             HStack {
                 Image(systemName: "timer")
-                    .font(.system(size: 16))
+                    .font(.custom(BlipFontName.regular, size: 16))
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(AlertDetailL10n.responseTime)

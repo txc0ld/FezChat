@@ -54,7 +54,7 @@ struct LocationChannelList: View {
     private var sectionHeader: some View {
         HStack {
             Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(.system(size: 14, weight: .medium))
+                .font(.custom(BlipFontName.medium, size: 14))
                 .foregroundStyle(.blipAccentPurple)
 
             Text(LocationChannelListL10n.nearbyChannels)
@@ -97,7 +97,7 @@ struct LocationChannelList: View {
         GlassCard(thickness: .ultraThin, cornerRadius: BlipCornerRadius.xl) {
             VStack(spacing: BlipSpacing.sm) {
                 Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 28))
+                    .font(.custom(BlipFontName.regular, size: 28))
                     .foregroundStyle(theme.colors.mutedText)
 
                 Text(LocationChannelListL10n.noChannels)
@@ -133,7 +133,7 @@ private struct LocationChannelCard: View {
                 // Channel icon and name
                 HStack(spacing: BlipSpacing.sm) {
                     Image(systemName: channel.iconName)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.custom(BlipFontName.medium, size: 16))
                         .foregroundStyle(.blipAccentPurple)
                         .frame(width: 28, height: 28)
                         .background(
@@ -157,7 +157,7 @@ private struct LocationChannelCard: View {
                 // Member count
                 HStack(spacing: BlipSpacing.xs) {
                     Image(systemName: "person.2.fill")
-                        .font(.system(size: 10))
+                        .font(.custom(BlipFontName.regular, size: 10))
                         .foregroundStyle(theme.colors.mutedText)
 
                     Text(LocationChannelListL10n.memberCount(channel.memberCount))

@@ -135,7 +135,7 @@ struct AddFriendByUsernameSheet: View {
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 } else {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.custom(BlipFontName.semiBold, size: 16))
                         .foregroundStyle(.white)
                         .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                         .background(
@@ -184,7 +184,7 @@ struct AddFriendByUsernameSheet: View {
     private var emptyState: some View {
         VStack(spacing: BlipSpacing.md) {
             Image(systemName: "person.crop.circle.badge.questionmark")
-                .font(.system(size: 40))
+                .font(.custom(BlipFontName.regular, size: 40))
                 .foregroundStyle(theme.colors.mutedText)
             Text(AddFriendByUsernameL10n.emptyTitle)
                 .font(theme.typography.body)

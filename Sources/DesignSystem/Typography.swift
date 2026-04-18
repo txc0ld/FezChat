@@ -6,40 +6,82 @@ import SwiftUI
 /// Supports Dynamic Type scaling for accessibility.
 struct BlipTypography: Sendable {
 
-    /// Large titles — Bold 34pt
+    // MARK: Display
+
+    /// Hero / splash text — Bold 40pt
+    let display: Font
+
+    // MARK: Titles
+
+    /// Screen titles — Bold 34pt
     let largeTitle: Font
+
+    /// Section titles — Bold 28pt
+    let title2: Font
+
+    /// Sub-section titles — SemiBold 20pt
+    let title3: Font
+
+    // MARK: Body-adjacent
 
     /// Section headers — SemiBold 22pt
     let headline: Font
 
-    /// Body / chat text — Regular 17pt
+    /// Emphasized subtext — SemiBold 15pt
+    let subheadline: Font
+
+    /// Primary body — Regular 17pt
     let body: Font
+
+    /// Supporting body — Regular 16pt
+    let callout: Font
+
+    // MARK: Small
 
     /// Secondary / metadata — Regular 13pt
     let secondary: Font
 
+    /// Fine print — Regular 12pt
+    let footnote: Font
+
     /// Captions — Medium 11pt
     let caption: Font
 
+    /// Smallest labels — Medium 10pt
+    let captionSmall: Font
+
     // MARK: - Default instance
 
-    /// Standard typography set using Plus Jakarta Sans with system fallback.
-    /// Fonts scale automatically with Dynamic Type via `.relativeTo`.
+    /// Standard typography set using Plus Jakarta Sans with Dynamic Type scaling.
     static let standard = BlipTypography(
-        largeTitle: .custom(BlipFontName.bold, size: 34, relativeTo: .largeTitle),
-        headline: .custom(BlipFontName.semiBold, size: 22, relativeTo: .headline),
-        body: .custom(BlipFontName.regular, size: 17, relativeTo: .body),
-        secondary: .custom(BlipFontName.regular, size: 13, relativeTo: .footnote),
-        caption: .custom(BlipFontName.medium, size: 11, relativeTo: .caption2)
+        display:      .custom(BlipFontName.bold,     size: 40, relativeTo: .largeTitle),
+        largeTitle:   .custom(BlipFontName.bold,     size: 34, relativeTo: .largeTitle),
+        title2:       .custom(BlipFontName.bold,     size: 28, relativeTo: .title2),
+        title3:       .custom(BlipFontName.semiBold, size: 20, relativeTo: .title3),
+        headline:     .custom(BlipFontName.semiBold, size: 22, relativeTo: .headline),
+        subheadline:  .custom(BlipFontName.semiBold, size: 15, relativeTo: .subheadline),
+        body:         .custom(BlipFontName.regular,  size: 17, relativeTo: .body),
+        callout:      .custom(BlipFontName.regular,  size: 16, relativeTo: .callout),
+        secondary:    .custom(BlipFontName.regular,  size: 13, relativeTo: .footnote),
+        footnote:     .custom(BlipFontName.regular,  size: 12, relativeTo: .footnote),
+        caption:      .custom(BlipFontName.medium,   size: 11, relativeTo: .caption2),
+        captionSmall: .custom(BlipFontName.medium,   size: 10, relativeTo: .caption2)
     )
 
-    /// System font fallback if custom fonts are not available.
+    /// System font fallback if Plus Jakarta Sans is not registered.
     static let system = BlipTypography(
-        largeTitle: .system(size: 34, weight: .bold, design: .rounded),
-        headline: .system(size: 22, weight: .semibold, design: .rounded),
-        body: .system(size: 17, weight: .regular, design: .default),
-        secondary: .system(size: 13, weight: .regular, design: .default),
-        caption: .system(size: 11, weight: .medium, design: .default)
+        display:      .system(size: 40, weight: .bold,     design: .rounded),
+        largeTitle:   .system(size: 34, weight: .bold,     design: .rounded),
+        title2:       .system(size: 28, weight: .bold,     design: .rounded),
+        title3:       .system(size: 20, weight: .semibold, design: .rounded),
+        headline:     .system(size: 22, weight: .semibold, design: .rounded),
+        subheadline:  .system(size: 15, weight: .semibold, design: .default),
+        body:         .system(size: 17, weight: .regular,  design: .default),
+        callout:      .system(size: 16, weight: .regular,  design: .default),
+        secondary:    .system(size: 13, weight: .regular,  design: .default),
+        footnote:     .system(size: 12, weight: .regular,  design: .default),
+        caption:      .system(size: 11, weight: .medium,   design: .default),
+        captionSmall: .system(size: 10, weight: .medium,   design: .default)
     )
 }
 
@@ -59,7 +101,6 @@ enum BlipFontName {
 enum BlipFontRegistration {
 
     /// Checks if Plus Jakarta Sans is available in the system.
-    /// Returns `true` if at least one weight is registered.
     static var isCustomFontAvailable: Bool {
         #if canImport(UIKit)
         let families = UIFont.familyNames
@@ -84,29 +125,43 @@ enum BlipFontRegistration {
 struct BlipTextStyle: ViewModifier {
 
     enum Style {
+        // Display
+        case display
+        // Titles
         case largeTitle
+        case title2
+        case title3
+        // Body-adjacent
         case headline
+        case subheadline
         case body
+        case callout
+        // Small
         case secondary
+        case footnote
         case caption
+        case captionSmall
     }
 
     let style: Style
     @Environment(\.theme) private var theme
 
     func body(content: Content) -> some View {
-        switch style {
-        case .largeTitle:
-            content.font(theme.typography.largeTitle)
-        case .headline:
-            content.font(theme.typography.headline)
-        case .body:
-            content.font(theme.typography.body)
-        case .secondary:
-            content.font(theme.typography.secondary)
-        case .caption:
-            content.font(theme.typography.caption)
+        let font: Font = switch style {
+        case .display:      theme.typography.display
+        case .largeTitle:   theme.typography.largeTitle
+        case .title2:       theme.typography.title2
+        case .title3:       theme.typography.title3
+        case .headline:     theme.typography.headline
+        case .subheadline:  theme.typography.subheadline
+        case .body:         theme.typography.body
+        case .callout:      theme.typography.callout
+        case .secondary:    theme.typography.secondary
+        case .footnote:     theme.typography.footnote
+        case .caption:      theme.typography.caption
+        case .captionSmall: theme.typography.captionSmall
         }
+        return content.font(font)
     }
 }
 

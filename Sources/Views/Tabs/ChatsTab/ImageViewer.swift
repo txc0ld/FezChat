@@ -52,7 +52,7 @@ struct ImageViewer: View {
             } else {
                 VStack(spacing: BlipSpacing.md) {
                     Image(systemName: "photo.fill")
-                        .font(.system(size: 48))
+                        .font(.custom(BlipFontName.regular, size: 48))
                         .foregroundStyle(.white.opacity(0.3))
                     Text(ImageViewerL10n.unavailable)
                         .font(theme.typography.secondary)
@@ -83,7 +83,7 @@ struct ImageViewer: View {
             dismiss()
         } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.custom(BlipFontName.semiBold, size: 16))
                 .foregroundStyle(.white)
                 .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                 .background(
@@ -109,7 +109,7 @@ struct ImageViewer: View {
                 )
             ) {
                 Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.custom(BlipFontName.semiBold, size: 16))
                     .foregroundStyle(.white)
                     .frame(width: BlipSizing.minTapTarget, height: BlipSizing.minTapTarget)
                     .background(

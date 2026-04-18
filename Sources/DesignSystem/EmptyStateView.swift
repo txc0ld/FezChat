@@ -31,7 +31,7 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: BlipSpacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 48))
+                .font(.custom(BlipFontName.regular, size: 48))
                 .foregroundStyle(theme.colors.mutedText)
 
             Text(title)
@@ -79,7 +79,7 @@ struct ErrorStateView: View {
         GlassCard(thickness: .regular) {
             VStack(spacing: BlipSpacing.md) {
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 28))
+                    .font(.custom(BlipFontName.regular, size: 28))
                     .foregroundStyle(BlipColors.adaptive.statusAmber)
 
                 Text(title)
