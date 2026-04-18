@@ -122,6 +122,8 @@ final class EventsViewModel {
         let id: String
         let name: String
         let location: String
+        let latitude: Double
+        let longitude: Double
         let startDate: Date
         let endDate: Date
         let description: String
@@ -425,6 +427,8 @@ final class EventsViewModel {
                 id: event.id.uuidString,
                 name: event.name,
                 location: event.location ?? "Unknown location",
+                latitude: event.latitude,
+                longitude: event.longitude,
                 startDate: event.startDate,
                 endDate: event.endDate,
                 description: event.description ?? "",
@@ -1018,6 +1022,8 @@ final class EventsViewModel {
         let id: UUID
         let name: String
         let location: String?
+        let latitude: Double
+        let longitude: Double
         let startDate: Date
         let endDate: Date
         let description: String?
@@ -1029,6 +1035,8 @@ final class EventsViewModel {
             self.id = manifestEvent.id
             self.name = manifestEvent.name
             self.location = manifestEvent.location
+            self.latitude = manifestEvent.latitude
+            self.longitude = manifestEvent.longitude
             self.startDate = manifestEvent.startDate
             self.endDate = manifestEvent.endDate
             self.description = manifestEvent.description
