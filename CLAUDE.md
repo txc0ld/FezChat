@@ -110,7 +110,7 @@ App source is under `Sources/` with MVVM layout:
 - `Sources/ViewModels/` — ObservableObject view models
 - `Sources/Models/` — SwiftData model definitions
 - `Sources/Services/` — Business logic services (messaging, audio, location, notifications, auth tokens, crash reporting, sync)
-- `Sources/Animations/` — Reusable SwiftUI animation components (springs, particles, waveforms, stagger reveals)
+- `Sources/Animations/` — Reusable SwiftUI animation components (spring constants, particle fields, waveforms, breathing rings, pulse glow, ripple, liquid progress, morphing icons, typewriter, scroll/stagger reveals, elastic counter)
 - `Sources/DesignSystem/` — Design tokens in code: colors, typography, spacing, glass components, shimmer/haptic modifiers
 - `Sources/Utilities/` — Build info helpers
 
@@ -180,6 +180,8 @@ The debug overlay (accessible in-app) displays these logs in real time — usefu
 
 **Font:** Plus Jakarta Sans (Regular, Medium, SemiBold, Bold) — loaded from `Resources/Fonts/`
 
+**Typography scale:** `BlipTypography` in `Sources/DesignSystem/Typography.swift` defines 12 roles with Dynamic Type scaling via `.relativeTo`: `display` (40pt), `largeTitle` (34pt), `title1`/`title2` (28pt), `title3` (20pt), `headline` (22pt), `callout` (16pt), `subheadline` (15pt), `body` (17pt), `secondary`/`footnote` (13pt), `caption` (11pt), `captionSmall`/`caption2`/`micro` (~9-10pt). Prefer `BlipTextStyle` tokens over raw `.font(.system(size:))`. SF Symbol icon sizing, monospaced debug overlays, and out-of-scale sizes may stay as `.system`.
+
 **Colors (use Asset Catalog named colors):**
 
 | Token | Dark | Light |
@@ -227,6 +229,10 @@ The debug overlay (accessible in-app) displays these logs in real time — usefu
 - **Image bubble memory:** `ChatView.messages` only forwards `attachment.thumbnail` to `MessageBubble`. Full-resolution bytes are loaded on demand via `imageDataForViewer(messageID:)` when the user taps a bubble and the `ImageViewer` is presented. Don't pass `attachment.fullData` into the chat scroll — long histories of 500KB+ images blow memory linearly.
 - **Friend action race guard:** `FriendsListView` keeps an `actionsInFlight: Set<UUID>` keyed by `Friend.id`. `acceptFriendRequest` / `removeFriend` / `blockFriend` / `unblockFriend` / `declineFriend` all `claimAction(for:)` first, returning early if a previous async run is still pending. This stops Accept-then-Decline double-taps from racing two flows against the same record.
 - **Tap-to-DM from Nearby:** `AppCoordinator.openDM(withUsername:)` resolves a username to a SwiftData `User`, asks `ChatViewModel.createDMChannel(with:)` to find/create the thread, then sets `pendingNotificationNavigation = .conversation(channelID:)`. `MainTabView` switches to `.chats` and `ChatListView` pushes the chat — this is the same plumbing notification taps use.
+- **PTT audio subtype:** Push-to-talk audio routes through the `pttAudio` `EncryptedSubType` (distinct from the voice-note subtype). Receivers dispatch `pttAudio` packets to the PTT overlay rather than the chat bubble pipeline. Don't collapse PTT into the voice-note subtype — overlay vs. bubble dispatch depends on the discriminator.
+- **Events & map rendering:** `Event`/`DiscoverableEvent` carry `coordinatesLatitude`/`coordinatesLongitude` (threaded through `EventCard`, `EventDetailView`, previews). Joined events render a MapKit map in `EventDetailView`. Events are DB-backed with an admin CRUD path and a bundled manifest fallback served by `blip-cdn` at `/manifests/events.json`. When adding new preview call sites for `DiscoverableEvent`, pass `latitude`/`longitude` or the build will fail.
+- **Breadcrumb trails:** Friend-finder map draws breadcrumb history as fading polylines. `BreadcrumbPoint` (SwiftData) records positions over time; `FriendFinderMap`/`FriendFinderMapView` render them with an opacity gradient tied to recency. Prune points out of the display window rather than keeping unbounded history.
+- **Relay connection resilience:** `WebSocketTransport` uses Cloudflare's hibernation API (60s timeout), an `NWPathMonitor` for network-change restarts, foreground restart on app resume, and a presence guard so a reconnect after hibernation recovers any mid-flight Noise handshakes instead of leaving them orphaned. Ping interval is tuned for hibernation-aware keepalive — don't shorten it without matching the server side.
 
 ## Dependencies (4 only)
 
