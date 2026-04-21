@@ -135,9 +135,18 @@ describe("GET /manifests/events.json", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=3600");
 
-    const body = (await res.json()) as { version: number; signature: unknown; events: unknown[] };
+    const body = (await res.json()) as {
+      version: number;
+      signature: unknown;
+      signingKey: unknown;
+      events: unknown[];
+    };
     expect(body.version).toBe(1);
-    expect(body.signature).toBeNull();
+    // With MANIFEST_SIGNING_KEY set in vitest.config.ts, the worker signs even an empty
+    // events array. Detailed signature/canonicalisation coverage lives in
+    // test/manifest-signature.test.ts.
+    expect(typeof body.signature).toBe("string");
+    expect(typeof body.signingKey).toBe("string");
     expect(body.events).toEqual([]);
   });
 

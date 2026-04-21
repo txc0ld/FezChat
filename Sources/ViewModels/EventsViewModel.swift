@@ -995,10 +995,15 @@ final class EventsViewModel {
     private struct EventManifest: Codable {
         let version: Int
         let signature: String?
+        // Top-level Ed25519 verifier key for `signature`, populated by the CDN worker
+        // (`server/cdn/src/index.ts`). Optional for back-compat with older CDN deployments
+        // that have not been rotated to the signing build; when absent, verification falls
+        // back to `events.first.organizerSigningKey`.
+        let signingKey: String?
         let events: [ManifestEvent]
 
         enum CodingKeys: String, CodingKey {
-            case version, signature, events
+            case version, signature, signingKey, events
         }
     }
 
@@ -1150,10 +1155,20 @@ final class EventsViewModel {
             return false
         }
 
-        guard let firstEvent = manifest.events.first,
-              let publicKeyData = Data(base64Encoded: firstEvent.organizerSigningKey),
-              publicKeyData.count == Signer.publicKeyLength else {
-            DebugLogger.shared.log("EVENT", "Manifest has no valid organizer signing key", isError: true)
+        // Prefer the top-level signingKey (CDN-signed manifests, post-HEY1306). Fall back to
+        // events.first.organizerSigningKey for older deployments where the manifest signer
+        // and the per-event organizer key were the same value.
+        let publicKeyData: Data
+        if let signingKeyBase64 = manifest.signingKey,
+           let decoded = Data(base64Encoded: signingKeyBase64),
+           decoded.count == Signer.publicKeyLength {
+            publicKeyData = decoded
+        } else if let firstEvent = manifest.events.first,
+                  let decoded = Data(base64Encoded: firstEvent.organizerSigningKey),
+                  decoded.count == Signer.publicKeyLength {
+            publicKeyData = decoded
+        } else {
+            DebugLogger.shared.log("EVENT", "Manifest has no valid signing key", isError: true)
             return false
         }
 

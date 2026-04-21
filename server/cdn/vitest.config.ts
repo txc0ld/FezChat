@@ -13,6 +13,9 @@ export default defineWorkersConfig({
             INTERNAL_API_KEY: "test-internal-api-key",
             CORS_ORIGIN: "*",
             MAX_AVATAR_BYTES: "2097152",
+            // 32-byte seed (0x01..0x20) || 32-byte derived public key — see test/manifest-signature.test.ts.
+            MANIFEST_SIGNING_KEY:
+              "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyB5tVYuj+ZU+UB4sRLoqYunkB+FOuaVvtfg45ELrQSWZA==",
           },
         },
       },
