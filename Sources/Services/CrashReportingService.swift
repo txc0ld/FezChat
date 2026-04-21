@@ -64,10 +64,21 @@ final class CrashReportingService: @unchecked Sendable {
             }
         }
 
+        // The `Embed Git Info` post-build script in project.yml injects
+        // GitCommitHash, GitBranch, and BuildDate into the product's Info.plist
+        // on every build. Read them here so every event carries the exact
+        // commit that shipped it.
+        let info = Bundle.main.infoDictionary
         SentrySDK.configureScope { scope in
-            scope.setTag(value: BuildInfo.gitHash, key: "git.commit")
-            scope.setTag(value: BuildInfo.gitBranch, key: "git.branch")
-            scope.setTag(value: BuildInfo.buildDate, key: "build.date")
+            if let hash = info?["GitCommitHash"] as? String {
+                scope.setTag(value: hash, key: "git.commit")
+            }
+            if let branch = info?["GitBranch"] as? String {
+                scope.setTag(value: branch, key: "git.branch")
+            }
+            if let buildDate = info?["BuildDate"] as? String {
+                scope.setTag(value: buildDate, key: "build.date")
+            }
             // Scheme leaks through the BLE service UUID — debug scheme uses ...FA,
             // release uses ...FB. Tag so crashes from each are filterable.
             if let bleUUID = ProcessInfo.processInfo.environment["BLE_SERVICE_UUID"] {
