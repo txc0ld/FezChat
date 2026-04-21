@@ -19,6 +19,10 @@ export interface Env {
   INTERNAL_API_KEY?: string;
   CORS_ORIGIN?: string;
   MAX_AVATAR_BYTES?: string;
+  // base64-encoded 64-byte libsodium Ed25519 secret key (32-byte seed || 32-byte public key).
+  // When unset, /manifests/events.json returns signature: null and the iOS client treats
+  // it as unsigned (back-compat with the pre-signing CDN). Generate with `scripts/generate-manifest-key.mjs`.
+  MANIFEST_SIGNING_KEY?: string;
 }
 
 interface JWTPayload {
@@ -222,10 +226,26 @@ async function handleEventsManifest(
     ORDER BY start_date ASC
   `) as unknown as EventRow[];
 
+  // Canonical events: keys inserted in alpha order, optional fields omitted when null,
+  // dates rendered as second-precision ISO with `Z`, UUIDs uppercased — byte-for-byte
+  // identical to what the iOS client produces with JSONEncoder([.sortedKeys, .iso8601]).
+  const canonicalEvents = rows.map(rowToCanonicalEvent);
+  const eventsJson = JSON.stringify(canonicalEvents);
+
+  let signatureB64: string | null = null;
+  let signingKeyB64: string | null = null;
+  const signingMaterial = env.MANIFEST_SIGNING_KEY;
+  if (signingMaterial && signingMaterial.length > 0) {
+    const signed = await signCanonicalEvents(eventsJson, signingMaterial);
+    signatureB64 = signed.signature;
+    signingKeyB64 = signed.publicKey;
+  }
+
   const manifest = {
     version: MANIFEST_VERSION,
-    signature: null,
-    events: rows.map(rowToManifestEvent),
+    signature: signatureB64,
+    signingKey: signingKeyB64,
+    events: canonicalEvents,
   };
 
   const headers = new Headers(corsHeaders);
@@ -359,8 +379,109 @@ function rowToManifestEvent(row: EventRow): Record<string, unknown> {
   };
 }
 
+// Build the canonical (signature-covered) representation of one event row.
+// Keys are inserted in alphabetical order, null/undefined optional fields are omitted,
+// UUIDs uppercased, dates rendered as second-precision ISO with `Z`. JSON.stringify
+// preserves insertion order, so the resulting bytes are deterministic and identical
+// to what Swift's JSONEncoder produces with [.sortedKeys, .iso8601].
+export function rowToCanonicalEvent(row: EventRow): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  out.attendeeCount = row.attendee_count ?? 0;
+  if (row.category !== null && row.category !== undefined) out.category = row.category;
+  if (row.description !== null && row.description !== undefined) out.description = row.description;
+  out.endDate = toCanonicalIso(row.end_date);
+  out.id = row.id.toUpperCase();
+  if (row.image_url !== null && row.image_url !== undefined) out.imageURL = row.image_url;
+  out.latitude = row.latitude;
+  if (row.location !== null && row.location !== undefined) out.location = row.location;
+  out.longitude = row.longitude;
+  out.name = row.name;
+  out.organizerSigningKey = row.organizer_signing_key ?? "";
+  out.radiusMeters = row.radius_meters;
+  out.startDate = toCanonicalIso(row.start_date);
+  return out;
+}
+
 function toIso(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : value;
+}
+
+// Render an ISO-8601 timestamp to second precision with a trailing `Z`, matching
+// Swift's ISO8601DateFormatter([.withInternetDateTime]) output exactly. Postgres
+// timestamps may arrive as Date objects (.toISOString includes millis) or as
+// strings with arbitrary precision; both paths normalise to YYYY-MM-DDTHH:mm:ssZ.
+export function toCanonicalIso(value: string | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    throw new HTTPError(500, `Invalid timestamp in events table: ${String(value)}`);
+  }
+  return `${d.toISOString().slice(0, 19)}Z`;
+}
+
+// MARK: - Manifest signing
+
+interface SignedManifest {
+  signature: string;
+  publicKey: string;
+}
+
+// PKCS#8 ASN.1 DER prefix for an Ed25519 PrivateKeyInfo carrying a 32-byte raw seed.
+// crypto.subtle accepts this format for importKey("pkcs8", ...) on Cloudflare Workers.
+const ED25519_PKCS8_PREFIX = new Uint8Array([
+  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+  0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+]);
+
+let cachedSigningKey: { material: string; privateKey: CryptoKey; publicKey: string } | undefined;
+
+export async function signCanonicalEvents(
+  eventsJson: string,
+  signingMaterial: string
+): Promise<SignedManifest> {
+  const { privateKey, publicKey } = await loadSigningKey(signingMaterial);
+  const sigBuffer = await crypto.subtle.sign("Ed25519", privateKey, utf8ToBytes(eventsJson));
+  return {
+    signature: bytesToBase64(new Uint8Array(sigBuffer)),
+    publicKey,
+  };
+}
+
+async function loadSigningKey(material: string): Promise<{ privateKey: CryptoKey; publicKey: string }> {
+  if (cachedSigningKey && cachedSigningKey.material === material) {
+    return { privateKey: cachedSigningKey.privateKey, publicKey: cachedSigningKey.publicKey };
+  }
+
+  const decoded = base64Decode(material);
+  if (decoded.length !== 64) {
+    throw new HTTPError(503, "MANIFEST_SIGNING_KEY must decode to 64 bytes (32-byte seed || 32-byte public key)");
+  }
+
+  const seed = decoded.subarray(0, 32);
+  const publicKeyBytes = decoded.subarray(32, 64);
+
+  const pkcs8 = new Uint8Array(ED25519_PKCS8_PREFIX.length + seed.length);
+  pkcs8.set(ED25519_PKCS8_PREFIX, 0);
+  pkcs8.set(seed, ED25519_PKCS8_PREFIX.length);
+
+  const privateKey = await crypto.subtle.importKey(
+    "pkcs8",
+    pkcs8,
+    { name: "Ed25519" },
+    false,
+    ["sign"]
+  );
+
+  const publicKey = bytesToBase64(publicKeyBytes);
+  cachedSigningKey = { material, privateKey, publicKey };
+  return { privateKey, publicKey };
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 function validateEventInput(raw: unknown): EventInput {

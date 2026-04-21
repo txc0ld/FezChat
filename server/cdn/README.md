@@ -18,7 +18,12 @@ static manifests, and the **events manifest** backed by Neon Postgres.
 | `GET` | `/health` | public | liveness |
 
 The response shape of `GET /manifests/events.json` is the `EventManifest`
-struct iOS decodes in `EventsViewModel` (`version`, `signature`, `events[]`).
+struct iOS decodes in `EventsViewModel` (`version`, `signature`, `signingKey`,
+`events[]`). When `MANIFEST_SIGNING_KEY` is set the worker signs the canonical
+events array with Ed25519 and the iOS client verifies via
+`Signer.verifyDetached`. When the secret is unset, `signature`/`signingKey`
+are `null` and the iOS client logs a warning but continues to use bundled
+events as the source of truth.
 
 ## One-time setup
 
@@ -31,6 +36,9 @@ wrangler secret put JWT_SECRET
 wrangler secret put DATABASE_URL
 wrangler secret put INTERNAL_API_KEY
 
+# Manifest signing key (HEY1306). Generate locally, then pipe straight in:
+node scripts/generate-manifest-key.mjs | wrangler secret put MANIFEST_SIGNING_KEY
+
 # Apply schema + seed against the Neon DB
 psql "$DATABASE_URL" -f schema.sql
 psql "$DATABASE_URL" -f seed.sql
@@ -38,6 +46,23 @@ psql "$DATABASE_URL" -f seed.sql
 # Deploy
 npm run deploy
 ```
+
+### Manifest signing details
+
+- `MANIFEST_SIGNING_KEY` is base64 of `seed (32) || publicKey (32)` — 64 bytes
+  total, libsodium layout. The seed half stays on the worker; the public half
+  is returned to clients in `manifest.signingKey` so they can verify.
+- The signed bytes are `JSON.stringify` of the events array, with keys inserted
+  in alphabetical order, optional fields omitted when null, UUIDs uppercased,
+  and dates rendered as second-precision ISO with a trailing `Z`. This is
+  byte-for-byte identical to what Swift's `JSONEncoder([.sortedKeys, .iso8601])`
+  produces.
+- Cross-language fixture lives in `server/cdn/test/manifest-signature.test.ts`
+  and `Packages/BlipCrypto/Tests/ManifestCanonicalEncodingTests.swift` — both
+  pin the same canonical string. Change one, change the other.
+- Rotating the key: `node scripts/generate-manifest-key.mjs | wrangler secret put MANIFEST_SIGNING_KEY`
+  then redeploy. The next manifest fetch on each device will pick up the new
+  `signingKey` automatically; no client release needed.
 
 ## Adding events
 

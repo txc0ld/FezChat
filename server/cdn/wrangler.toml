@@ -10,6 +10,7 @@ MAX_AVATAR_BYTES = "2097152"
 #   wrangler secret put JWT_SECRET
 #   wrangler secret put DATABASE_URL
 #   wrangler secret put INTERNAL_API_KEY
+#   wrangler secret put MANIFEST_SIGNING_KEY   # base64(seed||pubKey), 64 bytes total. Generate with `node scripts/generate-manifest-key.mjs`.
 
 [[r2_buckets]]
 binding = "AVATARS"
