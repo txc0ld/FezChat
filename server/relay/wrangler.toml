@@ -2,7 +2,9 @@ name = "blip-relay"
 main = "src/index.ts"
 compatibility_date = "2025-03-01"
 
-# Set JWT_SECRET and INTERNAL_API_KEY via `wrangler secret put <name>`
+# Required secrets — set via `wrangler secret put <name>`:
+#   JWT_SECRET        — HS256 signing key for session JWTs (must match blip-auth)
+#   INTERNAL_API_KEY  — shared secret for /v1/internal/push callouts (must match blip-auth)
 
 [vars]
 AUTH_PUSH_URL = "https://blip-auth.john-mckean.workers.dev/v1/internal/push"
