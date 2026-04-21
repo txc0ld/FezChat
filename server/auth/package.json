@@ -17,6 +17,7 @@
   "dependencies": {
     "@fivesheepco/cloudflare-apns2": "^13.0.0",
     "@neondatabase/serverless": "^0.10.0",
+    "@sentry/cloudflare": "^10.49.0",
     "resend": "^4.0.0",
     "typescript": "^5.7.0"
   }

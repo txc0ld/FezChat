@@ -1,4 +1,5 @@
 import { ApnsClient, Notification, Priority, PushType } from '@fivesheepco/cloudflare-apns2';
+import * as Sentry from '@sentry/cloudflare';
 import type { Env } from './index';
 
 let cachedClient: ApnsClient | null = null;
@@ -41,8 +42,24 @@ export async function sendPush(
         });
         await client.send(notification);
         return true;
-    } catch (error) {
+    } catch (error: any) {
         console.error(`APNs send failed for token ${deviceToken.slice(0, 8)}...: ${error}`);
+        // The APNS_ENVIRONMENT drift bug (PR #247) silently sent prod tokens
+        // to the sandbox host and only showed up in `wrangler tail`. Tagging
+        // by environment/status_code/reason so the next regression is one
+        // Sentry filter away.
+        Sentry.captureMessage(`APNs send failed: ${error?.reason ?? error?.message ?? String(error)}`, {
+            level: 'error',
+            tags: {
+                provider: 'apns',
+                'apns.environment': env.APNS_ENVIRONMENT ?? 'unknown',
+                'apns.status_code': String(error?.statusCode ?? error?.status ?? 'unknown'),
+                'apns.reason': String(error?.reason ?? 'unknown'),
+            },
+            extra: {
+                deviceTokenPrefix: deviceToken.slice(0, 8),
+            },
+        });
         return false;
     }
 }
