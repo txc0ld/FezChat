@@ -8,6 +8,7 @@
  * DELETE /v1/users/self     — delete the authenticated user account
  */
 import { Resend } from "resend";
+import * as Sentry from "@sentry/cloudflare";
 import { sendPush } from "./apns";
 
 export interface Env {
@@ -29,6 +30,48 @@ export interface Env {
   APNS_PRIVATE_KEY: string;
   APNS_ENVIRONMENT: string;
   INTERNAL_API_KEY: string;
+  /** Sentry project DSN. Optional — Worker no-ops gracefully when unset. */
+  SENTRY_DSN?: string;
+}
+
+let warnedAboutMissingSentryDsn = false;
+
+/**
+ * Build Sentry options from env. Returns an empty object when SENTRY_DSN is
+ * absent so the SDK initialises in disabled mode and the Worker boots cleanly
+ * even before John provisions the project.
+ */
+export function sentryOptions(env: Env) {
+  if (!env.SENTRY_DSN) {
+    if (!warnedAboutMissingSentryDsn) {
+      console.warn("[auth] SENTRY_DSN not configured — error reporting disabled");
+      warnedAboutMissingSentryDsn = true;
+    }
+    return {};
+  }
+  return {
+    dsn: env.SENTRY_DSN,
+    environment: env.APNS_ENVIRONMENT ?? "development",
+    tracesSampleRate: 0.1,
+    sendDefaultPii: false,
+    beforeSend(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
+      // Strip Authorization header — it carries Bearer JWTs / legacy keys.
+      const headers = event.request?.headers as Record<string, string> | undefined;
+      if (headers) {
+        delete headers["authorization"];
+        delete headers["Authorization"];
+      }
+      // Truncate any JWT-looking strings that leaked into the request body.
+      if (typeof event.request?.data === "string") {
+        event.request.data = scrubJwts(event.request.data);
+      }
+      return event;
+    },
+  };
+}
+
+function scrubJwts(input: string): string {
+  return input.replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "<jwt>");
 }
 
 /** KV value stored alongside each code. */
@@ -145,7 +188,7 @@ function corsHeaders(env?: Env): Record<string, string> {
   return headers;
 }
 
-export default {
+export default Sentry.withSentry(sentryOptions, {
   async fetch(request: Request, env: Env): Promise<Response> {
     _requestOrigin = request.headers.get("Origin");
 
@@ -227,7 +270,7 @@ export default {
       );
     }
   },
-};
+});
 
 // ─── Send Code ───────────────────────────────────────────────
 
@@ -288,9 +331,17 @@ async function handleSendCode(request: Request, env: Env): Promise<Response> {
     });
 
     if (error) {
+      Sentry.captureMessage("Resend send-code returned error", {
+        level: "error",
+        tags: { provider: "resend", route: "send-code" },
+        extra: { resendError: error },
+      });
       return json({ error: "Failed to send email" }, 502, env);
     }
   } catch (err: any) {
+    Sentry.captureException(err, {
+      tags: { provider: "resend", route: "send-code" },
+    });
     return json({ error: "Failed to send email", detail: err?.message ?? String(err) }, 502, env);
   }
 
@@ -546,6 +597,10 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTPaylo
 export async function validateJWT(request: Request, env: Env): Promise<JWTPayload> {
   const secret = getJWTSecret(env);
   if (!secret) {
+    Sentry.captureMessage("JWT_SECRET missing — auth verification disabled", {
+      level: "fatal",
+      tags: { route: "auth", failure: "jwt_secret_missing" },
+    });
     throw new HTTPError(503, "JWT secret not configured");
   }
 
@@ -556,6 +611,13 @@ export async function validateJWT(request: Request, env: Env): Promise<JWTPayloa
 
   const claims = await verifyJWT(token, secret);
   if (!claims) {
+    // Sample at 10% so a misbehaving client can't flood the project.
+    if (Math.random() < 0.1) {
+      Sentry.captureMessage("JWT verify failed", {
+        level: "warning",
+        tags: { route: "auth", failure: "jwt_invalid" },
+      });
+    }
     throw new HTTPError(401, "Unauthorized");
   }
 
@@ -797,11 +859,17 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
         return json({ userId }, 200, env);
       } catch (updateError: any) {
         console.error("[auth] handleRegister (username conflict update) error:", updateError);
+        Sentry.captureException(updateError, {
+          tags: { db: "neon", route: "register", branch: "username-conflict" },
+        });
         return json({ error: "Registration failed" }, 500, env);
       }
     }
 
     console.error("[auth] handleRegister error:", error);
+    Sentry.captureException(error, {
+      tags: { db: "neon", route: "register" },
+    });
     return json({ error: "Registration failed" }, 500, env);
   }
 }
@@ -1106,6 +1174,9 @@ async function handleLookupByUsername(request: Request, url: URL, env: Env): Pro
       return json({ error: error.message }, error.status, env);
     }
     console.error("[auth] handleLookupByUsername error:", error);
+    Sentry.captureException(error, {
+      tags: { db: "neon", route: "lookup-username" },
+    });
     return json({ error: "Lookup failed" }, 500, env);
   }
 }

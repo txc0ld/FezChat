@@ -1029,12 +1029,18 @@ describe("edge cases", () => {
 });
 
 describe("scheduled DB warmup", () => {
+  // Sentry's withSentry wrapper instruments scheduled handlers and reads
+  // `event.scheduledTime` to build a span name. Pass a real timestamp so
+  // that derivation doesn't fail with "Invalid time value".
+  const scheduledEvent = (): ScheduledEvent =>
+    ({ scheduledTime: Date.now(), cron: "*/5 * * * *", noRetry: () => {} } as unknown as ScheduledEvent);
+
   it("logs successful warmup pings", async () => {
     (env as Record<string, unknown>).DATABASE_URL = "postgres://unit-test";
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const ctx = createExecutionContext();
 
-    await worker.scheduled({} as ScheduledEvent, env as unknown as WorkerEnv, ctx);
+    await worker.scheduled(scheduledEvent(), env as unknown as WorkerEnv, ctx);
     await waitOnExecutionContext(ctx);
 
     expect(infoSpy).toHaveBeenCalledWith("[auth] DB warmup ping OK");
@@ -1046,7 +1052,7 @@ describe("scheduled DB warmup", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const ctx = createExecutionContext();
 
-    await worker.scheduled({} as ScheduledEvent, env as unknown as WorkerEnv, ctx);
+    await worker.scheduled(scheduledEvent(), env as unknown as WorkerEnv, ctx);
     await waitOnExecutionContext(ctx);
 
     expect(errorSpy).toHaveBeenCalledWith(

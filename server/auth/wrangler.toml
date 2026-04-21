@@ -1,6 +1,9 @@
 name = "blip-auth"
 main = "src/index.ts"
 compatibility_date = "2025-03-01"
+# @sentry/cloudflare imports node:async_hooks for context propagation across
+# async boundaries; the Worker fails at runtime without nodejs_compat.
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 FROM_EMAIL = "verify@heyblip.au"
@@ -21,6 +24,10 @@ JWT_REFRESH_GRACE_SECONDS = "300"
 #   APNS_ENVIRONMENT     — "production" for TestFlight/App Store, "development" for Xcode debug.
 #                          MUST match the `aps-environment` entitlement in App/Entitlements/Blip.entitlements.
 #                          Missing/mismatched = silent push failure (sandbox host rejects prod tokens).
+#   SENTRY_DSN           — Sentry project DSN for this Worker. Optional — when unset the
+#                          `withSentry` wrapper boots in disabled mode (errors stay in
+#                          `wrangler tail`). Set this in production so handlers below
+#                          capture exceptions to the dashboard.
 
 # Cron trigger: ping every 5 minutes to keep Worker + Neon DB warm,
 # avoiding cold-start timeouts on the first real user request.
