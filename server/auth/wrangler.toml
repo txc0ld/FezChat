@@ -10,9 +10,17 @@ MAX_SENDS_PER_HOUR = "3"
 JWT_EXPIRY_SECONDS = "3600"
 JWT_REFRESH_GRACE_SECONDS = "300"
 
-# Set RESEND_API_KEY via `wrangler secret put RESEND_API_KEY`
-# Set DATABASE_URL via `wrangler secret put DATABASE_URL`
-# Set JWT_SECRET via `wrangler secret put JWT_SECRET`
+# Required secrets — set via `wrangler secret put <name>`:
+#   RESEND_API_KEY       — transactional email (verification codes)
+#   DATABASE_URL         — Neon Postgres connection string
+#   JWT_SECRET           — HS256 signing key for session JWTs (must match blip-relay)
+#   INTERNAL_API_KEY     — shared secret for /v1/internal/push (must match blip-relay)
+#   APNS_KEY_ID          — Apple Push Notifications key ID
+#   APNS_TEAM_ID         — Apple developer team ID
+#   APNS_PRIVATE_KEY     — base64-encoded .p8 APNs auth key
+#   APNS_ENVIRONMENT     — "production" for TestFlight/App Store, "development" for Xcode debug.
+#                          MUST match the `aps-environment` entitlement in App/Entitlements/Blip.entitlements.
+#                          Missing/mismatched = silent push failure (sandbox host rejects prod tokens).
 
 # Cron trigger: ping every 5 minutes to keep Worker + Neon DB warm,
 # avoiding cold-start timeouts on the first real user request.
