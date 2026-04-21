@@ -254,29 +254,26 @@ Do not read or modify:
 Bugasura is the issue tracker (replaced Linear on 2026-04-13). Project: **HeyBlip** (project_id: 135167), team: **Mesh Works** (team_id: 101842), sprint: **Linear Import** (sprint_id: 152746). Issue prefix: **HEY** (e.g., HEY-1186).
 
 **API details:**
-- Base URL: `https://api.bugasura.io`
+- Base URL: `https://api.bugasura.io/v1`
 - Auth header: `Authorization: Basic ef611198bd434d11f9ad929b8a3a42efc2232cbc`
 - **CRITICAL:** Encoding is `application/x-www-form-urlencoded`, NOT JSON. JSON body is silently ignored.
 - Status values are case-sensitive: `"New"`, `"In Progress"`, `"Fixed"`, `"Closed"`
+- Title field is `summary`. Severity field is `severity` (values: `LOW`/`MEDIUM`/`HIGH`) — there is no `priority` field.
 
 **Key endpoints:**
 ```bash
-# List issues
-curl -s -G "https://api.bugasura.io/issues/list" \
-  -H "Authorization: Basic ef611198bd434d11f9ad929b8a3a42efc2232cbc" \
-  --data-urlencode "team_id=101842" \
-  --data-urlencode "project_id=135167"
-
-# Add issue
-curl -s -X POST "https://api.bugasura.io/issues/add" \
+# File a ticket (form-urlencoded, NOT JSON)
+curl -s -X POST "https://api.bugasura.io/v1/issues/add" \
   -H "Authorization: Basic ef611198bd434d11f9ad929b8a3a42efc2232cbc" \
   --data-urlencode "team_id=101842" \
   --data-urlencode "project_id=135167" \
   --data-urlencode "sprint_id=152746" \
-  --data-urlencode "summary=Your summary" \
-  --data-urlencode "description=Your description" \
-  --data-urlencode "issue_type=BUG" \
+  --data-urlencode "summary=Short title" \
+  --data-urlencode "description=Body text" \
+  --data-urlencode "type=BUG" \
   --data-urlencode "severity=HIGH"
+
+# List issues — endpoint path under investigation; use Slack search or web UI (https://my.bugasura.io/) as fallback
 ```
 
 Note: Delete uses `issue_key` (numeric like 1605380), NOT `issue_id` (like HEY-243).
