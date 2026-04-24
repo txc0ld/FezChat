@@ -10,25 +10,16 @@
 </h1>
 
 <p align="center">
-  <strong>Chat at events, even without signal.</strong>
-</p>
-
-<p align="center">
-  A Bluetooth mesh chat app that turns every phone at a event into a communication node.<br>
-  No towers. No WiFi. No problem.
+  <strong><em>The chat app for places phones don't work.</em></strong>
 </p>
 
 ---
 
-## The Problem
+Festivals, stadiums, ultra marathons, the back of every music venue with 50,000 people in it — the moments cell towers melt down are exactly when you most need to find your people. We turn the crowd itself into the network. Every iPhone in range meshes with the others over Bluetooth: **no SIM, no signal, no Wi-Fi required**. _**The bigger the crowd, the stronger the mesh.**_
 
-At large events (10,000 - 100,000+ attendees), mobile networks collapse. Towers get overwhelmed, texts fail, and finding your friends becomes a shouting match in a crowd of strangers. Emergency services can't reach you. You're disconnected at the one place you came to connect.
+End-to-end encrypted DMs, a channel for every stage, SOS for medical emergencies, and an offline-first design that just works when carriers don't. We're building the **comms layer for everywhere people gather and infrastructure fails** — starting with festivals, ending up wherever phones go.
 
-## The Solution
-
-HeyBlip creates a **self-forming mesh network** using Bluetooth Low Energy. Every phone running the app becomes a relay node. Messages hop from device to device across the crowd until they reach their destination — no cell towers, no WiFi, no internet required.
-
-When signal is available, HeyBlip seamlessly falls back to WiFi and cellular. But the mesh is always the first choice.
+> When signal is available, HeyBlip seamlessly falls back to Wi-Fi and cellular — but the mesh is always the first choice.
 
 ---
 
