@@ -1353,6 +1353,7 @@ interface InternalPushBody {
   recipientPeerIdHex?: string;
   senderPeerIdHex?: string;
   pushType?: number;
+  "content-available"?: number;
 }
 
 async function handleInternalPush(request: Request, env: Env): Promise<Response> {
@@ -1389,6 +1390,7 @@ async function handleInternalPush(request: Request, env: Env): Promise<Response>
 
     const senderName: string = senderRows[0]?.username ?? "Someone";
     const conversationId = body.senderPeerIdHex;
+    const contentAvailable = body["content-available"] === 1;
 
     let alertBody: string;
     switch (body.pushType) {
@@ -1402,7 +1404,15 @@ async function handleInternalPush(request: Request, env: Env): Promise<Response>
     let failed = 0;
 
     await Promise.all(tokenRows.map(async (row: Record<string, any>) => {
-      const ok = await sendPush(String(row.token), senderName, conversationId, 1, env, alertBody);
+      const ok = await sendPush(
+        String(row.token),
+        senderName,
+        conversationId,
+        1,
+        env,
+        alertBody,
+        contentAvailable
+      );
       if (ok) { sent++; } else { failed++; }
     }));
 

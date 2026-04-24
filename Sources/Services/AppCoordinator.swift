@@ -386,6 +386,18 @@ final class AppCoordinator {
         lifecycleController?.start()
     }
 
+    func handlePushWakeUp(
+        source: String,
+        completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard isReady, let lifecycleController else {
+            completionHandler(.failed)
+            return
+        }
+
+        lifecycleController.handlePushWakeUp(source: source, completionHandler: completionHandler)
+    }
+
     /// Stop all transports and clean up.
     func stop() {
         lifecycleController?.stop()

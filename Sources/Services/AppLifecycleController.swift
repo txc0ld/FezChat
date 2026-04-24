@@ -13,7 +13,6 @@ final class AppLifecycleController {
     private var broadcastObservation: NSObjectProtocol?
     private var peerStateObservation: NSObjectProtocol?
     private var foregroundObservation: NSObjectProtocol?
-    private var pushWakeUpObservation: NSObjectProtocol?
     private var badgeResetObservation: NSObjectProtocol?
     private var peerSyncTimer: Timer?
     private var announceTimer: Timer?
@@ -108,21 +107,6 @@ final class AppLifecycleController {
 
         runtime.messageCleanupService.start()
 
-        if pushWakeUpObservation == nil {
-            pushWakeUpObservation = NotificationCenter.default.addObserver(
-                forName: .remotePushReceived,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                let handler = (UIApplication.shared.delegate as? AppDelegate)?.consumePushCompletion()
-                self?.handlePushWakeUp(completionHandler: handler)
-            }
-        }
-
-        if let pendingHandler = (UIApplication.shared.delegate as? AppDelegate)?.consumePushCompletion() {
-            handlePushWakeUp(completionHandler: pendingHandler)
-        }
-
         if badgeResetObservation == nil {
             badgeResetObservation = NotificationCenter.default.addObserver(
                 forName: UIApplication.didBecomeActiveNotification,
@@ -171,11 +155,6 @@ final class AppLifecycleController {
         if let observation = foregroundObservation {
             NotificationCenter.default.removeObserver(observation)
             foregroundObservation = nil
-        }
-
-        if let observation = pushWakeUpObservation {
-            NotificationCenter.default.removeObserver(observation)
-            pushWakeUpObservation = nil
         }
 
         if let observation = badgeResetObservation {
@@ -327,24 +306,93 @@ final class AppLifecycleController {
         }
     }
 
-    private func handlePushWakeUp(completionHandler: ((UIBackgroundFetchResult) -> Void)? = nil) {
-        let ws = runtime.webSocketTransport
+    private enum PushWakeError: LocalizedError {
+        case relayConnectTimedOut
+        case relayFailed(String)
 
-        if ws.state != .running {
-            DebugLogger.shared.log("PUSH", "Push wake-up: WebSocket not connected (state=\(ws.state)) — reconnecting")
-            ws.stop()
-            ws.start()
-        } else {
-            DebugLogger.shared.log("PUSH", "Push wake-up: WebSocket already connected")
+        var errorDescription: String? {
+            switch self {
+            case .relayConnectTimedOut:
+                return "Relay reconnect timed out during push wake"
+            case .relayFailed(let reason):
+                return "Relay reconnect failed: \(reason)"
+            }
         }
+    }
 
-        guard let completionHandler else { return }
+    func handlePushWakeUp(
+        source: String = "silent",
+        completionHandler: ((UIBackgroundFetchResult) -> Void)? = nil
+    ) {
+        let ws = runtime.webSocketTransport
+        let initialState = ws.state
+
+        CrashReportingService.shared.addBreadcrumb(
+            category: "push",
+            message: "Push wake started (\(source), wsState=\(initialState))"
+        )
+        DebugLogger.shared.log("PUSH", "Push wake-up started (\(source), wsState=\(initialState))")
 
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(10))
-            await self?.runtime.messageRetryService.triggerScan()
-            completionHandler(.newData)
+            guard let self else {
+                completionHandler?(.failed)
+                return
+            }
+
+            do {
+                if initialState != .running {
+                    DebugLogger.shared.log("PUSH", "Push wake-up: WebSocket not connected (state=\(initialState)) — reconnecting")
+                    ws.stop()
+                    ws.start()
+                    try await awaitWebSocketRunning(timeout: .seconds(8))
+                } else {
+                    DebugLogger.shared.log("PUSH", "Push wake-up: WebSocket already connected")
+                }
+
+                await runtime.messageRetryService.triggerScan()
+                // Give the relay a short settle window after the socket is up so
+                // queued packets can arrive and persist before the user taps in.
+                let drainWindow: Duration = initialState == .running ? .seconds(1) : .seconds(2)
+                try? await Task.sleep(for: drainWindow)
+
+                CrashReportingService.shared.addBreadcrumb(
+                    category: "push",
+                    message: "Push wake completed (\(source), drainWindowMs=\(initialState == .running ? 1000 : 2000))"
+                )
+                if let completionHandler {
+                    completionHandler(.newData)
+                }
+            } catch {
+                DebugLogger.shared.log("PUSH", "Push wake-up failed: \(error.localizedDescription)", isError: true)
+                CrashReportingService.shared.captureError(
+                    error,
+                    context: [
+                        "operation": "push_wake",
+                        "source": source,
+                        "initialWebSocketState": String(describing: initialState)
+                    ]
+                )
+                if let completionHandler {
+                    completionHandler(.failed)
+                }
+            }
         }
+    }
+
+    private func awaitWebSocketRunning(timeout: Duration) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            switch runtime.webSocketTransport.state {
+            case .running:
+                return
+            case .failed(let reason):
+                throw PushWakeError.relayFailed(reason)
+            default:
+                try await Task.sleep(for: .milliseconds(200))
+            }
+        }
+
+        throw PushWakeError.relayConnectTimedOut
     }
 
     private func scheduleAuthRefreshTimer() {

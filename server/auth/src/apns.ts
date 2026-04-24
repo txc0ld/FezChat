@@ -26,7 +26,8 @@ export async function sendPush(
     conversationId: string,
     unreadCount: number,
     env: Env,
-    alertBody?: string
+    alertBody?: string,
+    contentAvailable = false
 ): Promise<boolean> {
     try {
         const client = getClient(env);
@@ -34,7 +35,7 @@ export async function sendPush(
             alert: { title: 'HeyBlip', body: alertBody ?? `New message from ${senderName}` },
             badge: unreadCount,
             sound: 'default',
-            contentAvailable: true,
+            contentAvailable,
             mutableContent: true,
             threadId: conversationId,
             priority: Priority.immediate,
