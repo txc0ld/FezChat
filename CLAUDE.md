@@ -249,38 +249,40 @@ Do not read or modify:
 - `*.xcuserdata`
 - `.DS_Store`
 
-## Issue Tracker (Bugasura)
+## Issue Tracker (Notion)
 
-Bugasura is the issue tracker (replaced Linear on 2026-04-13). Project: **HeyBlip** (project_id: 135167), team: **Mesh Works** (team_id: 101842), sprint: **Linear Import** (sprint_id: 152746). Issue prefix: **HEY** (e.g., HEY-1186).
+Notion is the issue tracker as of 2026-04-24 (replaced Bugasura, which replaced Linear on 2026-04-13). Issue prefix continues as **HEY** (e.g., HEY-1186) — the Bugasura import preserved IDs and new tickets continue the sequence.
 
-**API details:**
-- Base URL: `https://api.bugasura.io/v1`
-- Auth header: `Authorization: Basic ef611198bd434d11f9ad929b8a3a42efc2232cbc`
-- **CRITICAL:** Encoding is `application/x-www-form-urlencoded`, NOT JSON. JSON body is silently ignored.
-- Status values are case-sensitive: `"New"`, `"In Progress"`, `"Fixed"`, `"Closed"`
-- Title field is `summary`. Severity field is `severity` (values: `LOW`/`MEDIUM`/`HIGH`) — there is no `priority` field.
+**Notion workspace:** `HeyBlip` — see https://www.notion.so/HeyBlip-34c3e435f07a80acbe11e76655af9ebf for the hub.
 
-**Key endpoints:**
-```bash
-# File a ticket (form-urlencoded, NOT JSON)
-curl -s -X POST "https://api.bugasura.io/v1/issues/add" \
-  -H "Authorization: Basic ef611198bd434d11f9ad929b8a3a42efc2232cbc" \
-  --data-urlencode "team_id=101842" \
-  --data-urlencode "project_id=135167" \
-  --data-urlencode "sprint_id=152746" \
-  --data-urlencode "summary=Short title" \
-  --data-urlencode "description=Body text" \
-  --data-urlencode "type=BUG" \
-  --data-urlencode "severity=HIGH"
+**Tasks DB:** `34c3e435-f07a-8175-bbdd-e0c455d106f7`
 
-# List issues — endpoint path under investigation; use Slack search or web UI (https://my.bugasura.io/) as fallback
+**Schema:**
+- `Name` — title
+- `HEY ID` — rich text (e.g. `HEY-1245`); HEY-N continues from the Bugasura import
+- `Status` — select: `New`, `In Progress`, `Fixed`, `Not Fixed`, `Released`, `Cancelled`, `Closed`
+- `Severity` — select: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`
+- `Type` — select: `BUG`, `FEATURE`, `IMPROVEMENT`, `POLISH`, `SUGGESTION`, `TASK`, `TECH-DEBT`
+- `Sprint` — select: `Linear Import`, `Audit Gaps — Apr 2026`
+- `Assigned to` — select of agent handles (`claude-1`, `claude-2`, etc.); maintainer-owned
+- `Owner` — text; the agent's claim
+- `PR URL` — url
+- `Bugasura URL` — url (historical reference for tickets imported from Bugasura)
+- `Approved to merge` — checkbox; maintainer-owned
+- `Created`, `Closed` — date
+
+**Filing a ticket** (use the Notion MCP `create-pages` tool, not curl):
 ```
+mcp__notion-create-pages with parent={"data_source_id": "<tasks-data-source-id>"}
+properties: { Name, "HEY ID", Status, Severity, Type, Sprint }
+```
+The next available HEY-N is whatever sits one above the current max (query the DB sorted by HEY ID descending).
 
-Note: Delete uses `issue_key` (numeric like 1605380), NOT `issue_id` (like HEY-243).
+**Bugasura is read-only archive** at https://my.bugasura.io/HeyBlip — useful for historical lookup of imported tickets, but no new edits should land there.
 
-**Workflow:** Claude Code prompts are stored in Bugasura ticket descriptions. To pick up a task:
-1. Fetch the ticket from Bugasura (web UI at https://my.bugasura.io/ or API)
-2. Copy the prompt from the ticket description into Claude Code
+**Workflow:** Claude Code prompts are stored in the Notion task body. To pick up a task:
+1. Fetch the Notion task (via the Notion MCP `notion-fetch` tool — not WebFetch)
+2. Copy the prompt from the task body into Claude Code
 3. Slack (#tay-tasks, #jmac-tasks) is for **notifications and status updates only** — not for prompts
 
 ## Git
@@ -289,7 +291,7 @@ Note: Delete uses `issue_key` (numeric like 1605380), NOT `issue_id` (like HEY-2
 - Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - One logical change per commit
 - Never commit with failing tests
-- **Branch naming:** `type/HEY-XXX-short-description` (matches Bugasura ticket)
+- **Branch naming:** `type/HEY-XXX-short-description` (matches the Notion HEY-N ticket ID)
 - **Before merging:** Always rebase onto latest `main` and re-run build + tests
 
 ### PR and Ticket Handoff — STOP HERE
@@ -299,9 +301,9 @@ Note: Delete uses `issue_key` (numeric like 1605380), NOT `issue_id` (like HEY-2
 2. PR opened on GitHub
 3. Message posted in `#blip-dev` that the PR is up
 
-John merges all PRs directly via GitHub PAT (updated 2026-04-14). Do not merge, do not approve, do not squash — just notify and stop. Cowork coordinates the pipeline (review prompts, Bugasura updates, merge routing), but the merge click is John's.
+John merges all PRs directly via GitHub PAT (updated 2026-04-14). Do not merge, do not approve, do not squash — just notify and stop. Cowork coordinates the pipeline (review prompts, Notion task updates, merge routing), but the merge click is John's.
 
-**NEVER update Bugasura ticket status.** Cowork manages all ticket transitions (New → In Progress → Fixed → Closed). Do not touch ticket status at any point during your work.
+**NEVER update Notion task `Status`, `Approved to merge`, or `Closed` date.** Cowork manages all ticket transitions (New → In Progress → Fixed → Closed) end-to-end. Do not touch those fields at any point during your work — your only allowed write is `Owner` → your handle when claiming.
 
 ## Execution Model
 

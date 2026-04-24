@@ -7,51 +7,62 @@ Copy the prompt below into Claude Dispatch or Cowork to begin working.
 ## Dispatch Prompt
 
 ```
-I am Tay, working on HeyBlip - a BLE mesh chat app for events.
+I am Tay, working on HeyBlip — a BLE mesh chat app for events.
 
 ## Project
 - Repo: https://github.com/txc0ld/heyblip
-- Issue tracker: Bugasura (HeyBlip project - https://my.bugasura.io/)
-- My role: Frontend, UX/UI, Design + shared backend
+- Notion hub: https://www.notion.so/HeyBlip-34c3e435f07a80acbe11e76655af9ebf
+- Issue tracker: Notion Tasks DB (under the HeyBlip hub). Issue prefix: HEY-N.
+- Bugasura at https://my.bugasura.io/HeyBlip is read-only archive only — no new edits land there.
+- My role: Frontend, UX/UI, Design + shared backend.
 
 ## Setup
-1. Clone https://github.com/txc0ld/heyblip if not already cloned
+1. Clone https://github.com/txc0ld/heyblip if not already cloned.
 2. Read these files for context:
    - CLAUDE.md (auto-loaded)
-   - README.md - project overview
-   - docs/superpowers/specs/blip-design.md - design source of truth
+   - README.md — project overview
+   - docs/superpowers/specs/blip-design.md — design source of truth
+3. Read the Notion hub's 🤖 callout AND the linked "Fresh agent orientation" page before doing anything.
 
 ## Task Management Workflow
 
 For every task I work on, follow this exact flow:
 
 ### Starting a task
-1. Check Bugasura for my assigned HeyBlip issues
-2. Move the selected Bugasura issue to "In Progress"
-3. Create a git branch named for the ticket and task
-4. Begin implementation
+1. A Notion task is dispatched to me when John names a specific HEY-N in chat. (There's no auto-dispatch worker right now — the Assigned to column is informational only.)
+2. Set Owner → my handle on the Notion task. Do NOT touch Status — Cowork manages transitions.
+3. Create a git branch named `type/HEY-N-short-description` (e.g. `feat/HEY-1245-adhoc-event-channels`).
+4. Begin implementation per the prompt in the task body.
 
 ### Working on a task
-- Follow CLAUDE.md build and coding rules
-- Read the design spec section relevant to the task before coding
-- Commit with conventional commit messages
-- Push the branch regularly
+- Follow CLAUDE.md build and coding rules.
+- Read the design spec section relevant to the task before coding.
+- Commit with conventional commit messages (`type(scope): description`).
+- Push the branch regularly.
+- Stay inside the task's scope. If real work needs a path outside, stop and ask — never silently widen.
 
 ### Completing a task
-1. Verify the work with the required build and any relevant tests
-2. Push the final commits to the branch
-3. Open a PR on GitHub targeting `main` with a clear description
-4. Move the Bugasura issue to "Fixed"
-5. Add a Bugasura comment summarizing what changed, any decisions made, and any downstream blockers
-6. Pick up the next assigned Bugasura task
+1. Verify the work with the required build + all three Swift package test suites.
+2. Run the verification greps from the dispatch prompt — paste output into the PR description.
+3. Push final commits and open a PR on GitHub targeting `main`. Title format: `type(scope): description (HEY-N)`.
+4. Post in #blip-dev with the verification grep output + PR link.
+5. STOP. Do NOT merge. Do NOT update the Notion task Status. Cowork handles both.
+6. Wait for the next dispatch — either a new Assigned to assignment or a HEY-N named in chat.
 
 ## Rules
-- Work autonomously - do not ask questions the codebase or spec can answer
-- The design spec is the source of truth: docs/superpowers/specs/blip-design.md
-- Build command: xcodebuild -scheme Blip -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO -quiet
-- Test commands: swift test --package-path Packages/BlipProtocol, swift test --package-path Packages/BlipCrypto, swift test --package-path Packages/BlipMesh
-- Keep Bugasura updated at every state change - it is the team source of truth
-- If blocked, document the blocker in Bugasura and move to the next available task
+- Work autonomously — do not ask questions the codebase or spec can answer.
+- Default mode is WAIT between tasks. Don't browse the Backlog and self-select.
+- The design spec is the source of truth: `docs/superpowers/specs/blip-design.md`.
+- Build command: `xcodebuild -scheme Blip -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO -quiet`
+- Test commands:
+  - `swift test --package-path Packages/BlipProtocol`
+  - `swift test --package-path Packages/BlipCrypto`
+  - `swift test --package-path Packages/BlipMesh`
+- Hot files (coordinate before editing): `AppCoordinator.swift`, `MessageService.swift`, `BLEService.swift`, `WebSocketTransport.swift`, `NoiseSessionManager.swift`, `FragmentAssembler.swift`, any `Sources/Models/*` SwiftData models.
+- 4 dependencies max — never add new ones without explicit approval.
+- BLE features need real-device verification. Simulator does not support CoreBluetooth.
+- Never merge own PR. Never update Notion Status.
+- If blocked, drop a one-paragraph note in the Notion task body and move to the next dispatched task.
 
-Begin by checking Bugasura for the highest-priority assigned issue. Go.
+Begin by reading the Notion hub callout and waiting for a HEY-N dispatch. Do not self-select work.
 ```
