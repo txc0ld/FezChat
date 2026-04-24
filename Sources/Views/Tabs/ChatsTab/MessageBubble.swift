@@ -9,6 +9,9 @@ private enum MessageBubbleL10n {
     static let edit = String(localized: "chat.message.context.edit", defaultValue: "Edit")
     static let delete = String(localized: "chat.message.context.delete", defaultValue: "Delete")
     static let report = String(localized: "chat.message.context.report", defaultValue: "Report")
+    static let react = String(localized: "chat.message.context.react", defaultValue: "React")
+    static let clearReaction = String(localized: "chat.message.context.clear_reaction", defaultValue: "Remove reaction")
+    static let reactionAccessibility = String(localized: "chat.message.reaction.accessibility", defaultValue: "Your reaction: %@. Tap to remove.")
     static let you = String(localized: "common.you", defaultValue: "You")
     static let voiceNote = String(localized: "chat.message.content.voice_note", defaultValue: "Voice note")
     static let image = String(localized: "chat.message.content.image", defaultValue: "Image")
@@ -21,6 +24,11 @@ private enum MessageBubbleL10n {
     static let previewArrival = "Just arrived! Where are you?"
     static let previewPyramid = "I'm near the Pyramid Stage! Bicep is about to start"
     static let previewOnMyWay = "On my way! Save me a spot"
+}
+
+/// Emoji choices offered in the reaction picker.
+enum ReactionChoices {
+    static let options: [String] = ["👍", "❤️", "😂", "🎉", "😮", "😢"]
 }
 
 // MARK: - MessageBubble
@@ -52,6 +60,9 @@ struct MessageBubble: View {
 
     /// Called when user taps report in context menu.
     var onReport: (() -> Void)? = nil
+
+    /// Called when the user picks a reaction emoji. `nil` clears the reaction.
+    var onReact: ((String?) -> Void)? = nil
 
     @State private var isVisible = false
     @State private var isRetrying = false
@@ -87,6 +98,9 @@ struct MessageBubble: View {
                 bubbleContent
                     .contextMenu {
                         contextMenuItems
+                    }
+                    .overlay(alignment: message.isFromMe ? .bottomLeading : .bottomTrailing) {
+                        reactionChip
                     }
 
                 // Retry button for failed messages
@@ -153,28 +167,27 @@ struct MessageBubble: View {
                 replyQuote(reply)
             }
 
-            // Message body, with a subtle inline time in the bottom-right
-            // corner — WhatsApp-style. No transport icon (redundant with the
-            // nav bar indicator), no inline "edited" label (moved to
-            // accessibility + context menu metadata), tight padding.
+            // Message body. A clean two-row layout — text/media on top, a
+            // compact time + delivery footer underneath right-aligned — avoids
+            // the overlay-based timestamp colliding with characters on
+            // bubble-width-constrained messages. No transport icon (redundant
+            // with the nav bar indicator), no inline "edited" label (moved to
+            // accessibility + context menu metadata).
             Group {
                 switch message.contentType {
                 case .text:
-                    textWithTrailingTimestamp
-                case .voiceNote:
+                    textContent
+                case .voiceNote, .pttAudio:
                     voiceNoteContent
                 case .image:
                     imageContent
-                case .pttAudio:
-                    voiceNoteContent
                 }
             }
 
-            // Media/voice messages don't support inline trailing timestamps
-            // cleanly, so we emit a compact footer underneath instead.
-            if message.contentType != .text {
-                mediaFooter
-            }
+            // Footer row: time + delivery status, trailing-aligned. Always
+            // present so text and media bubbles feel consistent and the
+            // timestamp never overlaps the last text line.
+            bubbleFooter
         }
         .padding(.horizontal, BlipSpacing.md - 2)
         .padding(.vertical, BlipSpacing.sm - 2)
@@ -187,47 +200,32 @@ struct MessageBubble: View {
         )
     }
 
-    /// Text bubble with the time and delivery status laid out trailing at the
-    /// baseline — WhatsApp's tight "time-in-corner" look. A transparent spacer
-    /// run reserves horizontal room inside the text layout for the overlayed
-    /// timestamp so long lines wrap correctly without the time colliding.
-    private var textWithTrailingTimestamp: some View {
-        let body = Text(message.text)
+    /// Plain text run with no trailing timestamp overlay. The footer row below
+    /// carries the time + delivery badge so characters never collide with
+    /// them on narrow bubbles.
+    private var textContent: some View {
+        Text(message.text)
             .font(theme.typography.body)
             .foregroundStyle(message.isFromMe ? .white : theme.colors.text)
-        let gap = Text(reservedTimestampGap)
-            .font(theme.typography.body)
-            .foregroundStyle(.clear)
-
-        return (body + gap)
             .fixedSize(horizontal: false, vertical: true)
-            .overlay(alignment: .bottomTrailing) {
-                timestampRow
-                    .padding(.trailing, 2)
-                    .padding(.bottom, 1)
-            }
+            .frame(
+                maxWidth: .infinity,
+                alignment: message.isFromMe ? .trailing : .leading
+            )
     }
 
-    /// Footer shown under media (voice notes / images) since they can't host
-    /// an inline trailing timestamp cleanly.
-    private var mediaFooter: some View {
-        HStack(spacing: BlipSpacing.xs) {
-            Spacer(minLength: 0)
-            timestampRow
-        }
-        .padding(.top, 2)
-    }
-
-    /// Compact timestamp + delivery state row used as an overlay on text
-    /// bubbles and as a footer on media bubbles.
-    private var timestampRow: some View {
+    /// Compact footer under every bubble — time and (for outgoing messages)
+    /// the delivery status badge. Always right-aligned inside the bubble.
+    private var bubbleFooter: some View {
         HStack(spacing: 3) {
+            Spacer(minLength: 0)
+
             Text(message.formattedTime)
                 .font(.custom(BlipFontName.regular, size: 10, relativeTo: .caption2))
                 .foregroundStyle(
                     message.isFromMe
-                        ? Color.white.opacity(0.65)
-                        : theme.colors.mutedText.opacity(0.7)
+                        ? Color.white.opacity(0.7)
+                        : theme.colors.mutedText.opacity(0.8)
                 )
 
             if message.isFromMe {
@@ -235,21 +233,12 @@ struct MessageBubble: View {
                     status: message.deliveryStatus,
                     size: 11,
                     tintColor: message.deliveryStatus == .read
-                        ? .white.opacity(0.9)
-                        : .white.opacity(0.55)
+                        ? .white.opacity(0.95)
+                        : .white.opacity(0.6)
                 )
             }
         }
-    }
-
-    /// Invisible gap inside the text run so the overlay timestamp doesn't
-    /// collide with message characters. The exact width scales with the
-    /// expected "HH:MM" + check glyphs footprint.
-    private var reservedTimestampGap: String {
-        // Three or four non-breaking spaces give the overlay room without
-        // introducing a visible trailing space. More for me-messages because
-        // the status badge widens the footprint.
-        message.isFromMe ? "\u{00A0}\u{00A0}\u{00A0}\u{00A0}\u{00A0}\u{00A0}" : "\u{00A0}\u{00A0}\u{00A0}\u{00A0}"
+        .padding(.top, 1)
     }
 
     // MARK: - Voice Note Content
@@ -328,10 +317,80 @@ struct MessageBubble: View {
         )
     }
 
+    // MARK: - Reaction Chip
+
+    /// Small reaction pill attached to the outside corner of the bubble.
+    /// Overlayed with a slight offset so it visually peels off the bubble edge.
+    @ViewBuilder
+    private var reactionChip: some View {
+        if let reaction = message.reaction, !reaction.isEmpty {
+            Text(reaction)
+                .font(.system(size: 13))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(
+                            colorScheme == .dark
+                                ? Color.white.opacity(0.18)
+                                : Color.black.opacity(0.08),
+                            lineWidth: 0.5
+                        )
+                )
+                .offset(
+                    x: message.isFromMe ? -6 : 6,
+                    y: 10
+                )
+                .onTapGesture {
+                    if !SpringConstants.isReduceMotionEnabled {
+                        #if canImport(UIKit)
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        #endif
+                    }
+                    onReact?(nil)
+                }
+                .accessibilityLabel(String(
+                    format: MessageBubbleL10n.reactionAccessibility,
+                    reaction
+                ))
+                .transition(
+                    SpringConstants.isReduceMotionEnabled
+                        ? .opacity
+                        : .scale.combined(with: .opacity)
+                )
+        }
+    }
+
     // MARK: - Context Menu
 
     @ViewBuilder
     private var contextMenuItems: some View {
+        // Reaction picker — nested Menu so the native iOS context sheet opens
+        // a small submenu with the emoji choices.
+        Menu {
+            ForEach(ReactionChoices.options, id: \.self) { emoji in
+                Button {
+                    onReact?(emoji)
+                } label: {
+                    Text(emoji)
+                }
+            }
+            if message.reaction != nil {
+                Divider()
+                Button(role: .destructive) {
+                    onReact?(nil)
+                } label: {
+                    Label(MessageBubbleL10n.clearReaction, systemImage: "xmark.circle")
+                }
+            }
+        } label: {
+            Label(MessageBubbleL10n.react, systemImage: "face.smiling")
+        }
+
         Button {
             onReply?()
         } label: {
@@ -452,6 +511,7 @@ struct ChatMessage: Identifiable, Sendable {
     let waveformSamples: [Float]
     let audioData: Data?
     let isRelayed: Bool
+    let reaction: String?
 
     var formattedTime: String {
         timestamp.formatted(date: .omitted, time: .shortened)
@@ -470,7 +530,7 @@ extension ChatMessage {
             timestamp: Date().addingTimeInterval(-3600),
             isEdited: false, replyPreview: nil, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
-            isRelayed: false
+            isRelayed: false, reaction: nil
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewMe, senderAvatarData: nil,
@@ -480,7 +540,7 @@ extension ChatMessage {
             timestamp: Date().addingTimeInterval(-3500),
             isEdited: false, replyPreview: nil, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
-            isRelayed: false
+            isRelayed: false, reaction: nil
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewAlice, senderAvatarData: nil,
@@ -490,7 +550,7 @@ extension ChatMessage {
             timestamp: Date().addingTimeInterval(-3400),
             isEdited: false, replyPreview: MessageBubbleL10n.previewArrival, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
-            isRelayed: true
+            isRelayed: true, reaction: "👍"
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewMe, senderAvatarData: nil,
@@ -500,7 +560,7 @@ extension ChatMessage {
             timestamp: Date().addingTimeInterval(-60),
             isEdited: true, replyPreview: nil, imageData: nil,
             voiceNoteDuration: nil, waveformSamples: [], audioData: nil,
-            isRelayed: false
+            isRelayed: false, reaction: nil
         ),
         ChatMessage(
             id: UUID(), senderName: MessageBubbleL10n.previewAlice, senderAvatarData: nil,
@@ -512,7 +572,7 @@ extension ChatMessage {
             voiceNoteDuration: 12.5,
             waveformSamples: [0.2, 0.4, 0.6, 0.8, 0.5, 0.3, 0.7, 0.9, 0.4, 0.2, 0.5, 0.6],
             audioData: nil,
-            isRelayed: true
+            isRelayed: true, reaction: nil
         )
     ]
 }

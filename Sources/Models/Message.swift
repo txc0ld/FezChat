@@ -53,6 +53,10 @@ final class Message {
     var createdAt: Date
     var expiresAt: Date?
 
+    /// Local-only reaction emoji the current user applied to this message.
+    /// Not transmitted over the wire — reactions are UI-only for now.
+    var reaction: String?
+
     // MARK: - Inverse Relationships
 
     @Relationship(inverse: \MessageQueue.message)
@@ -98,7 +102,8 @@ final class Message {
         isDeleted: Bool = false,
         editedAt: Date? = nil,
         createdAt: Date = Date(),
-        expiresAt: Date? = nil
+        expiresAt: Date? = nil,
+        reaction: String? = nil
     ) {
         self.id = id
         self.sender = sender
@@ -117,5 +122,6 @@ final class Message {
         self.editedAt = editedAt
         self.createdAt = createdAt
         self.expiresAt = expiresAt
+        self.reaction = reaction
     }
 }
