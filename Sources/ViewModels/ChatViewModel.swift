@@ -816,6 +816,24 @@ final class ChatViewModel {
     func clearReplyTarget() {
         replyTarget = nil
     }
+
+    /// Apply or clear the local reaction emoji on a message.
+    /// Local-only — not transmitted over the wire. Passing `nil` clears.
+    func setReaction(_ emoji: String?, on message: Message) {
+        let messageID = message.id
+        let context = self.context
+        do {
+            let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == messageID })
+            guard let localMessage = try context.fetch(descriptor).first else { return }
+            localMessage.reaction = emoji
+            try context.save()
+            if let idx = activeMessages.firstIndex(where: { $0.id == messageID }) {
+                activeMessages[idx] = localMessage
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 extension ChatViewModel: MessageServiceDelegate {

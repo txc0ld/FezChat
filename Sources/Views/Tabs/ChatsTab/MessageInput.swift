@@ -61,6 +61,11 @@ struct MessageInput: View {
     /// Whether the WebSocket relay is connected (PTT requires relay — too large for BLE).
     var isRelayAvailable: Bool = true
 
+    /// Notifies the parent when the composer text field gains or loses focus.
+    /// Parent uses this to pin the chat scroll to the latest message while the
+    /// keyboard is open.
+    var onFocusChange: ((Bool) -> Void)? = nil
+
     @State private var isSendMode = false
     @State private var isPTTActive = false
     @State private var showAttachmentMenu = false
@@ -225,6 +230,9 @@ struct MessageInput: View {
                     withAnimation(SpringConstants.bouncyAnimation) {
                         isSendMode = !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     }
+                }
+                .onChange(of: isTextFieldFocused) { _, focused in
+                    onFocusChange?(focused)
                 }
         }
         .padding(.vertical, BlipSpacing.xs)

@@ -64,6 +64,7 @@ struct ChatView: View {
     @State private var lastTypingIndicatorSent = Date.distantPast
     @State private var showPTTUnavailableToast = false
     @State private var showGroupInfo = false
+    @State private var isComposerFocused = false
 
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.theme) private var theme
@@ -181,7 +182,16 @@ struct ChatView: View {
                 onCancelEdit: {
                     chatViewModel?.cancelEditing()
                 },
-                isRelayAvailable: isRelayAvailable
+                isRelayAvailable: isRelayAvailable,
+                onFocusChange: { focused in
+                    isComposerFocused = focused
+                    if focused {
+                        withAnimation(SpringConstants.accessibleMessage) {
+                            scrollProxy?.scrollTo("bottom", anchor: .bottom)
+                        }
+                        unseenMessageCount = 0
+                    }
+                }
             )
             .accessibilityValue(isRecordingVoiceNote ? ChatViewL10n.recordingVoiceNote : "")
         }
@@ -536,16 +546,30 @@ struct ChatView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: messages.count) { oldCount, newCount in
-                if isNearBottom || justSentMessage {
+                // Pin to the latest message when the user is actively composing
+                // — without this, opening the keyboard shifts the bottom anchor
+                // off-screen and incoming messages stay hidden behind the
+                // composer. The composer-focused user expects the latest line
+                // to stay visible.
+                if isNearBottom || justSentMessage || isComposerFocused {
                     withAnimation(SpringConstants.accessibleMessage) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                     justSentMessage = false
+                    if isComposerFocused {
+                        unseenMessageCount = 0
+                    }
                 } else {
                     let newMessages = newCount - oldCount
                     if newMessages > 0 {
                         unseenMessageCount += newMessages
                     }
+                }
+            }
+            .onChange(of: isComposerFocused) { _, focused in
+                guard focused else { return }
+                withAnimation(SpringConstants.accessibleMessage) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
             }
             .onAppear {
@@ -615,7 +639,12 @@ struct ChatView: View {
             },
             onEdit: { findOriginal(messageID) { chatViewModel?.startEditing($0) } },
             onDelete: { findOriginal(messageID) { showDeleteConfirmation = $0 } },
-            onRetry: { findOriginal(messageID) { msg in Task { await chatViewModel?.retryMessage(msg) } } }
+            onRetry: { findOriginal(messageID) { msg in Task { await chatViewModel?.retryMessage(msg) } } },
+            onReact: { emoji in
+                findOriginal(messageID) { msg in
+                    chatViewModel?.setReaction(emoji, on: msg)
+                }
+            }
         )
         .id(message.id)
     }
@@ -747,7 +776,8 @@ struct ChatView: View {
                 voiceNoteDuration: message.attachments.first(where: { $0.isAudio })?.duration,
                 waveformSamples: [],
                 audioData: message.attachments.first(where: { $0.isAudio })?.fullData,
-                isRelayed: message.isRelayed
+                isRelayed: message.isRelayed,
+                reaction: message.reaction
             )
         }
     }
