@@ -1,7 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "BlipSplash.png",
+      "filename" : "splash_light.png",
+      "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "splash_dark.png",
       "idiom" : "universal"
     }
   ],
