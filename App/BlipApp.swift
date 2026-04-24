@@ -43,7 +43,6 @@ struct BlipApp: App {
                     appDelegate.coordinator = coordinator
                     if !coordinator.isReady && !coordinator.needsOnboarding {
                         coordinator.configure(modelContainer: sharedModelContainer)
-                        appDelegate.coordinator = coordinator
                     }
                 }
                 .onOpenURL { url in

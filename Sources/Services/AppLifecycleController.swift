@@ -326,6 +326,7 @@ final class AppLifecycleController {
     ) {
         let ws = runtime.webSocketTransport
         let initialState = ws.state
+        let pushWakeStartedAt = Date()
 
         CrashReportingService.shared.addBreadcrumb(
             category: "push",
@@ -350,28 +351,34 @@ final class AppLifecycleController {
                 }
 
                 await runtime.messageRetryService.triggerScan()
-                // Give the relay a short settle window after the socket is up so
-                // queued packets can arrive and persist before the user taps in.
-                let drainWindow: Duration = initialState == .running ? .seconds(1) : .seconds(2)
-                try? await Task.sleep(for: drainWindow)
+                let drainWindowMilliseconds = makeDrainWindowMilliseconds(
+                    initialState: initialState,
+                    pushWakeStartedAt: pushWakeStartedAt
+                )
+                try await Task.sleep(for: .milliseconds(drainWindowMilliseconds))
 
                 CrashReportingService.shared.addBreadcrumb(
                     category: "push",
-                    message: "Push wake completed (\(source), drainWindowMs=\(initialState == .running ? 1000 : 2000))"
+                    message: "Push wake completed (\(source), drainWindowMs=\(drainWindowMilliseconds))"
                 )
                 if let completionHandler {
                     completionHandler(.newData)
                 }
             } catch {
                 DebugLogger.shared.log("PUSH", "Push wake-up failed: \(error.localizedDescription)", isError: true)
-                CrashReportingService.shared.captureError(
-                    error,
-                    context: [
-                        "operation": "push_wake",
-                        "source": source,
-                        "initialWebSocketState": String(describing: initialState)
-                    ]
-                )
+                let context: [String: Any] = [
+                    "operation": "push_wake",
+                    "source": source,
+                    "initialWebSocketState": String(describing: initialState)
+                ]
+                if case PushWakeError.relayConnectTimedOut = error {
+                    CrashReportingService.shared.captureMessage(
+                        "Push wake relay reconnect timed out",
+                        level: .warning
+                    )
+                } else {
+                    CrashReportingService.shared.captureError(error, context: context)
+                }
                 if let completionHandler {
                     completionHandler(.failed)
                 }
@@ -393,6 +400,20 @@ final class AppLifecycleController {
         }
 
         throw PushWakeError.relayConnectTimedOut
+    }
+
+    private func makeDrainWindowMilliseconds(
+        initialState: TransportState,
+        pushWakeStartedAt: Date
+    ) -> Int {
+        let minimumDrainMs = initialState == .running ? 1_000 : 2_000
+        let maximumDrainMs = initialState == .running ? 5_000 : 10_000
+        let totalBudgetMs = 28_000
+        let safetyBufferMs = 2_000
+        let elapsedMs = max(Int(Date().timeIntervalSince(pushWakeStartedAt) * 1_000), 0)
+        let remainingDrainBudgetMs = totalBudgetMs - elapsedMs - safetyBufferMs
+        let clampedDrainMs = min(maximumDrainMs, remainingDrainBudgetMs)
+        return max(minimumDrainMs, clampedDrainMs)
     }
 
     private func scheduleAuthRefreshTimer() {

@@ -33,8 +33,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// Background task service — registered once at launch.
     let backgroundTaskService = BackgroundTaskService()
 
+    private var pendingPushWake: PendingPushWake?
+
     weak var coordinator: AppCoordinator? {
         didSet {
+            oldValue?.onReady = nil
+            coordinator?.onReady = { [weak self] in
+                self?.flushPendingPushWakeIfNeeded()
+            }
             flushPendingPushWakeIfNeeded()
         }
     }
@@ -65,9 +71,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     // MARK: - Remote Notifications
 
-    private enum RemotePushKind: String {
+    enum RemotePushKind: String {
         case alertOnly = "alert_only"
         case silent = "silent"
+        // Keep this distinct from pure silent pushes so breadcrumbs can tell us
+        // whether APNs delivered a visible banner alongside the wake.
         case alertAndSilent = "alert_and_silent"
 
         var shouldWakeRelay: Bool {
@@ -105,8 +113,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        let pushKind = classifyRemotePush(userInfo: userInfo)
+        let pushKind = Self.classifyRemotePush(userInfo: userInfo)
         guard pushKind.shouldWakeRelay else {
+            DebugLogger.shared.log("PUSH", "Remote push classified as alert-only; skipping background relay wake")
+            CrashReportingService.shared.addBreadcrumb(
+                category: "push",
+                message: "Remote push classified as alert-only"
+            )
             completionHandler(.noData)
             return
         }
@@ -121,11 +134,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         schedulePendingPushWakeTimeout(for: pendingWake.id)
     }
 
-    private var pendingPushWake: PendingPushWake?
-
-    private func classifyRemotePush(userInfo: [AnyHashable: Any]) -> RemotePushKind {
+    static func classifyRemotePush(userInfo: [AnyHashable: Any]) -> RemotePushKind {
         let aps = userInfo["aps"] as? [AnyHashable: Any]
         let hasAlert = aps?["alert"] != nil
+        // In production APNs payloads arrive bridged through NSNumber, but unit
+        // tests and local dictionaries often feed the field through as Int/String.
         let contentAvailable = (aps?["content-available"] as? NSNumber)?.intValue == 1
             || (aps?["content-available"] as? Int) == 1
             || (aps?["content-available"] as? String) == "1"

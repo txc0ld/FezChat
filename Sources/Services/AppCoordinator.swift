@@ -66,6 +66,7 @@ final class AppCoordinator {
     /// `bleTransportState` and on every BLE connect/disconnect callback so
     /// observers see transitions in the same render frame.
     private(set) var connectedBLEPeerCount: Int = 0
+    @ObservationIgnored var onReady: (@MainActor () -> Void)?
 
     // MARK: - Services
 
@@ -247,6 +248,7 @@ final class AppCoordinator {
         self.backgroundTaskService = bgService
 
         isReady = true
+        onReady?()
         logger.info("AppCoordinator configured — services ready")
 
         // Self-check: verify local user is registered on the server.

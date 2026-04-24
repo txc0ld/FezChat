@@ -106,6 +106,24 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertFalse(firstMessageService === secondMessageService, "Runtime-owned services should be rebuilt on reconfigure")
     }
 
+    func testConfigure_invokesOnReadyCallback() throws {
+        let keyManager = KeyManager(keyStore: InMemoryKeyManagerStore())
+        let identity = try keyManager.generateIdentity()
+        try keyManager.storeIdentity(identity)
+
+        let coordinator = AppCoordinator(keyManager: keyManager)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: BlipSchema.schema, configurations: [config])
+        let readyExpectation = expectation(description: "onReady called")
+        coordinator.onReady = {
+            readyExpectation.fulfill()
+        }
+
+        coordinator.configure(modelContainer: container)
+
+        wait(for: [readyExpectation], timeout: 1.0)
+    }
+
     func testResetToOnboarding_clearsRuntimeServices() throws {
         let keyManager = KeyManager(keyStore: InMemoryKeyManagerStore())
         let identity = try keyManager.generateIdentity()
