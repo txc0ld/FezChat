@@ -4,9 +4,19 @@ import {
   waitOnExecutionContext,
 } from "cloudflare:test";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
+const { sendPushMock } = vi.hoisted(() => ({
+  sendPushMock: vi.fn(async () => true),
+}));
+
+vi.mock("../src/apns", () => ({
+  sendPush: sendPushMock,
+}));
+
 vi.mock("@neondatabase/serverless", () => ({
   neon: () => {
     const users = ((globalThis as any).__blipAuthMockUsers ??= []) as MockUser[];
+    const deviceTokens = ((globalThis as any).__blipAuthMockDeviceTokens ??= []) as MockDeviceToken[];
     const query = async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const normalized = strings.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -172,6 +182,26 @@ vi.mock("@neondatabase/serverless", () => ({
         }] : [];
       }
 
+      if (normalized.includes("select dt.token from device_tokens dt")
+        && normalized.includes("join users u on dt.user_id = u.id")
+        && normalized.includes("where u.peer_id_hex =")) {
+        const recipientPeerIdHex = values[0] as string;
+        const user = users.find((candidate) => candidate.peer_id_hex === recipientPeerIdHex);
+        if (!user) {
+          return [];
+        }
+
+        return deviceTokens
+          .filter((deviceToken) => deviceToken.user_id === user.id)
+          .map((deviceToken) => ({ token: deviceToken.token }));
+      }
+
+      if (normalized.includes("select username from users where peer_id_hex =")) {
+        const senderPeerIdHex = values[0] as string;
+        const user = users.find((candidate) => candidate.peer_id_hex === senderPeerIdHex);
+        return user ? [{ username: user.username }] : [];
+      }
+
       if (normalized.includes("delete from users where noise_public_key =")) {
         const noisePublicKey = values[0] as Uint8Array;
         const index = users.findIndex((candidate) =>
@@ -222,6 +252,11 @@ interface MockUser {
   noise_public_key: Uint8Array | null;
   signing_public_key: Uint8Array | null;
   peer_id_hex: string | null;
+}
+
+interface MockDeviceToken {
+  user_id: string;
+  token: string;
 }
 
 async function request(
@@ -292,6 +327,20 @@ function resetMockUsers(): void {
   mockUsers().length = 0;
 }
 
+function mockDeviceTokens(): MockDeviceToken[] {
+  return (((globalThis as any).__blipAuthMockDeviceTokens ??= []) as MockDeviceToken[]);
+}
+
+function resetMockDeviceTokens(): void {
+  mockDeviceTokens().length = 0;
+}
+
+function seedDeviceToken(userID: string, token = crypto.randomUUID()): MockDeviceToken {
+  const deviceToken: MockDeviceToken = { user_id: userID, token };
+  mockDeviceTokens().push(deviceToken);
+  return deviceToken;
+}
+
 async function seedAuthUser(username = "alice"): Promise<{
   user: MockUser;
   noisePublicKey: Uint8Array;
@@ -313,6 +362,7 @@ async function seedAuthUser(username = "alice"): Promise<{
     updated_at: now,
     noise_public_key: noisePublicKey,
     signing_public_key: signingPublicKey,
+    peer_id_hex: null,
   };
 
   mockUsers().push(user);
@@ -359,6 +409,9 @@ beforeEach(async () => {
   delete (env as Record<string, unknown>).DATABASE_URL;
   delete (globalThis as Record<string, unknown>).__blipAuthMockWarmupError;
   resetMockUsers();
+  resetMockDeviceTokens();
+  sendPushMock.mockReset();
+  sendPushMock.mockResolvedValue(true);
 });
 
 // ─── Health ──────────────────────────────────────────────────
@@ -1135,5 +1188,43 @@ describe("input hardening", () => {
     });
     expect(res.status).toBe(501);
     expect((await json(res)).error).toContain("not configured");
+  });
+});
+
+describe("POST /v1/internal/push", () => {
+  it("threads content-available through to APNs send", async () => {
+    const { user: sender } = await seedAuthUser("sender");
+    const { user: recipient } = await seedAuthUser("recipient");
+    sender.peer_id_hex = "aa".repeat(16);
+    recipient.peer_id_hex = "bb".repeat(16);
+    const deviceToken = seedDeviceToken(recipient.id, "device-token-1");
+
+    (env as Record<string, unknown>).DATABASE_URL = "postgres://test";
+    (env as Record<string, unknown>).INTERNAL_API_KEY = "test-internal-key";
+
+    const res = await request(
+      "POST",
+      "/v1/internal/push",
+      {
+        recipientPeerIdHex: recipient.peer_id_hex,
+        senderPeerIdHex: sender.peer_id_hex,
+        "content-available": 1,
+      },
+      {
+        "X-Internal-Key": "test-internal-key",
+      }
+    );
+
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ sent: 1, failed: 0 });
+    expect(sendPushMock).toHaveBeenCalledWith(
+      deviceToken.token,
+      sender.username,
+      sender.peer_id_hex,
+      1,
+      env,
+      `Message from ${sender.username}`,
+      true
+    );
   });
 });

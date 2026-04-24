@@ -6,6 +6,7 @@ import CoreBluetooth
 /// Handles BLE state restoration for background operation.
 /// When iOS relaunches the app after suspension/termination due to a BLE event,
 /// the delegate receives restoration state and rebuilds the peer table.
+@MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
 
     // MARK: - State restoration keys
@@ -31,6 +32,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     /// Background task service — registered once at launch.
     let backgroundTaskService = BackgroundTaskService()
+
+    private var pendingPushWake: PendingPushWake?
+
+    weak var coordinator: AppCoordinator? {
+        didSet {
+            oldValue?.onReady = nil
+            coordinator?.onReady = { [weak self] in
+                self?.flushPendingPushWakeIfNeeded()
+            }
+            flushPendingPushWakeIfNeeded()
+        }
+    }
 
     func application(
         _ application: UIApplication,
@@ -58,17 +71,27 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     // MARK: - Remote Notifications
 
-    /// Stored completion handler from the most recent silent push.
-    /// AppCoordinator consumes this via `consumePushCompletion()` once transports
-    /// are running. A 25-second fallback fires if nobody consumes it in time.
-    private var pendingPushCompletion: ((UIBackgroundFetchResult) -> Void)?
+    enum RemotePushKind: String {
+        case alertOnly = "alert_only"
+        case silent = "silent"
+        // Keep this distinct from pure silent pushes so breadcrumbs can tell us
+        // whether APNs delivered a visible banner alongside the wake.
+        case alertAndSilent = "alert_and_silent"
 
-    /// Returns and clears the pending push completion handler.
-    /// Called by AppCoordinator after it reconnects the relay.
-    func consumePushCompletion() -> ((UIBackgroundFetchResult) -> Void)? {
-        let handler = pendingPushCompletion
-        pendingPushCompletion = nil
-        return handler
+        var shouldWakeRelay: Bool {
+            switch self {
+            case .alertOnly:
+                return false
+            case .silent, .alertAndSilent:
+                return true
+            }
+        }
+    }
+
+    private struct PendingPushWake {
+        let id = UUID()
+        let kind: RemotePushKind
+        let completionHandler: (UIBackgroundFetchResult) -> Void
     }
 
     func application(
@@ -90,19 +113,69 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        // Store so AppCoordinator can hold it open while the relay drains.
-        // The notification wakes an already-running coordinator; for a killed-app
-        // relaunch the coordinator picks up pendingPushCompletion inside start().
-        pendingPushCompletion = completionHandler
-        NotificationCenter.default.post(name: .remotePushReceived, object: nil, userInfo: userInfo)
+        let pushKind = Self.classifyRemotePush(userInfo: userInfo)
+        guard pushKind.shouldWakeRelay else {
+            DebugLogger.shared.log("PUSH", "Remote push classified as alert-only; skipping background relay wake")
+            CrashReportingService.shared.addBreadcrumb(
+                category: "push",
+                message: "Remote push classified as alert-only"
+            )
+            completionHandler(.noData)
+            return
+        }
 
-        // Safety net: iOS requires the handler within ~30 seconds.
-        // AppCoordinator calls it after relay drain; this fires only if it never does.
+        let pendingWake = PendingPushWake(kind: pushKind, completionHandler: completionHandler)
+        if dispatchPushWake(pendingWake) {
+            return
+        }
+
+        pendingPushWake?.completionHandler(.failed)
+        pendingPushWake = pendingWake
+        schedulePendingPushWakeTimeout(for: pendingWake.id)
+    }
+
+    static func classifyRemotePush(userInfo: [AnyHashable: Any]) -> RemotePushKind {
+        let aps = userInfo["aps"] as? [AnyHashable: Any]
+        let hasAlert = aps?["alert"] != nil
+        // In production APNs payloads arrive bridged through NSNumber, but unit
+        // tests and local dictionaries often feed the field through as Int/String.
+        let contentAvailable = (aps?["content-available"] as? NSNumber)?.intValue == 1
+            || (aps?["content-available"] as? Int) == 1
+            || (aps?["content-available"] as? String) == "1"
+
+        switch (hasAlert, contentAvailable) {
+        case (true, true):
+            return .alertAndSilent
+        case (false, true):
+            return .silent
+        default:
+            return .alertOnly
+        }
+    }
+
+    private func dispatchPushWake(_ pendingWake: PendingPushWake) -> Bool {
+        guard let coordinator, coordinator.isReady else { return false }
+        coordinator.handlePushWakeUp(
+            source: pendingWake.kind.rawValue,
+            completionHandler: pendingWake.completionHandler
+        )
+        return true
+    }
+
+    private func flushPendingPushWakeIfNeeded() {
+        guard let pendingPushWake else { return }
+        guard dispatchPushWake(pendingPushWake) else { return }
+        self.pendingPushWake = nil
+    }
+
+    private func schedulePendingPushWakeTimeout(for pendingID: UUID) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in
-            guard let self, let handler = self.pendingPushCompletion else { return }
-            self.pendingPushCompletion = nil
-            DebugLogger.emit("PUSH", "Push completion handler timed out — calling fallback")
-            handler(.newData)
+            guard let self,
+                  let pendingPushWake = self.pendingPushWake,
+                  pendingPushWake.id == pendingID else { return }
+            self.pendingPushWake = nil
+            DebugLogger.emit("PUSH", "Push wake timed out before coordinator could drain relay", isError: true)
+            pendingPushWake.completionHandler(.failed)
         }
     }
 
@@ -182,7 +255,4 @@ extension Notification.Name {
 
     /// Posted when BLE peripheral manager state is restored from background.
     static let blePeripheralStateRestored = Notification.Name("Blip.blePeripheralStateRestored")
-
-    /// Posted when a remote push notification is received in the foreground or background.
-    static let remotePushReceived = Notification.Name("Blip.remotePushReceived")
 }

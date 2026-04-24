@@ -40,6 +40,7 @@ struct BlipApp: App {
                 .preferredColorScheme(appTheme.colorScheme)
                 .animation(.easeInOut(duration: 0.3), value: appTheme)
                 .onAppear {
+                    appDelegate.coordinator = coordinator
                     if !coordinator.isReady && !coordinator.needsOnboarding {
                         coordinator.configure(modelContainer: sharedModelContainer)
                     }

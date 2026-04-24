@@ -66,6 +66,7 @@ final class AppCoordinator {
     /// `bleTransportState` and on every BLE connect/disconnect callback so
     /// observers see transitions in the same render frame.
     private(set) var connectedBLEPeerCount: Int = 0
+    @ObservationIgnored var onReady: (@MainActor () -> Void)?
 
     // MARK: - Services
 
@@ -247,6 +248,7 @@ final class AppCoordinator {
         self.backgroundTaskService = bgService
 
         isReady = true
+        onReady?()
         logger.info("AppCoordinator configured — services ready")
 
         // Self-check: verify local user is registered on the server.
@@ -384,6 +386,18 @@ final class AppCoordinator {
             return
         }
         lifecycleController?.start()
+    }
+
+    func handlePushWakeUp(
+        source: String,
+        completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard isReady, let lifecycleController else {
+            completionHandler(.failed)
+            return
+        }
+
+        lifecycleController.handlePushWakeUp(source: source, completionHandler: completionHandler)
     }
 
     /// Stop all transports and clean up.

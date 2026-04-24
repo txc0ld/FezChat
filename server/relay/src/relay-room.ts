@@ -527,6 +527,9 @@ export class RelayRoom implements DurableObject {
           recipientPeerIdHex: recipientHex,
           senderPeerIdHex: senderHex,
           pushType: packetType,
+          // Wake the iOS client for a short background drain window while
+          // preserving the visible alert/banner path.
+          "content-available": 1,
         }),
       });
       if (!resp.ok) {
