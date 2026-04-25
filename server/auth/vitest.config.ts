@@ -16,6 +16,15 @@ export default defineWorkersConfig({
             JWT_EXPIRY_SECONDS: "3600",
             JWT_REFRESH_GRACE_SECONDS: "300",
           },
+          // The wrangler.toml declares a service binding to `blip-relay`. In
+          // tests we don't have the relay Worker available, so the auth code
+          // falls back to globalThis.fetch (which the test suite stubs). This
+          // mock satisfies miniflare's binding resolution without touching
+          // production behaviour.
+          serviceBindings: {
+            RELAY: () =>
+              new Response("relay binding is mocked in tests", { status: 599 }),
+          },
         },
       },
     },

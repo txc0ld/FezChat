@@ -24,6 +24,13 @@ bindings = [
   { name = "RELAY_ROOM", class_name = "RelayRoom" }
 ]
 
+# Service binding to the auth Worker. workers.dev → workers.dev cross-Worker
+# fetches over the public hostname are blocked by Cloudflare (`error code:
+# 1042`); push-dispatch.ts uses this binding instead of `fetch(AUTH_PUSH_URL)`.
+[[services]]
+binding = "AUTH"
+service = "blip-auth"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RelayRoom"]

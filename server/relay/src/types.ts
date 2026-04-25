@@ -45,6 +45,14 @@ export interface Env {
   RELAY_ROOM: DurableObjectNamespace;
   JWT_SECRET?: string;
   AUTH_PUSH_URL: string;
+  /**
+   * Service binding to the blip-auth Worker. Configured via [[services]] in
+   * wrangler.toml. When present, push-dispatch.ts forwards through this
+   * binding; cross-Worker fetches over the public workers.dev hostname are
+   * blocked by Cloudflare (`error code: 1042`). Optional only so unit tests
+   * that mock globalThis.fetch keep working.
+   */
+  AUTH?: Fetcher;
   INTERNAL_API_KEY: string;
   /**
    * When set to a truthy string, the relay accepts raw base64-encoded Noise

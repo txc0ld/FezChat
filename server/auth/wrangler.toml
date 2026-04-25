@@ -43,3 +43,10 @@ crons = ["*/5 * * * *"]
 [[kv_namespaces]]
 binding = "CODES"
 id = "46bc2e8e8a2e4c5badea76ac27658a5e"
+
+# Service binding to the relay Worker. workers.dev → workers.dev cross-Worker
+# fetches over the public hostname are blocked by Cloudflare (`error code:
+# 1042`); /v1/badge/clear forwards through this binding instead of `fetch()`.
+[[services]]
+binding = "RELAY"
+service = "blip-relay"
