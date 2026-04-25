@@ -50,23 +50,49 @@ jobs:
           echo "PROFILE_NSE_PLIST_PATH=$RUNNER_TEMP/build_pp_nse.plist" >> "$GITHUB_ENV"
 
       - name: Select Xcode & install iOS platform
-        # Pick the latest STABLE Xcode 26 (filter out beta). When macos-26 runner images
-        # include `Xcode_26.5_beta_*.app`, a greedy `sort -V | tail -1` grabs the beta —
-        # whose iOS SDK isn't pre-installed on the runner, breaking `xcodebuild archive`
-        # with `iOS X.Y is not installed`. Filtering to GA-only avoids the trap.
+        # Pick an Xcode 26.x with the iOS SDK already installed. macos-26 images
+        # currently ship with bare Xcode_26.5.0.app (no iOS SDK pre-installed) plus
+        # older 26.x versions that DO have iOS bundled. We want the older one.
+        # Strategy: enumerate Xcode_26*.app, filter out betas, then pick the highest
+        # version whose iPhoneOS SDK directory is non-empty. Fall back to running
+        # `xcodebuild -downloadPlatform iOS` (loud, no `|| true`) on the chosen one.
         run: |
           set -euo pipefail
-          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+
+          echo "All Xcode installs on this runner:"
+          ls -d /Applications/Xcode_*.app 2>/dev/null || true
+          echo
+
+          XCODE=""
+          # Walk newest → oldest; pick the first with an iPhoneOS SDK already installed.
+          for candidate in $(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -v -i beta | sort -Vr); do
+            sdk_dir="$candidate/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs"
+            if [ -d "$sdk_dir" ] && ls "$sdk_dir"/iPhoneOS*.sdk >/dev/null 2>&1; then
+              echo "Found Xcode with bundled iOS SDK: $candidate"
+              XCODE="$candidate"
+              break
+            else
+              echo "Skipping $candidate — no iPhoneOS*.sdk under $sdk_dir"
+            fi
+          done
+
+          # If nothing has iOS bundled, fall back to the latest stable Xcode 26
+          # and try to download the platform (no `|| true` — we want loud failure).
           if [ -z "$XCODE" ]; then
-            echo "::error::No stable Xcode 26 installation found on the runner"
-            echo "Available Xcode installs:"
-            ls -d /Applications/Xcode_*.app 2>/dev/null || true
-            exit 1
+            XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+            if [ -z "$XCODE" ]; then
+              echo "::error::No stable Xcode 26 found on this runner"
+              exit 1
+            fi
+            echo "No Xcode 26.x has iOS bundled. Using $XCODE and attempting downloadPlatform."
+            sudo xcode-select -s "$XCODE"
+            xcodebuild -downloadPlatform iOS
+          else
+            sudo xcode-select -s "$XCODE"
           fi
 
           echo "Using $XCODE"
-          sudo xcode-select -s "$XCODE"
-          xcodebuild -downloadPlatform iOS || true
+          xcodebuild -showsdks | head -20
 
       - name: Validate required secrets
         env:
