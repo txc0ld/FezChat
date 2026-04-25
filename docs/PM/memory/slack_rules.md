@@ -18,7 +18,7 @@ originSessionId: bbbc0954-8624-408e-9557-ba247c463544
 
 ## Task Dispatch (CRITICAL — corrected 2026-04-03)
 - ALWAYS post the FULL Claude Code prompt directly in the task channel as a copy-pasteable code block
-- NEVER tell someone to "check the Notion task body" or "look at the ticket" — they won't
+- NEVER tell someone to "check the Jira ticket body" or "look at the ticket" — they won't
 - NEVER just post issue numbers and say "prompts are in the descriptions" — that's not the workflow
 - The prompt must be RIGHT THERE in the Slack message, ready to copy-paste into Claude Code
 - **Why:** John and Tay are non-technical. If the prompt isn't directly in front of them, it doesn't get done.
@@ -76,10 +76,10 @@ originSessionId: bbbc0954-8624-408e-9557-ba247c463544
 - Posts show as the user (not the bot) with "Sent using Claude" tag
 - Prompts CAN include "post in #blip-dev" — their Claude Code will handle it
 - John also uses Codex (OpenAI) for some tasks — Codex does NOT have Slack MCP, so any "post in #blip-dev" step in a Codex prompt won't auto-post. Cowork may need to post on John's behalf.
-- Notion MCP is connected to Cowork via the personal integration token (rotated 2026-04-24). Tay's and John's local CLIs may not have it — Blip bot + Cowork handle all Notion task creates/updates.
+- **Atlassian MCP** (`https://mcp.atlassian.com/v1/sse`) is the live integration for Jira BDEV + Confluence BLIP. John added it to the Claude Code App via the connector UI on 2026-04-25. Tay's and John's local CLIs may not have it — Blip bot + Cowork handle all Jira ticket creates/transitions via REST + `JIRA_API_TOKEN` as a fallback.
 
 ## Scheduled Task Rules
-- ONLY respond to direct @Blip tags and DMs — do NOT proactively comment on Notion updates or general chatter
+- ONLY respond to direct @Blip tags and DMs — do NOT proactively comment on Jira updates or general chatter
 - NEVER generate Claude Code prompts or do substantive planning — that's Cowork's job
 - The scheduled bot auto-reviews new GitHub PRs (checks every 15 min) and responds to @Blip tags
 - PR reviews: post in #blip-dev, merge commands go to the appropriate task channel per merge routing rules

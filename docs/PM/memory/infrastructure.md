@@ -15,25 +15,33 @@ originSessionId: 6e15e31b-7115-4971-bf13-07d171f32b25
 
 ## TestFlight
 
-- **Build 29** (`alpha-1.0.0-29` at commit `537100d`) uploaded 2026-04-21 via GitHub Actions workflow `24713328183`. Deployment pipeline: `.github/workflows/deploy-testflight.yml`.
-- **Build 28** (`alpha-1.0.0-28` at `fc1ffcc`, PR #235) was the prior shipping build.
-- Build-number convention: `alpha-<version>-<build>`.
+- **Build 43** (`beta-1.0.0-43` at commit `6614568`) uploaded 2026-04-25 ~08:11 UTC via GitHub Actions workflow `24926469648` (status `success`). App Store Connect processing not yet confirmed by John as of 2026-04-25 19:30 AWST. Deployment pipeline: `.github/workflows/deploy-testflight.yml`.
+- **Build 42** (`beta-1.0.0-42` at `f3a9912` of PR #264 branch, squashed onto main as `00439c5`) uploaded 2026-04-25 ~05:33 UTC via workflow `24923695627`. First successful build with NSE, push notifications + new endpoints. Took 11 deploy attempts to land — see project_history.md "CI infrastructure" section for traps.
+- Build-number convention swapped from `alpha-<version>-<build>` to `beta-<version>-<build>` at build 42 with the push-notifications launch.
+- Builds 29-31 still installable for legacy QA (no NSE / no new endpoints, but backwards-compat with new auth/relay code).
 
 ## Cloudflare Workers (John's account)
 
 ### blip-auth — `blip-auth.john-mckean.workers.dev`
 - Registration, login, key upload, user lookup. Ed25519 challenge-response on `/v1/register`. JWT session tokens via `POST /v1/auth/token` and `POST /v1/auth/refresh` (HS256 via Web Crypto, `JWT_SECRET` as Workers secret).
+- **Current deployed version: `61a29aff`** (2026-04-25 ~07:33 UTC, BDEV-368 Service Bindings rewire).
+- **Service Binding:** `[[services]] RELAY = blip-relay` — auth → relay calls now go via Service Binding (was failing with CF error 1042 on workers.dev → workers.dev). Pattern must repeat for any new cross-Worker calls.
+- **Push endpoints (build 42+):** `/v1/users/notification-prefs`, `/v1/badge/clear`. Push secrets: `APNS_BUNDLE_ID_PROD`, `APNS_BUNDLE_ID_DEBUG`, `APNS_ENVIRONMENT`. See `project_push_notification_secrets.md` for the silent-failure postmortem.
+- **`INTERNAL_API_KEY`** rotated 2026-04-25 — shared secret with blip-relay, must match. If badge clear or push internally returns 401, that's the first thing to check.
 - **Sentry:** `SENTRY_DSN` set 2026-04-21 (PR #249). `@sentry/cloudflare` instrumented. Smoke events confirmed landing.
-- **APNS_ENVIRONMENT** secret set 2026-04-20 — production push working. See `project_push_notification_secrets.md` for the silent-failure postmortem.
 - **DEV_BYPASS** removed entirely 2026-04-20 (PR #242 / HEY-1281).
 - **Deploy:** `cd ~/heyblip/server/auth && wrangler deploy`.
 - Wrangler has `compatibility_flags = ["nodejs_compat"]` from PR #249.
 
 ### blip-relay — `blip-relay.john-mckean.workers.dev`
-- WebSocket relay with store-and-forward. Durable Object storage, 50 packets/peer cap, 1hr TTL. Per-peer drain serialization (BDEV-205 / PR #149). Sender PeerID verification from packet header bytes 16-23.
+- WebSocket relay with store-and-forward. Durable Object storage, 1hr TTL. Per-peer drain serialization (BDEV-205 / PR #149). Sender PeerID verification from packet header bytes 16-23.
+- **Current deployed version: `4c6e3ae3`** (2026-04-25 ~07:32 UTC, BDEV-368 Service Bindings rewire).
+- **Service Binding:** `[[services]] AUTH = blip-auth` — counterpart to auth's RELAY binding. Triggers push when recipient is offline via auth's APNs path.
+- **`MAX_QUEUED_PER_PEER`** bumped 50 → 1000 on 2026-04-25 to handle fragmented-image bursts (BDEV-370).
+- **`INTERNAL_API_KEY`** matches blip-auth's value.
 - **JWT validation:** accepts JWT or legacy base64(noisePublicKey). Expired JWT → WebSocket close 4001. `JWT_SECRET` as Workers secret.
 - **Sentry:** `SENTRY_DSN` set 2026-04-21 (PR #249). `@sentry/cloudflare` instrumented. Smoke events confirmed.
-- **Foreground reconnect fix:** PR #253 (2026-04-21) — reads live transport state on foreground instead of cached. Known residual issues: HEY1310/1311 (tech debt, review follow-up), HEY1318 (foreground multi-reconnect race, MEDIUM).
+- **Foreground reconnect:** PR #253 (2026-04-21) reads live transport state on foreground. PR #256 (HEY-1318, merged 2026-04-25) coalesces concurrent reconnect triggers. Residual: BDEV-352 (3+ reconnect cycles in 1.5s, In Progress).
 - **Deploy:** `cd ~/heyblip/server/relay && wrangler deploy`.
 - Wrangler has `compatibility_flags = ["nodejs_compat"]`.
 
@@ -51,9 +59,8 @@ originSessionId: 6e15e31b-7115-4971-bf13-07d171f32b25
 
 - **Org:** `heyblip`. **Projects:** `apple-ios` (client), `blip-auth` (worker), `blip-relay` (worker).
 - PR #249 (2026-04-21): `@sentry/cloudflare` on both Workers. `DebugLogger → CrashReportingService.captureMessage` bridge. `clearUser()` on sign-out (previously zero call sites — PII leak risk closed). Scope-tag releases. Authorization header scrubbing.
-- **Watch after build 29:** `APPLE-IOS-1` (163 events / 29 users, `/auth/refresh` 401 cascade). Fixed by PR #250 pre-flight grace check — should go dark once users pick up build 29.
-- **Pending dashboard cleanup** (manual, no API): John to resolve `APPLE-IOS-6`, `-1T`, `-1V`, `-1W`, `-1X` as "Resolved in next release" once build 29 distributes. These are pre-#248 test-harness ghosts.
-- **HEY1288:** Sentry Releases scope-tag → native migration. Still open.
+- **Pending dashboard cleanup** (manual, no API): John to resolve `APPLE-IOS-1`, `-1T`, `-1V`, `-1W`, `-1X`, `-6` as "Resolved in next release" once build 43 distributes. Same items rolled forward across multiple sessions — `APPLE-IOS-1` was the `/auth/refresh` 401 cascade fixed by PR #250 pre-flight grace check; the others are pre-#248 test-harness ghosts.
+- **BDEV-336:** Sentry Releases native release/dist wiring. Still open (Low priority).
 
 ## Neon Postgres (Tay's account)
 
