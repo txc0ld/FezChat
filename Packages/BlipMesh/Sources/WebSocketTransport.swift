@@ -130,6 +130,16 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     /// reconnections when both didCloseWith and receiveNextMessage fire.
     private var isReconnectScheduled = false
 
+    /// True from the moment a reconnect cycle is claimed until the transport
+    /// either reaches `.running`, is explicitly stopped, or exhausts retries.
+    /// This coalesces foreground/path/ping overlap into one reconnect cycle.
+    private var reconnectInFlight = false
+
+    /// Optional callback for surfacing relay transport events to the app layer
+    /// (for example DebugLogger breadcrumbs in production).
+    /// Parameters: (category: String, message: String)
+    public var transportEventHandler: ((String, String) -> Void)?
+
     /// Network path monitor — triggers immediate disconnect/reconnect on path changes
     /// (WiFi→LTE, flight mode, etc.) rather than waiting up to 20s for ping failure.
     private var pathMonitor: NWPathMonitor?
@@ -184,10 +194,15 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
 
     // MARK: - Transport lifecycle
 
+    /// Starts relay connectivity and enables auto-reconnect.
+    ///
+    /// Unlike the previous implementation, `start()` also re-arms the
+    /// transport from `.failed` so callers can explicitly recover from a
+    /// terminal relay error without first calling `stop()`.
     public func start() {
-        guard state == .idle || state == .stopped else { return }
         autoReconnect = true
         startPathMonitor()
+        guard beginReconnectCycleIfNeeded(reason: "start()") else { return }
         connect()
     }
 
@@ -195,10 +210,22 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
         autoReconnect = false
         lock.withLock {
             isReconnectScheduled = false
+            reconnectInFlight = false
         }
         stopPathMonitor()
         disconnect()
         setState(.stopped)
+    }
+
+    /// Forces a reconnect cycle and re-enables auto-reconnect even if a prior
+    /// `stop()` disabled it. Callers should only use this for lifecycle-driven
+    /// recovery paths that want the relay to stay connected afterwards.
+    public func reconnect(reason: String) {
+        autoReconnect = true
+        startPathMonitor()
+        guard beginReconnectCycleIfNeeded(reason: reason) else { return }
+        disconnect()
+        connect()
     }
 
     public func send(data: Data, to peerID: PeerID) throws {
@@ -252,6 +279,7 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
     // MARK: - Network path monitoring
 
     private func startPathMonitor() {
+        guard pathMonitor == nil else { return }
         let monitor = NWPathMonitor()
         pathMonitor = monitor
         monitor.pathUpdateHandler = { [weak self] path in
@@ -267,6 +295,7 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
                 self.handleConnectionLost(error: nil)
             } else if path.status == .satisfied, self.autoReconnect, self.state != .running {
                 self.logger.info("Network path restored — reconnecting relay")
+                guard self.beginReconnectCycleIfNeeded(reason: "pathUpdateHandler") else { return }
                 self.scheduleReconnect()
             }
         }
@@ -298,6 +327,7 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
                 } else if self.state != .stopped {
                     // A concurrent stop() has the final word — don't stomp .stopped
                     // with a late .failed from the detached tokenProvider Task.
+                    self.clearReconnectCycle()
                     self.setState(.failed("Authentication failed"))
                 }
             }
@@ -361,6 +391,7 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
             reconnectAttempts = 0
             currentReconnectDelay = Self.minReconnectDelay
             isReconnectScheduled = false
+            reconnectInFlight = false
             return taskGeneration
         }
         guard let generation else { return }
@@ -393,8 +424,10 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
 
         // Attempt reconnection with exponential backoff.
         if autoReconnect {
+            markReconnectCycleActive()
             scheduleReconnect()
         } else {
+            clearReconnectCycle()
             setState(.stopped)
         }
     }
@@ -424,6 +457,7 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
             }
 
             guard self.autoReconnect else {
+                self.clearReconnectCycle()
                 self.setState(.stopped)
                 return
             }
@@ -431,21 +465,26 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
             // Use the same exponential backoff as normal reconnections.
             // Do NOT reset reconnectAttempts — only handleConnectionEstablished
             // resets the backoff counter (when a connection actually succeeds).
+            self.markReconnectCycleActive()
             self.scheduleReconnect()
         }
     }
 
-    private func scheduleReconnect() {
+    private func scheduleReconnect(forcedDelayForTesting: TimeInterval? = nil) {
         let (delay, shouldRetry): (TimeInterval, Bool) = lock.withLock {
-            // Prevent duplicate reconnections from racing callbacks.
+            // Layered guards: `reconnectInFlight` coalesces higher-level
+            // trigger sources, while `isReconnectScheduled` keeps callbacks
+            // within a claimed reconnect cycle from queueing duplicate retries.
             guard !isReconnectScheduled else { return (0, false) }
             reconnectAttempts += 1
             guard reconnectAttempts <= Self.maxReconnectAttempts else {
                 return (0, false)
             }
             isReconnectScheduled = true
-            let d = currentReconnectDelay
-            currentReconnectDelay = min(currentReconnectDelay * 2, Self.maxReconnectDelay)
+            let d = forcedDelayForTesting ?? currentReconnectDelay
+            if forcedDelayForTesting == nil {
+                currentReconnectDelay = min(currentReconnectDelay * 2, Self.maxReconnectDelay)
+            }
             return (d, true)
         }
 
@@ -453,6 +492,7 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
             let attempts = lock.withLock { reconnectAttempts }
             if attempts > Self.maxReconnectAttempts {
                 logger.error("WebSocket max reconnect attempts reached")
+                clearReconnectCycle()
                 setState(.failed("Max reconnect attempts reached"))
             }
             return
@@ -464,6 +504,58 @@ public final class WebSocketTransport: NSObject, Transport, @unchecked Sendable 
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self = self, self.autoReconnect else { return }
             self.connect()
+        }
+    }
+
+    private func beginReconnectCycleIfNeeded(reason: String) -> Bool {
+        enum Decision {
+            case skip(log: String)
+            case begin
+        }
+
+        let decision: Decision = lock.withLock {
+            if reconnectInFlight {
+                return .skip(log: "reconnect already in flight, skipping (\(reason))")
+            }
+
+            switch _state {
+            case .idle, .stopped, .failed:
+                reconnectInFlight = true
+                isReconnectScheduled = false
+                return .begin
+            case .starting:
+                // `.starting` already implies an in-flight reconnect cycle, but
+                // we mirror that explicitly so later triggers coalesce even if a
+                // stale observer races with the caller that initiated the start.
+                reconnectInFlight = true
+                return .skip(log: "reconnect already starting, skipping (\(reason))")
+            case .running, .unauthorized:
+                return .skip(log: "reconnect not needed from state \(_state) (\(reason))")
+            }
+        }
+
+        switch decision {
+        case .begin:
+            return true
+        case .skip(let message):
+            logger.debug("\(message)")
+            if message.contains("already starting") {
+                transportEventHandler?("RELAY", message)
+            }
+            return false
+        }
+    }
+
+    private func markReconnectCycleActive() {
+        lock.withLock {
+            reconnectInFlight = true
+        }
+    }
+
+    private func clearReconnectCycle() {
+        lock.withLock {
+            reconnectInFlight = false
+            isReconnectScheduled = false
         }
     }
 
@@ -620,6 +712,19 @@ extension WebSocketTransport {
     /// waiting for the asyncAfter backoff to fire.
     func __testing_markReconnecting() {
         setState(.starting)
+    }
+
+    func __testing_triggerForegroundReconnect() {
+        reconnect(reason: "test-foreground")
+    }
+
+    func __testing_triggerScheduledReconnect(reason: String) {
+        guard beginReconnectCycleIfNeeded(reason: reason) else { return }
+        scheduleReconnect(forcedDelayForTesting: 0)
+    }
+
+    func __testing_simulateConnectionLoss() {
+        handleConnectionLost(error: nil)
     }
 }
 
