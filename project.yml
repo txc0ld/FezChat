@@ -117,9 +117,10 @@ targets:
           - "Info.plist"
       - path: NotificationServiceExtension/Info.plist
         buildPhase: none
-      - path: Sources/Services/NotificationEnrichmentCache.swift
-        # Shared with main app — defines Codable cache model used by both targets.
-        # Writer half lives here; reader half is in NSE's NotificationEnrichmentCacheReader.swift.
+    # NSE intentionally has NO dependency on the main app target. The Codable
+    # cache model is duplicated verbatim in NotificationServiceExtension/
+    # NotificationEnrichmentCacheReader.swift — keep the layouts in lockstep
+    # with Sources/Services/NotificationEnrichmentCache.swift when fields change.
     settings:
       base:
         GENERATE_INFOPLIST_FILE: false
