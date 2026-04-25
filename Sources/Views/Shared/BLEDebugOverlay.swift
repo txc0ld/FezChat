@@ -17,6 +17,9 @@ struct BLEDebugOverlay: View {
     @State private var copiedToast = false
     @State private var copiedDebugToast = false
     @State private var showShareSheet = false
+    @State private var showHistoryShareSheet = false
+    @State private var historyShareText: String = ""
+    @State private var loadingHistory = false
     @State private var selectedTab: DebugTab = .log
     @State private var pendingHandshakes: [(peerHex: String, queuedMsgs: Int, isResponder: Bool)] = []
 
@@ -81,6 +84,24 @@ struct BLEDebugOverlay: View {
                                 .font(.system(.caption, design: .monospaced))
                         }
                         .foregroundStyle(.blipAccentPurple)
+
+                        Button {
+                            guard !loadingHistory else { return }
+                            loadingHistory = true
+                            Task {
+                                let text = await DebugLogger.shared.loadPersistedHistory()
+                                await MainActor.run {
+                                    historyShareText = text
+                                    loadingHistory = false
+                                    showHistoryShareSheet = true
+                                }
+                            }
+                        } label: {
+                            Label(loadingHistory ? "Loading…" : "Export 24h", systemImage: "tray.full")
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                        .foregroundStyle(.blipAccentPurple)
+                        .disabled(loadingHistory)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -112,6 +133,9 @@ struct BLEDebugOverlay: View {
             .onAppear { refreshState() }
             .sheet(isPresented: $showShareSheet) {
                 ShareSheet(text: DebugLogger.shared.exportText)
+            }
+            .sheet(isPresented: $showHistoryShareSheet) {
+                ShareSheet(text: historyShareText)
             }
         }
         .preferredColorScheme(.dark)
