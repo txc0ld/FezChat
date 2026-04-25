@@ -1,18 +1,21 @@
 import SwiftUI
 import CoreBluetooth
+import AVFoundation
 
 private enum PermissionsStepL10n {
     static let title = String(localized: "onboarding.permissions.title", defaultValue: "Stay connected\nwithout signal")
-    static let subtitle = String(localized: "onboarding.permissions.subtitle", defaultValue: "HeyBlip needs Bluetooth to connect with people nearby. Your device becomes part of a mesh network that relays messages.")
+    static let subtitle = String(localized: "onboarding.permissions.subtitle", defaultValue: "HeyBlip needs Bluetooth to connect with people nearby. The microphone is for voice notes — optional, but easy to enable now.")
     static let bluetoothEnabled = String(localized: "onboarding.permissions.enabled", defaultValue: "Bluetooth enabled")
+    static let microphoneEnabled = String(localized: "onboarding.permissions.microphone_enabled", defaultValue: "Microphone enabled")
+    static let microphoneSkipped = String(localized: "onboarding.permissions.microphone_skipped", defaultValue: "Microphone disabled — voice notes won't work")
     static let bluetoothRequired = String(localized: "onboarding.permissions.required_message", defaultValue: "Bluetooth is required for HeyBlip to work.")
     static let openSettings = String(localized: "common.open_settings", defaultValue: "Open Settings")
     static let openSettingsHint = String(localized: "onboarding.permissions.open_settings.hint", defaultValue: "Opens the iOS Settings app for HeyBlip.")
     static let getStarted = String(localized: "onboarding.permissions.cta.get_started", defaultValue: "Get started")
-    static let enableBluetooth = String(localized: "onboarding.permissions.cta.enable_bluetooth", defaultValue: "Enable Bluetooth")
+    static let enablePermissions = String(localized: "onboarding.permissions.cta.enable_permissions", defaultValue: "Enable permissions")
     static let completeHint = String(localized: "onboarding.permissions.complete.hint", defaultValue: "Finishes onboarding and opens the app.")
-    static let requestHint = String(localized: "onboarding.permissions.request.hint", defaultValue: "Requests Bluetooth permission from iOS.")
-    static let requiredCaption = String(localized: "onboarding.permissions.required_caption", defaultValue: "Required for HeyBlip to work")
+    static let requestHint = String(localized: "onboarding.permissions.request.hint", defaultValue: "Requests Bluetooth and microphone permissions from iOS.")
+    static let requiredCaption = String(localized: "onboarding.permissions.required_caption", defaultValue: "Bluetooth required • Microphone optional")
 }
 
 // MARK: - BLE Permission Observer
@@ -49,6 +52,8 @@ struct PermissionsStep: View {
     @State private var contentVisible = false
     @State private var permissionGranted = false
     @State private var permissionDenied = false
+    @State private var microphoneGranted = false
+    @State private var microphoneDenied = false
     @State private var observer = BLEPermissionObserver()
     @Environment(\.theme) private var theme
 
@@ -83,13 +88,31 @@ struct PermissionsStep: View {
 
             // Permission status
             if permissionGranted {
-                HStack(spacing: BlipSpacing.sm) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(theme.colors.statusGreen)
-                        .accessibilityLabel(PermissionsStepL10n.bluetoothEnabled)
-                    Text(PermissionsStepL10n.bluetoothEnabled)
-                        .font(.custom(BlipFontName.medium, size: 15, relativeTo: .body))
-                        .foregroundStyle(theme.colors.statusGreen)
+                VStack(spacing: BlipSpacing.xs) {
+                    HStack(spacing: BlipSpacing.sm) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(theme.colors.statusGreen)
+                            .accessibilityLabel(PermissionsStepL10n.bluetoothEnabled)
+                        Text(PermissionsStepL10n.bluetoothEnabled)
+                            .font(.custom(BlipFontName.medium, size: 15, relativeTo: .body))
+                            .foregroundStyle(theme.colors.statusGreen)
+                    }
+
+                    if microphoneGranted {
+                        HStack(spacing: BlipSpacing.sm) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(theme.colors.statusGreen)
+                                .accessibilityLabel(PermissionsStepL10n.microphoneEnabled)
+                            Text(PermissionsStepL10n.microphoneEnabled)
+                                .font(.custom(BlipFontName.medium, size: 15, relativeTo: .body))
+                                .foregroundStyle(theme.colors.statusGreen)
+                        }
+                    } else if microphoneDenied {
+                        Text(PermissionsStepL10n.microphoneSkipped)
+                            .font(theme.typography.secondary)
+                            .foregroundStyle(theme.colors.mutedText)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .padding(.bottom, BlipSpacing.md)
             }
@@ -121,7 +144,7 @@ struct PermissionsStep: View {
             // Action buttons
             VStack(spacing: BlipSpacing.md) {
                 GlassButton(
-                    permissionGranted ? PermissionsStepL10n.getStarted : PermissionsStepL10n.enableBluetooth,
+                    permissionGranted ? PermissionsStepL10n.getStarted : PermissionsStepL10n.enablePermissions,
                     icon: permissionGranted ? "arrow.right" : "antenna.radiowaves.left.and.right"
                 ) {
                     if permissionGranted {
@@ -225,10 +248,29 @@ struct PermissionsStep: View {
                 break
             }
         }
+
+        // Microphone is decided independently of Bluetooth — surface its
+        // current state so a user who already accepted/denied previously sees
+        // the right checkmark on this screen.
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            microphoneGranted = true
+            microphoneDenied = false
+        case .denied:
+            microphoneGranted = false
+            microphoneDenied = true
+        case .undetermined:
+            microphoneGranted = false
+            microphoneDenied = false
+        @unknown default:
+            break
+        }
     }
 
     /// Creates a CBCentralManager to trigger the system permission dialog.
-    /// Only called on explicit user tap.
+    /// Only called on explicit user tap. Once Bluetooth is granted (or denied)
+    /// we chain into the microphone request so the user sees both system
+    /// dialogs in sequence and isn't stuck with a greyed-out mic button later.
     private func requestBluetoothPermission() {
         observer.onStateChange = { authorization in
             withAnimation(SpringConstants.accessiblePageEntrance) {
@@ -240,11 +282,46 @@ struct PermissionsStep: View {
                     permissionDenied = true
                     permissionGranted = false
                 default:
-                    break
+                    return
+                }
+            }
+            requestMicrophonePermission()
+        }
+        observer.startRequest()
+    }
+
+    /// Trigger the iOS microphone permission dialog. Idempotent: iOS only
+    /// shows the prompt the first time per install. Microphone is optional —
+    /// "Get started" stays enabled regardless of the outcome.
+    private func requestMicrophonePermission() {
+        // Skip if iOS has already recorded an answer.
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            withAnimation(SpringConstants.accessiblePageEntrance) {
+                microphoneGranted = true
+                microphoneDenied = false
+            }
+            return
+        case .denied:
+            withAnimation(SpringConstants.accessiblePageEntrance) {
+                microphoneGranted = false
+                microphoneDenied = true
+            }
+            return
+        case .undetermined:
+            break
+        @unknown default:
+            return
+        }
+
+        AVAudioApplication.requestRecordPermission { granted in
+            DispatchQueue.main.async {
+                withAnimation(SpringConstants.accessiblePageEntrance) {
+                    microphoneGranted = granted
+                    microphoneDenied = !granted
                 }
             }
         }
-        observer.startRequest()
     }
 
     private func openSettings() {
