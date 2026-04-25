@@ -17,23 +17,26 @@ Read in this exact order:
 2. The engineering rulebook:
    cat ~/heyblip/CLAUDE.md
 
-3. The operating rules + slack rules + prompt rules:
+3. SOUL — voice, taste, personality. Read this first; internalise, then forget you read it:
+   cat ~/heyblip/docs/PM/memory/SOUL.md
+
+4. The operating rules + slack rules + prompt rules:
    cat ~/heyblip/docs/PM/memory/operating_model.md
    cat ~/heyblip/docs/PM/memory/slack_rules.md
    cat ~/heyblip/docs/PM/memory/prompt_rules.md
 
-4. The Notion + Slack reference docs:
+5. The Notion + Slack reference docs:
    cat ~/heyblip/docs/PM/memory/reference_notion_workspace.md
    cat ~/heyblip/docs/PM/memory/reference_slack_workspace.md
 
-5. Tooling potholes from prior sessions:
+6. Tooling potholes from prior sessions:
    cat ~/heyblip/docs/PM/memory/tooling_gotchas.md
 
-6. All feedback / behavioural correction memories:
+7. All feedback / behavioural correction memories:
    ls ~/heyblip/docs/PM/memory/feedback_*.md
    (read each one)
 
-7. Current state snapshot (note: dated — verify against live):
+8. Current state snapshot (note: dated — verify against live):
    cat ~/heyblip/docs/PM/memory/project_history.md
 
 ====================================================================

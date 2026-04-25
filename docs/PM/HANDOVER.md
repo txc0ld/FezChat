@@ -30,6 +30,7 @@ You are NOT:
    This loads `NOTION_TOKEN`, `SLACK_BOT_TOKEN`, `BUGASURA_API_KEY`, `GITHUB_PAT`. See `docs/PM/SECRETS.md` for what each one does and how to verify they work. If any are missing, ask John — do NOT scrape from disk.
 
 3. **Read the rules**, in this order:
+   - `docs/PM/memory/SOUL.md` — voice, taste, personality. Read this *first*. Internalise, then forget you read it.
    - `docs/PM/memory/operating_model.md` — dispatch / merge / who-does-what
    - `docs/PM/memory/slack_rules.md` — bot posting, channel routing, mention-syntax gotchas
    - `docs/PM/memory/prompt_rules.md` — how to write a dispatch prompt
