@@ -44,6 +44,14 @@ export interface Env {
    * relay's internal endpoint). Defaults to the production relay URL.
    */
   RELAY_INTERNAL_URL?: string;
+  /**
+   * Service binding to the blip-relay Worker. Configured via [[services]] in
+   * wrangler.toml. When present, /v1/badge/clear forwards to the relay through
+   * this binding; cross-Worker fetches over the public workers.dev hostname
+   * are blocked by Cloudflare (`error code: 1042`). Optional only so unit
+   * tests that mock globalThis.fetch keep working.
+   */
+  RELAY?: Fetcher;
   INTERNAL_API_KEY: string;
   /** Sentry project DSN. Optional — Worker no-ops gracefully when unset. */
   SENTRY_DSN?: string;
@@ -1959,14 +1967,22 @@ async function handleBadgeClear(request: Request, env: Env): Promise<Response> {
       all: isAll,
     };
 
-    const response = await fetch(relayUrl, {
+    const init: RequestInit = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Internal-Key": env.INTERNAL_API_KEY,
       },
       body: JSON.stringify(payload),
-    });
+    };
+
+    // Prefer the Service Binding when configured. workers.dev → workers.dev
+    // cross-Worker fetches over the public URL are blocked by Cloudflare with
+    // `error code: 1042`; the Service Binding routes the request inside the
+    // edge without going over the network.
+    const response = env.RELAY
+      ? await env.RELAY.fetch(relayUrl, init)
+      : await fetch(relayUrl, init);
 
     const text = await response.text();
     let parsed: any = null;

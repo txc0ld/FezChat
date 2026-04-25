@@ -25,20 +25,28 @@ interface FetchCall {
   init: RequestInit;
 }
 
-function stubFetch(
+/**
+ * Replace the RELAY service binding on `env` with a stub that records calls
+ * and runs the supplied responder. Production uses `env.RELAY.fetch(...)` to
+ * forward to the relay Worker — Cloudflare blocks workers.dev → workers.dev
+ * fetches over the public hostname (`error code: 1042`).
+ */
+function stubRelayBinding(
   responder: (call: FetchCall) => Response | Promise<Response>
 ): { calls: FetchCall[]; restore: () => void } {
   const calls: FetchCall[] = [];
-  const original = globalThis.fetch;
-  (globalThis as any).fetch = vi.fn(async (url: any, init?: any) => {
-    const call: FetchCall = { url: String(url), init: init ?? {} };
-    calls.push(call);
-    return await responder(call);
-  });
+  const original = (env as any).RELAY;
+  (env as any).RELAY = {
+    fetch: vi.fn(async (url: any, init?: any) => {
+      const call: FetchCall = { url: String(url), init: init ?? {} };
+      calls.push(call);
+      return await responder(call);
+    }),
+  };
   return {
     calls,
     restore: () => {
-      (globalThis as any).fetch = original;
+      (env as any).RELAY = original;
     },
   };
 }
@@ -79,7 +87,7 @@ describe("POST /v1/badge/clear", () => {
 
   it("forwards threadId to relay with X-Internal-Key and returns relay response", async () => {
     const auth = makeAuthHeader();
-    const { calls, restore } = stubFetch(
+    const { calls, restore } = stubRelayBinding(
       () => new Response(JSON.stringify({ badgeCount: 4 }), { status: 200 })
     );
     try {
@@ -102,7 +110,7 @@ describe("POST /v1/badge/clear", () => {
 
   it("forwards all=true clear request", async () => {
     const auth = makeAuthHeader();
-    const { calls, restore } = stubFetch(
+    const { calls, restore } = stubRelayBinding(
       () => new Response(JSON.stringify({ badgeCount: 0 }), { status: 200 })
     );
     try {
@@ -119,7 +127,7 @@ describe("POST /v1/badge/clear", () => {
 
   it("rejects when both threadId and all are provided", async () => {
     const auth = makeAuthHeader();
-    const { calls, restore } = stubFetch(() => new Response("", { status: 200 }));
+    const { calls, restore } = stubRelayBinding(() => new Response("", { status: 200 }));
     try {
       const res = await post({ threadId: "t", all: true }, auth);
       expect(res.status).toBe(400);
@@ -131,7 +139,7 @@ describe("POST /v1/badge/clear", () => {
 
   it("rejects when neither threadId nor all are provided", async () => {
     const auth = makeAuthHeader();
-    const { calls, restore } = stubFetch(() => new Response("", { status: 200 }));
+    const { calls, restore } = stubRelayBinding(() => new Response("", { status: 200 }));
     try {
       const res = await post({}, auth);
       expect(res.status).toBe(400);
@@ -143,7 +151,7 @@ describe("POST /v1/badge/clear", () => {
 
   it("propagates relay non-2xx failures", async () => {
     const auth = makeAuthHeader();
-    const { restore } = stubFetch(
+    const { restore } = stubRelayBinding(
       () => new Response(JSON.stringify({ error: "nope" }), { status: 500 })
     );
     try {

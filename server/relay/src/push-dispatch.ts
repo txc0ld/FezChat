@@ -234,14 +234,21 @@ export class PushDispatcher {
     };
 
     try {
-      const resp = await fetch(this.authPushUrl, {
+      const init: RequestInit = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Internal-Key": this.env.INTERNAL_API_KEY,
         },
         body: JSON.stringify(body),
-      });
+      };
+      // Prefer the Service Binding when configured. workers.dev →
+      // workers.dev cross-Worker fetches over the public URL are blocked by
+      // Cloudflare with `error code: 1042`; the Service Binding routes the
+      // request inside the edge without going over the network.
+      const resp = this.env.AUTH
+        ? await this.env.AUTH.fetch(this.authPushUrl, init)
+        : await fetch(this.authPushUrl, init);
       if (!resp.ok) {
         structuredLog("push.internal_fetch_failed", {
           recipientPeerIdHex: payload.recipientPeerIdHex,
