@@ -4,28 +4,43 @@ description: Current repo state, open backlog, pending verifications. For pre-20
 type: project
 ---
 
-## Current state (as of 2026-04-25 EOD AWST — push-notifications session)
+> **Issue tracker note (2026-04-25):** All HEY-N references below are pre-migration Bugasura/Notion IDs. They were imported into Jira BDEV with new BDEV-N numbers but their original HEY-N is preserved on each ticket as the `HEY ID` custom field. To find the new BDEV equivalent: `JQL: "HEY ID" = "HEY-1334"`. New tickets file directly in Jira BDEV (no HEY prefix — just BDEV-N).
+
+## Current state (as of 2026-04-25 ~19:30 AWST — claude-pm-1 orientation)
 
 ### Headline
-**HEY-1321 production push notifications shipped end-to-end.** PR #264 (Tay) squash-merged to main as `00439c5`, plus my SOUL.md follow-up at `03de535`. TestFlight build **1.0.0 (42)** uploaded via `deploy-testflight.yml` run 24923695627. Took 11 deploy attempts to land — every failure was a real, separable issue. Trail in the merge commit body and the workflow runs.
+**Build 43 built + uploaded successfully** (workflow run `24926469648` = `success`). Build 43 carries everything in build 42 plus the four post-smoke-test fixes:
+- BDEV-368 / PR #266 — Workers Service Bindings (auth↔relay) → fixes CF error 1042 push pipeline
+- BDEV-369 / PR #267 — onboarding chains mic permission after BLE
+- BDEV-370 / PR #268 — fragment >MTU addressed packets (images + voice notes)
+- HEY-1318 / PR #256 — relay coalesce concurrent reconnect triggers
+- HEY-1323 / PR #265 — chat UX (reactions on wire, friend count, reply integrity)
+
+App Store Connect processing is John's manual confirmation — not yet done from session.
+
+### Earlier today (push-notifications session, 2026-04-25 ~05:38 UTC)
+HEY-1321 production push notifications shipped via PR #264 → squash-merged as `00439c5`, then SOUL.md follow-up at `03de535`. TestFlight build **1.0.0 (42)** uploaded via deploy-testflight.yml run `24923695627` after **11 deploy attempts** — every failure was a real, separable issue. Trail in the merge commit body and the workflow runs.
 
 ### TestFlight
-- **Build 42** (`beta-1.0.0-42` at commit `f3a9912` of the PR branch — squashed onto main as `00439c5`) on TestFlight as of 2026-04-25 ~05:38 UTC. Owed: confirm Apple finishes processing (~10 min after upload), then John installs on real device for the §5 push smoke test.
+- **Build 43** (`beta-1.0.0-43` at commit `6614568`) — workflow `24926469648` completed `success` at 2026-04-25 ~08:11 UTC. Includes all post-smoke-test fixes. Apple processing not yet confirmed.
+- **Build 42** (`beta-1.0.0-42` at commit `f3a9912` of the PR branch — squashed onto main as `00439c5`) on TestFlight as of 2026-04-25 ~05:38 UTC. Build 42 already picks up the BDEV-368/372 worker-side fixes (auth↔relay Service Binding + INTERNAL_API_KEY rotation) automatically — no rebuild required for those. Build 43 adds the iOS-side BDEV-369 (mic) + BDEV-370 (fragmentation) fixes.
 - Builds 30/31 still installable for legacy QA — they don't have NSE or new endpoints but are backwards-compat with the new auth/relay code (verified routes match).
 
 ### Workers (live)
-- `blip-auth.john-mckean.workers.dev` — version `2c29ab9d` (deployed via worktree from PR branch, 2026-04-25 ~04:24 UTC). New endpoints `/v1/users/notification-prefs` and `/v1/badge/clear` live alongside the legacy routes. Two new secrets: `APNS_BUNDLE_ID_PROD`, `APNS_BUNDLE_ID_DEBUG`.
-- `blip-relay.john-mckean.workers.dev` — version `ebf8bccc`. Triggers push when recipient is offline.
+- `blip-auth.john-mckean.workers.dev` — version `61a29aff` (deployed 2026-04-25 ~07:33 UTC after BDEV-368 Service Binding rewire). Service Binding `RELAY = blip-relay`. `INTERNAL_API_KEY` rotated to fresh 64-hex-char token (matches relay). Endpoints `/v1/users/notification-prefs` and `/v1/badge/clear` live, plus the legacy routes. Push secrets: `APNS_BUNDLE_ID_PROD`, `APNS_BUNDLE_ID_DEBUG`.
+- `blip-relay.john-mckean.workers.dev` — version `4c6e3ae3` (deployed 2026-04-25 ~07:32 UTC). Service Binding `AUTH = blip-auth`. `MAX_QUEUED_PER_PEER` bumped 50 → 1000 for fragmented-image bursts. `INTERNAL_API_KEY` matches auth. Triggers push when recipient is offline.
 - `blip-cdn.john-mckean.workers.dev` — unchanged.
+
+**Verified end-to-end this session:** `POST /v1/badge/clear → HTTP 200 {"cleared":true,"badgeCount":0}`. Auth → Service Binding → Relay → DO chain confirmed working. **CF error 1042 is gone.**
 
 ### Neon (live)
 - Migration `002_push_notifications.sql` applied 2026-04-25 ~04:21 UTC. Additive, idempotent: `device_tokens` gained `locale`, `app_version`, `sandbox`, `last_registered_at`; new `notification_prefs` table.
 - DATABASE_URL connection string is in the older `~/Documents/Vibe Coding/FezChat/FezChat/blip-memory-export/.env` (not in `~/heyblip/.claude/skills/secrets/.env`). Worth pulling into the canonical secrets file at next rotation.
 
 ### Repo
-- Local `~/heyblip` clean, on `main` at `03de535`. Stash dropped.
-- Two stale `.git/*.lock` files were sitting in `.git/index.lock` and `.git/objects/maintenance.lock` from 2026-04-24 — removed during this session. Same pattern `tooling_gotchas.md` documented; macOS background processes (Spotlight/`com.apple` PIDs) hold read-only FDs which look scary but don't actually conflict.
-- `~/heyblip-HEY-1318` worktree still exists for John's PR #256 work (legit, leave it).
+- `origin/main` at `6614568` (after #256 + #265 + #266 + #267 + #268 all merged today).
+- John's local `~/heyblip` is on `main` at `6c21508` — his own docs commit on top of `c954ec5` (the BDEV-370 merge), so local has diverged from origin: 1 commit local-only, 2 commits remote-only. **Don't `git pull`** — let John reconcile his own docs branch.
+- Earlier session worktrees (`heyblip-workers-service-bindings`, `heyblip-mic-permission`, `heyblip-relay-frag`, `heyblip-HEY-1318`) all cleaned up. None left around.
 - Self-hosted runner `johns-mac` (PID 82202 on the Air, registered to `iamjohnnymac/xfit365-ios`) is running but not connected to heyblip. Future option if GitHub-hosted runners keep being unstable.
 
 ### Apple Developer Portal
@@ -43,61 +58,96 @@ The `deploy-testflight.yml` workflow now handles the NSE target cleanly. Key tak
 
 ---
 
-## Notion (post-session state)
+## Jira BDEV state (post-session, 2026-04-25 ~19:30 AWST)
 
-### Closed today (2026-04-25)
-| HEY | Status | Resolution |
-|---|---|---|
-| HEY-1321 | Fixed | Squash-merged as `00439c5`, TestFlight build 42 |
-| HEY-1331 | Cancelled | Misdiagnosis — the "WebSocketTransportTOCTOUTests timing flake" was real iOS compile errors (NotificationEnrichmentCache duplicate types + missing await on @MainActor DebugLogger), all fixed in the same merge |
+**54 open tickets** in BDEV (statusCategory != Done). Full list is in Jira; highlights below. **DO NOT transition status from engineer-agent role — Cowork (PM) owns workflow.**
 
-### Other 2026-04-25 closures (separate sweep earlier in session)
-43 of the 44 "Fixed" Notion tickets transitioned to Closed with PR + commit hash notes appended. Only HEY-1279 left as Fixed (untitled body, can't verify against main without more context). HEY-1334 created and renumbered: see "Bugasura webhook + ID collision" below.
+### Closed this session via PM transitions (claude-pm-1, ~20:03 AWST)
 
-### Open backlog (verify before acting — Notion drift is a real thing)
-**Strict open** = New + In Progress = 42 tickets at session end (38 New + 4 In Progress now that HEY-1321 is Fixed).
+PM transitioned the four merged-but-still-To-Do tickets to Done with PR-link comments:
 
-**High priority for next PM session:**
-- **HEY-1192** (HIGH, In Progress) — PUSH-5 two-phone smoke test. Becomes runnable now that build 42 is live. John + 2 phones + ~30 min.
-- **HEY-1318** (MEDIUM, In Progress) — foreground reconnect race, PR #256. iOS CI was previously red because of the same compile errors that ate builds 32-41. Re-run CI on PR #256 first thing — it might just go green now. If it goes red again, the new error is a real ticket worth filing.
-- **HEY-1334** (HIGH, In Progress) — chat UX bugs Tay shipped as PR #265. CI green, awaiting review/merge.
+| Ticket | PR | Closed | Note |
+|---|---|---|---|
+| [BDEV-368](https://heyblip.atlassian.net/browse/BDEV-368) | #266 → `042d46f` | ✅ Done | Workers Service Bindings (CF 1042 fix), both workers redeployed |
+| [BDEV-369](https://heyblip.atlassian.net/browse/BDEV-369) | #267 → `6356ac7` | ✅ Done | Mic permission chain in onboarding, in build 43 |
+| [BDEV-370](https://heyblip.atlassian.net/browse/BDEV-370) | #268 → `c954ec5` | ✅ Done | >MTU fragmentation for images + voice, in build 43 |
+| [BDEV-372](https://heyblip.atlassian.net/browse/BDEV-372) | (no PR — secret rotation) | ✅ Done | INTERNAL_API_KEY rotated, end-to-end verified |
 
-**Launch-prep stack** (HEY-1322 → HEY-1328 + 1330) — 8 tickets, mostly App Store Connect manual work (privacy nutrition label, screenshots, support page on heyblip.au, debug overlay gating, moderation policy, anonymous-chat defence write-up, Info.plist purpose strings audit, channelUpdate receive-side handler).
+**Atlassian MCP attribution caveat:** comments posted via the MCP authenticate as the OAuth user (John). All PM-posted comments are signed `— claude-pm-1` in the body so the agent attribution is preserved in the audit trail.
 
-### Bugasura webhook + ID collision
-John was still creating tickets in Bugasura (HEY1322 / HEY1323 / HEY1321) on 2026-04-25 morning, even though Notion is the SOT post-2026-04-24. The webhook fires into #blip-dev. Two pollutants:
-1. **HEY-1321 collision** — Bugasura HEY1321 (push notif, John's filing) ≠ Notion HEY-1321 (originally launch demo prep). Resolved by swapping IDs: Notion HEY-1321 now = push notif, launch demo moved to HEY-1333. Tay's PR #264 title `(HEY-1321)` correctly references the canonical Notion ID.
-2. **HEY1322 / HEY1323** — Bugasura UX bugs, migrated into Notion as HEY-1334 with a body note linking both Bugasura tickets.
+PRs #265 (HEY-1323 chat UX) and #256 (HEY-1318 reconnect race) are also merged on origin/main; their Jira equivalents need looking up via JQL `"HEY ID" = "HEY-1323"` / `"HEY ID" = "HEY-1318"` and may need similar transitions.
 
-Resolution still pending: **disable the Bugasura → Slack webhook** in Bugasura notification settings to stop the noise. John knows.
+### High-priority tickets still open
+
+- [BDEV-373](https://heyblip.atlassian.net/browse/BDEV-373) (Highest, To Do) — **Noise XX retry rotates initiator ephemeral, relay-buffered msg2 fails decryption, DMs queue forever**. Filed 2026-04-25 19:18.
+- [BDEV-371](https://heyblip.atlassian.net/browse/BDEV-371) (High, To Do) — BLE peerID mismatch when contact's noise key rotates. Two-device repro logs in ticket. Re-test on fresh build 43 install before deciding stale-state vs real bug.
+- [BDEV-260](https://heyblip.atlassian.net/browse/BDEV-260) (High, In Progress) — PUSH-5 deploy + smoke test. Becomes runnable now build 43 is up.
+- [BDEV-355](https://heyblip.atlassian.net/browse/BDEV-355) (High, In Progress) — production push notifications iOS+Workers+APNs (parent of HEY-1321 work).
+- [BDEV-374](https://heyblip.atlassian.net/browse/BDEV-374) / [BDEV-375](https://heyblip.atlassian.net/browse/BDEV-375) / [BDEV-376](https://heyblip.atlassian.net/browse/BDEV-376) — handshake testing tickets (two-phone harness, chaos coverage, soak test). Filed 19:18.
+- [BDEV-377](https://heyblip.atlassian.net/browse/BDEV-377) — handshake state-machine telemetry. Filed 19:18.
+- [BDEV-378](https://heyblip.atlassian.net/browse/BDEV-378) — process: add "Verified on devices" gate between Merged and Done. Filed 19:18.
+
+### Launch-prep stack (8 tickets, blocks App Store submission)
+
+[BDEV-359](https://heyblip.atlassian.net/browse/BDEV-359), [BDEV-360](https://heyblip.atlassian.net/browse/BDEV-360), [BDEV-361](https://heyblip.atlassian.net/browse/BDEV-361), [BDEV-362](https://heyblip.atlassian.net/browse/BDEV-362), [BDEV-363](https://heyblip.atlassian.net/browse/BDEV-363), [BDEV-364](https://heyblip.atlassian.net/browse/BDEV-364), [BDEV-365](https://heyblip.atlassian.net/browse/BDEV-365), [BDEV-366](https://heyblip.atlassian.net/browse/BDEV-366) — App Store Connect manual work (Info.plist purpose strings audit, anonymous-chat defence write-up, moderation policy, debug overlay gating, /support page on heyblip.au, screenshots, privacy nutrition label, reviewer demo account).
+
+### Closed during this session window (2026-04-25)
+
+Earlier (push-notifications session): HEY-1321 fixed (PR #264 → `00439c5`). HEY-1331 cancelled (misdiagnosis).
+
+Smoke-test debrief session: BDEV-368/369/370 shipped via PRs #266/267/268, BDEV-372 resolved (INTERNAL_API_KEY rotation).
+
+Late evening (post-handover, 18:46–19:18): BDEV-29, BDEV-184, BDEV-235, BDEV-315, BDEV-318, BDEV-319 all transitioned to Done.
 
 ---
 
-## Open PRs (2)
-- **PR #265** — `fix(chat): chat UX bugfixes (HEY-1323)` — Tay, opened 2026-04-25 morning. CI green per Tay's #blip-dev confirmation. Maps to Notion HEY-1334. Awaiting review/merge.
-- **PR #256** — `fix(relay): coalesce concurrent reconnect triggers (HEY-1318)` — John, opened 2026-04-24. iOS CI was red due to PR #264's compile errors leaking into the wider workspace; now those errors are off main, re-run CI to see real status.
+## Open PRs
+
+**Zero.** All five PRs from start of session merged: #266, #267, #268 (all mine, BDEV-368/369/370), #265 (Tay's, HEY-1323), #256 (John's, HEY-1318).
+
+---
+
+## Atlassian MCP
+
+Added at user scope this session via `claude mcp add --scope user --transport sse atlassian https://mcp.atlassian.com/v1/sse`. John then re-added via the Claude Code App connector UI (CLI version was removed first to avoid duplicate-URL collision). Once OAuth-authenticated, `mcp__atlassian__*` tools should resolve. Until then, Jira/Confluence access is via REST + `JIRA_API_TOKEN` from `~/heyblip/.claude/skills/secrets/.env`.
+
+Bugasura MCP entry was removed this session (Bugasura is a read-only archive — cross-tracker noise).
 
 ---
 
 ## Owed to John (manual, non-dispatchable)
 
-1. **§5 push smoke test** on real device — install build 42 from TestFlight, ping me (next PM), I tail `wrangler tail blip-auth` and we fire the curl from `docs/OPS_APNS.md` §5. Want `push.attempted` then `push.success` with `apnsStatus=200` in the structured logs.
-2. **HEY-1192 PUSH-5 two-phone test** — same as above but with two devices, verify cross-device convergence.
-3. **TestFlight processing confirmation** — refresh App Store Connect → HeyBlip → TestFlight and verify build 42 is past Processing.
-4. **Sentry housekeeping** — APPLE-IOS-1, -1T, -1V, -1W, -1X, -6 still need "Resolved in next release" clicks. Same items from prior sessions.
-5. **Bugasura webhook off** — stop the cross-tracker noise.
+1. **§5 push smoke test** on real device — install build 42 OR build 43 once processed → background app → ping me, I tail `wrangler tail blip-auth` and we fire the curl from `docs/OPS_APNS.md` §5. Want `push.attempted` then `push.success` with `apnsStatus=200` in the structured logs.
+2. **HEY-1192 / PUSH-5 two-phone test** — verify cross-device convergence, especially the silent_badge_sync fan-out which we never end-to-end exercised.
+3. **TestFlight build 43 processing confirmation** — refresh App Store Connect → HeyBlip → TestFlight and verify build 43 is past Processing.
+4. **BDEV-371 BLE peerID mismatch re-test** — fresh install of build 43 with both Fabs's and John's phone wiped, before deciding stale state vs real key-rotation handling bug.
+5. **Sentry housekeeping** — APPLE-IOS-1, -1T, -1V, -1W, -1X, -6 still need "Resolved in next release" clicks. Same items from prior sessions.
+6. **Bugasura → Slack webhook off** — stop the cross-tracker noise into #blip-dev (Bugasura is archive only).
 
 ---
 
 ## What the next PM should know on day-one
 
 1. **Read SOUL.md first.** It's now wired into HANDOVER.md and PM-ORIENTATION-PROMPT.md as step 3 / first item. Don't skip it.
-2. **The CI pipeline is fragile but documented.** If `deploy-testflight.yml` starts failing, read this file's "CI infrastructure" section before debugging — every trap we hit today is documented with the fix.
-3. **HEY-1321 is FIXED.** Don't try to dispatch it. The Notion state is correct.
-4. **PR #256 might just go green** — re-run CI before assuming HEY-1318 still needs work.
-5. **Notion is SOT, but John still occasionally files in Bugasura.** Watch for ID collisions; you can swap HEY IDs cleanly via PATCH to the rich_text field if needed (see HEY-1321 ↔ HEY-1333 swap precedent in this session for the recipe).
-6. **Self-hosted runner option exists** if GitHub-hosted runners go bad again. The `johns-mac` listener on the Air is registered to xfit365ios but a second instance pointed at heyblip would take ~10 min to set up and would dodge image-rotation surprises.
+2. **The CI pipeline is fragile but documented.** If `deploy-testflight.yml` starts failing, read this file's "CI infrastructure" section + the project_history_archive.md "11-attempt saga" notes before debugging.
+3. **PRs #266/267/268 are MERGED but Jira tickets BDEV-368/369/370/372 still show "To Do".** First action: verify on main, then transition to Done.
+4. **Workers cross-Worker calls require Service Bindings**, not public-URL fetch. CF returns `error code: 1042` for workers.dev → workers.dev fetch on the same account. Both directions auth↔relay are now bound; if you add a new cross-Worker call, repeat the pattern.
+5. **`INTERNAL_API_KEY` must match across blip-auth and blip-relay.** Shared secret. If badge clear or push internally returns 401, that's the first thing to check.
+6. **Atlassian API gotchas:** rate limits look like 401/404 (not 429), pace ≥1s between calls. Use the plain "Create API token" button, NOT "Create with scopes" (scoped tokens default read-only and break writes).
+7. **Don't transition Jira tickets from engineer-agent role.** PM/Cowork owns workflow. Engineer-agent allowed writes: `Assignee` → self when claiming, comment with PR URL, paste PR URL into description.
+8. **Don't merge own PRs by default** — John merges via PAT. Per-instance authorization (e.g., "merge it") may be given explicitly; match the scope precisely. (PM/Cowork has separate merge authority per `operating_model.md`.)
+9. **Self-hosted runner option exists** if GitHub-hosted runners go bad again. The `johns-mac` listener on the Air is registered to xfit365ios but a second instance pointed at heyblip would take ~10 min to set up and would dodge image-rotation surprises.
 
 ---
 
-See `operating_model.md` for dispatch/merge/reviewer rules, `tooling_gotchas.md` for lessons learned, and `SOUL.md` for the voice.
+## Credentials
+
+All in `~/heyblip/.claude/skills/secrets/.env`:
+- `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_BASE_URL` — Jira REST API (note: HANDOVER.md calls this `ATLASSIAN_TOKEN`; same thing, env var name is `JIRA_API_TOKEN`)
+- `GITHUB_PAT` — `gh` CLI (use as `GITHUB_TOKEN=$GITHUB_PAT`)
+- `SLACK_BOT_TOKEN` — Blip bot (also legacy `BLIP_BOT_TOKEN` in `.claude/skills/slack-bot/.env`)
+- `NOTION_TOKEN`, `BUGASURA_API_KEY` — archived trackers, leave for historical lookup
+
+---
+
+See `operating_model.md` for dispatch/merge/reviewer rules, `tooling_gotchas.md` for lessons learned, `SOUL.md` for the voice, and `reference_jira_workspace.md` for Jira API patterns.
