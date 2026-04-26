@@ -65,13 +65,15 @@ jobs:
           done
 
       - name: Build app
+        # SWIFT_STRICT_CONCURRENCY is set to `complete` in project.yml; do NOT
+        # override to `minimal` here — CI must match local builds so concurrency
+        # bugs that fail your local build also fail CI (BDEV-398).
         run: >
           xcodebuild -scheme Blip
           -destination 'generic/platform=iOS'
           -skipPackagePluginValidation
           CODE_SIGN_IDENTITY=""
           CODE_SIGNING_ALLOWED=NO
-          OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -strict-concurrency=minimal'
           -quiet
 
   server-tests:
