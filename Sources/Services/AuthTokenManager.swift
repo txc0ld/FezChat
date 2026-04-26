@@ -25,6 +25,11 @@ final class AuthTokenManager: ObservableObject {
         return formatter
     }()
 
+    private var inFlightRefresh: Task<Void, Error>?
+    private var consecutive401s = 0
+    private var lastRefreshFailureAt: Date?
+    private let maxBackoff: TimeInterval = 30
+
     private struct TokenResponse: Decodable {
         let token: String
         let expiresAt: String
@@ -62,10 +67,27 @@ final class AuthTokenManager: ObservableObject {
         }
     }
 
-    init(keyManager: KeyManager = .shared, sodium: Sodium = Sodium()) {
+    init(
+        keyManager: KeyManager = .shared,
+        sodium: Sodium = Sodium(),
+        urlSession: URLSession? = nil,
+        keychainEnabled: Bool = true
+    ) {
         self.keyManager = keyManager
         self.sodium = sodium
+        self.urlSession = urlSession
+        self.keychainEnabled = keychainEnabled
         loadStoredToken()
+    }
+
+    // Optional override for tests. When nil, requests go through ServerConfig.pinnedSession.
+    private let urlSession: URLSession?
+    // When false, store/load/delete keychain ops are no-ops. Tests on the simulator
+    // can hit errSecMissingEntitlement (-34018) without this seam.
+    private let keychainEnabled: Bool
+
+    private var session: URLSession {
+        urlSession ?? ServerConfig.pinnedSession
     }
 
     func authenticate(noisePublicKey: Data, signingSecretKey: Data) async throws {
@@ -92,7 +114,10 @@ final class AuthTokenManager: ObservableObject {
 
         do {
             let response = try await sendRequest(url: url, body: body, bearerToken: nil)
+            try Task.checkCancellation()
             try store(token: response.token, expiresAtString: response.expiresAt)
+            consecutive401s = 0
+            lastRefreshFailureAt = nil
             DebugLogger.shared.log("AUTH", "JWT session established")
         } catch {
             DebugLogger.shared.log("AUTH", "JWT authenticate failed: \(error.localizedDescription)", isError: true)
@@ -101,35 +126,22 @@ final class AuthTokenManager: ObservableObject {
     }
 
     func refreshIfNeeded(force: Bool = false) async throws {
-        if force {
-            if currentToken != nil {
-                try await refreshToken()
-                return
-            }
-
-            guard let identity = try keyManager.loadIdentity() else {
-                throw AuthError.missingIdentity
-            }
-
-            try await authenticate(
-                noisePublicKey: identity.noisePublicKey.rawRepresentation,
-                signingSecretKey: identity.signingSecretKey
-            )
+        if let existing = inFlightRefresh {
+            try await existing.value
             return
         }
 
-        guard let expiry = tokenExpiresAt else {
-            if currentToken == nil {
-                return
+        let task = Task<Void, Error> { [weak self] in
+            guard let self else { return }
+            try await self.performRefresh(force: force)
+        }
+        inFlightRefresh = task
+        defer {
+            if let inFlight = inFlightRefresh, inFlight == task {
+                inFlightRefresh = nil
             }
-            throw AuthError.invalidPayload
         }
-
-        guard expiry.timeIntervalSinceNow < refreshThreshold else {
-            return
-        }
-
-        try await refreshToken()
+        try await task.value
     }
 
     func validToken() async throws -> String {
@@ -142,6 +154,12 @@ final class AuthTokenManager: ObservableObject {
                 try await refreshIfNeeded()
             } catch {
                 DebugLogger.shared.log("AUTH", "JWT refresh before use failed: \(error.localizedDescription)", isError: true)
+                // On unauthorized, preserve back-off state (clearToken would reset it,
+                // letting the next caller tight-loop into authenticate). Rethrow so
+                // subsequent validToken() calls hit the back-off gate in performRefresh.
+                if case AuthError.unauthorized = error {
+                    throw error
+                }
                 clearToken()
             }
         }
@@ -169,6 +187,11 @@ final class AuthTokenManager: ObservableObject {
     }
 
     func clearToken() {
+        inFlightRefresh?.cancel()
+        inFlightRefresh = nil
+        consecutive401s = 0
+        lastRefreshFailureAt = nil
+
         do {
             try deleteKeychainValue(for: keychainTokenKey)
             try deleteKeychainValue(for: keychainExpiryKey)
@@ -181,13 +204,64 @@ final class AuthTokenManager: ObservableObject {
     }
 
     func clear() throws {
+        inFlightRefresh?.cancel()
+        inFlightRefresh = nil
+        consecutive401s = 0
+        lastRefreshFailureAt = nil
+
         try deleteKeychainValue(for: keychainTokenKey)
         try deleteKeychainValue(for: keychainExpiryKey)
         currentToken = nil
         tokenExpiresAt = nil
     }
 
-    private func refreshToken() async throws {
+    private func performRefresh(force: Bool) async throws {
+        if let last = lastRefreshFailureAt, consecutive401s > 0 {
+            let backoff = min(pow(2.0, Double(consecutive401s - 1)), maxBackoff)
+            let elapsed = -last.timeIntervalSinceNow
+            if elapsed < backoff {
+                let remaining = Int(ceil(backoff - elapsed))
+                DebugLogger.shared.log(
+                    "AUTH",
+                    "JWT refresh backing off (\(remaining)s remaining, attempt \(consecutive401s))",
+                    isError: true
+                )
+                throw AuthError.unauthorized("Auth refresh backing off (\(remaining)s remaining)")
+            }
+        }
+
+        if force {
+            if currentToken != nil {
+                try await performNetworkRefresh()
+                return
+            }
+
+            guard let identity = try keyManager.loadIdentity() else {
+                throw AuthError.missingIdentity
+            }
+
+            try await authenticate(
+                noisePublicKey: identity.noisePublicKey.rawRepresentation,
+                signingSecretKey: identity.signingSecretKey
+            )
+            return
+        }
+
+        guard let expiry = tokenExpiresAt else {
+            if currentToken == nil {
+                return
+            }
+            throw AuthError.invalidPayload
+        }
+
+        guard expiry.timeIntervalSinceNow < refreshThreshold else {
+            return
+        }
+
+        try await performNetworkRefresh()
+    }
+
+    private func performNetworkRefresh() async throws {
         guard let token = currentToken else {
             throw AuthError.missingToken
         }
@@ -214,9 +288,16 @@ final class AuthTokenManager: ObservableObject {
 
         do {
             let response = try await sendRequest(url: url, body: nil, bearerToken: token)
+            try Task.checkCancellation()
             try store(token: response.token, expiresAtString: response.expiresAt)
+            consecutive401s = 0
+            lastRefreshFailureAt = nil
             DebugLogger.shared.log("AUTH", "JWT session refreshed")
         } catch {
+            if case AuthError.unauthorized = error {
+                consecutive401s += 1
+                lastRefreshFailureAt = Date()
+            }
             DebugLogger.shared.log("AUTH", "JWT refresh failed: \(error.localizedDescription)", isError: true)
             throw error
         }
@@ -247,7 +328,7 @@ final class AuthTokenManager: ObservableObject {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await ServerConfig.pinnedSession.data(for: request)
+            (data, response) = try await session.data(for: request)
         } catch {
             throw AuthError.serverError(error.localizedDescription)
         }
@@ -331,6 +412,7 @@ final class AuthTokenManager: ObservableObject {
     }
 
     private func storeKeychainValue(_ value: Data, for key: String) throws {
+        guard keychainEnabled else { return }
         SecItemDelete(keychainQuery(for: key) as CFDictionary)
 
         var query = keychainQuery(for: key)
@@ -344,6 +426,7 @@ final class AuthTokenManager: ObservableObject {
     }
 
     private func loadKeychainValue(for key: String) throws -> Data? {
+        guard keychainEnabled else { return nil }
         var query = keychainQuery(for: key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -362,6 +445,7 @@ final class AuthTokenManager: ObservableObject {
     }
 
     private func deleteKeychainValue(for key: String) throws {
+        guard keychainEnabled else { return }
         let status = SecItemDelete(keychainQuery(for: key) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
