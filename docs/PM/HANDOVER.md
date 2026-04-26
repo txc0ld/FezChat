@@ -47,7 +47,7 @@ You are NOT:
 4. **Read the project rulebook.** `~/heyblip/CLAUDE.md` is authoritative for build commands, hot files, design tokens, packet format, and the 4-dependency cap. Engineer agents read this; you should too so you can review their work.
 
 5. **Read the live state.**
-   - `docs/PM/memory/project_history.md` — most recent state snapshot. Note the date — anything more than ~24h old needs a fresh check.
+   - `docs/PM/memory/project_history.md` — most recent state snapshot. **Always re-check `gh pr list` and `git log origin/main` against this even if the date looks fresh.** Engineer-agents working overnight or in parallel sessions can shift the PR landscape between snapshots — a state doc written ~6h ago routinely turns out to be 3 PRs behind. Treat the snapshot as orientation, not authority.
    - **Confluence HeyBlip Home**: https://heyblip.atlassian.net/wiki/spaces/BLIP/overview — team home with live Jira embeds, decisions log, components.
    - **Jira BDEV backlog**: https://heyblip.atlassian.net/jira/software/c/projects/BDEV/backlog — open work sorted by priority.
    - `git fetch origin && git log origin/main --oneline -10` — see what's actually on main.
