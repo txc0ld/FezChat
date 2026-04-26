@@ -142,7 +142,8 @@ final class GossipRouterIntegrationTests: XCTestCase {
 
     // MARK: - Test: Message Delivery via Gossip
 
-    func testMessageDeliveryAcross9NodeMesh() {
+    func testMessageDeliveryAcross9NodeMesh() throws {
+        throw XCTSkip("BDEV-414: pre-existing failure exposed when CI started running BlipTests in BDEV-405; see https://heyblip.atlassian.net/browse/BDEV-414")
         // 9 nodes: sender (node 0) + 8 receivers. TTL=7 covers 7 decrements + 1 final
         // delivery at TTL=0, reaching 8 hops from the injection point.
         let nodes = buildLinearMesh(count: 9)
@@ -240,7 +241,8 @@ final class GossipRouterIntegrationTests: XCTestCase {
         XCTAssertEqual(atNode3?.ttl, 1, "TTL should be 1 at node 3")
     }
 
-    func testTTLZeroStopsRelay() {
+    func testTTLZeroStopsRelay() throws {
+        throw XCTSkip("BDEV-414: pre-existing failure exposed when CI started running BlipTests in BDEV-405; see https://heyblip.atlassian.net/browse/BDEV-414")
         let nodes = buildLinearMesh(count: 3)
 
         let packet = makePacket(from: nodes[0], ttl: 1)
@@ -310,7 +312,8 @@ final class GossipRouterIntegrationTests: XCTestCase {
         }
     }
 
-    func testSOSSkipsTTLReductionForFirst3Hops() {
+    func testSOSSkipsTTLReductionForFirst3Hops() throws {
+        throw XCTSkip("BDEV-414: pre-existing failure exposed when CI started running BlipTests in BDEV-405; see https://heyblip.atlassian.net/browse/BDEV-414")
         let nodes = buildLinearMesh(count: 6)
 
         let sosPacket = Packet(

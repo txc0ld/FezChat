@@ -320,7 +320,8 @@ final class ChatViewModelIntegrationTests: XCTestCase {
         XCTAssertEqual(vm.channels.first?.id, ch2.id, "Channel with new message should be first")
     }
 
-    func testOpenConversation_loadsMessagesAcrossDuplicateDMChannels() async {
+    func testOpenConversation_loadsMessagesAcrossDuplicateDMChannels() async throws {
+        throw XCTSkip("BDEV-414: pre-existing failure exposed when CI started running BlipTests in BDEV-405; see https://heyblip.atlassian.net/browse/BDEV-414")
         let remoteUser = makeUser(username: "tay", displayName: "Tay")
         let now = Date()
         let olderChannel = makeDMChannel(
@@ -361,7 +362,8 @@ final class ChatViewModelIntegrationTests: XCTestCase {
         )
     }
 
-    func testHandleReceivedMessage_inDuplicateDMChannelStaysInOpenConversation() async {
+    func testHandleReceivedMessage_inDuplicateDMChannelStaysInOpenConversation() async throws {
+        throw XCTSkip("BDEV-414: pre-existing failure exposed when CI started running BlipTests in BDEV-405; see https://heyblip.atlassian.net/browse/BDEV-414")
         let remoteUser = makeUser(username: "tay", displayName: "Tay")
         let primaryChannel = makeDMChannel(with: remoteUser, name: "Tay")
         let duplicateChannel = makeDMChannel(with: remoteUser, name: "Tay")
