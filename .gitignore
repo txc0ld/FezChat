@@ -16,6 +16,8 @@ Packages/*/.swiftpm/
 .claude/
 .xcodebuildmcp/
 screenshots/
+tasks/
+.agents/
 
 # Node (for Cloudflare Workers in server/)
 **/node_modules/
