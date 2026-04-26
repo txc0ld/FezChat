@@ -53,7 +53,11 @@ STEP 1 — ORIENT (read in this order, all relative paths)
    ls docs/PM/memory/feedback_*.md
    (read each)
 
-8. Latest state snapshot (note the date — verify against live):
+8. Latest state snapshot — TREAT AS POTENTIALLY STALE. Engineer-agents
+   land PRs and shift Jira state between PM sessions; a snapshot written
+   6h ago routinely turns out to be 3 PRs behind. STEP 3 below (gh pr list
+   + git log + Slack sweep) is load-bearing — re-verify every concrete
+   claim from this file before acting on it.
    cat docs/PM/memory/project_history.md
 
 ====================================================================
