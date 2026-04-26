@@ -1,24 +1,45 @@
-import Testing
+import XCTest
 import Foundation
 import SwiftData
 @testable import Blip
 
-@Suite("SwiftData Schema Validation - T24")
+/// SwiftData schema validation tests. Migrated from swift-testing to XCTest
+/// in BDEV-405. Two latent bugs were hiding in the original swift-testing
+/// version, both surfaced once CI started running this suite:
+///   1. `makeContext()` returned `container.mainContext` but the local
+///      `container` var went out of scope at function exit. On iOS 26 the
+///      SwiftData runtime traps inside `ModelContext.insert(_:)` once its
+///      owning ModelContainer has deallocated. Now the container is held
+///      as an instance property across the test, matching the pattern used
+///      in every other XCTest file in the codebase (e.g. ChatViewModelTests).
+///   2. The hand-rolled model list omitted `JoinedEvent`, `ChannelMute`,
+///      and `FriendMute`. Now we use `BlipSchema.schema` directly so the
+///      test container stays in sync as models are added or removed.
 @MainActor
-struct SwiftDataSchemaValidationTests {
+final class SwiftDataSchemaValidationTests: XCTestCase {
+    private var container: ModelContainer!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        container = try ModelContainer(
+            for: BlipSchema.schema,
+            configurations: [config]
+        )
+    }
+
+    override func tearDown() async throws {
+        container = nil
+        try await super.tearDown()
+    }
+
     // MARK: - Helpers
 
-    private func makeContext() throws -> ModelContext {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(
-            for: User.self, Friend.self, Message.self, Attachment.self, Channel.self,
-            GroupMembership.self, Event.self, Stage.self, SetTime.self, MeetingPoint.self,
-            MessageQueue.self, SOSAlert.self, MedicalResponder.self,
-            FriendLocation.self, BreadcrumbPoint.self, CrowdPulse.self, UserPreferences.self,
-            GroupSenderKey.self, NoiseSessionModel.self,
-            configurations: config
-        )
-        return container.mainContext
+    private func makeContext() -> ModelContext {
+        // Each test runs in its own XCTestCase instance with a fresh container
+        // (created in setUp). Returning a new ModelContext bound to that
+        // container avoids polluting `mainContext` across tests.
+        ModelContext(container)
     }
 
     private func makeUser(
@@ -61,9 +82,8 @@ struct SwiftDataSchemaValidationTests {
 
     // MARK: - Schema Registration Tests
 
-    @Test("Schema contains all 19 models")
-    func schemaRegistration() {
-        #expect(BlipSchema.models.count == 19)
+    /// Schema contains every registered Blip model
+    func testSchemaRegistration() {
         let modelNames = BlipSchema.models.map { String(describing: $0) }
 
         let expectedModels = [
@@ -71,34 +91,31 @@ struct SwiftDataSchemaValidationTests {
             "GroupMembership", "Event", "Stage", "SetTime", "MeetingPoint",
             "MessageQueue", "SOSAlert", "MedicalResponder", "FriendLocation",
             "BreadcrumbPoint", "CrowdPulse", "UserPreferences", "GroupSenderKey",
-            "NoiseSessionModel"
+            "NoiseSessionModel", "JoinedEvent", "ChannelMute", "FriendMute"
         ]
 
+        XCTAssertEqual(BlipSchema.models.count, expectedModels.count)
         for expectedModel in expectedModels {
-            #expect(modelNames.contains { $0.contains(expectedModel) })
+            XCTAssertTrue(modelNames.contains { $0.contains(expectedModel) })
         }
     }
 
-    @Test("Container creation with in-memory storage")
-    func containerCreation() throws {
+    /// Container creation with in-memory storage
+    func testContainerCreation() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
-            for: User.self, Friend.self, Message.self, Attachment.self, Channel.self,
-            GroupMembership.self, Event.self, Stage.self, SetTime.self, MeetingPoint.self,
-            MessageQueue.self, SOSAlert.self, MedicalResponder.self,
-            FriendLocation.self, BreadcrumbPoint.self, CrowdPulse.self, UserPreferences.self,
-            GroupSenderKey.self, NoiseSessionModel.self,
-            configurations: config
+            for: BlipSchema.schema,
+            configurations: [config]
         )
         let context = container.mainContext
-        #expect(context != nil)
+        XCTAssertNotNil(context)
     }
 
     // MARK: - User CRUD Tests
 
-    @Test("User creation and persistence")
-    func userCreation() throws {
-        let context = try makeContext()
+    /// User creation and persistence
+    func testUserCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         try context.save()
@@ -106,14 +123,14 @@ struct SwiftDataSchemaValidationTests {
         let fetched = try context.fetch(
             FetchDescriptor<User>(predicate: #Predicate { $0.username == "alice" })
         )
-        #expect(fetched.count == 1)
-        #expect(fetched[0].username == "alice")
-        #expect(fetched[0].displayName == nil)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].username, "alice")
+        XCTAssertNil(fetched[0].displayName)
     }
 
-    @Test("User update displayName")
-    func userUpdate() throws {
-        let context = try makeContext()
+    /// User update displayName
+    func testUserUpdate() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         try context.save()
 
@@ -123,13 +140,13 @@ struct SwiftDataSchemaValidationTests {
         let fetched = try context.fetch(
             FetchDescriptor<User>(predicate: #Predicate { $0.username == "alice" })
         )
-        #expect(fetched[0].displayName == "Alice Wonder")
-        #expect(fetched[0].resolvedDisplayName == "Alice Wonder")
+        XCTAssertEqual(fetched[0].displayName, "Alice Wonder")
+        XCTAssertEqual(fetched[0].resolvedDisplayName, "Alice Wonder")
     }
 
-    @Test("User deletion")
-    func userDeletion() throws {
-        let context = try makeContext()
+    /// User deletion
+    func testUserDeletion() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         try context.save()
 
@@ -137,12 +154,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<User>())
-        #expect(fetched.isEmpty)
+        XCTAssertTrue(fetched.isEmpty)
     }
 
-    @Test("User unique constraint on username")
-    func userUniquenessConstraint() throws {
-        let context = try makeContext()
+    /// User unique constraint on username
+    func testUserUniquenessConstraint() throws {
+        let context = makeContext()
         let user1 = makeUser(username: "alice", context: context)
         try context.save()
 
@@ -156,14 +173,14 @@ struct SwiftDataSchemaValidationTests {
 
         // SwiftData should enforce unique constraint
         // This test documents the expected behavior
-        #expect(context.hasChanges)
+        XCTAssertTrue(context.hasChanges)
     }
 
     // MARK: - Friend CRUD Tests
 
-    @Test("Friend creation with user relationship")
-    func friendCreation() throws {
-        let context = try makeContext()
+    /// Friend creation with user relationship
+    func testFriendCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let friend = Friend(
@@ -177,14 +194,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Friend>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].status == .accepted)
-        #expect(fetched[0].locationPrecision == .precise)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].status, .accepted)
+        XCTAssertEqual(fetched[0].locationPrecision, .precise)
     }
 
-    @Test("Friend status enum roundtrip")
-    func friendStatusEnum() throws {
-        let context = try makeContext()
+    /// Friend status enum roundtrip
+    func testFriendStatusEnum() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         for status in FriendStatus.allCases {
@@ -200,16 +217,15 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Friend>())
-        #expect(fetched.count == FriendStatus.allCases.count)
-
-        for (idx, status) in FriendStatus.allCases.enumerated() {
-            #expect(fetched[idx].status == status)
-        }
+        XCTAssertEqual(fetched.count, FriendStatus.allCases.count)
+        // SwiftData fetch order isn't guaranteed without an explicit sort,
+        // so compare the set of statuses instead of indexed equality.
+        XCTAssertEqual(Set(fetched.map(\.status)), Set(FriendStatus.allCases))
     }
 
-    @Test("Friend location precision roundtrip")
-    func friendLocationPrecision() throws {
-        let context = try makeContext()
+    /// Friend location precision roundtrip
+    func testFriendLocationPrecision() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let friend = Friend(
@@ -225,14 +241,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Friend>())
-        #expect(fetched[0].locationPrecision == .fuzzy)
-        #expect(fetched[0].lastSeenLocation?.latitude == 51.15)
-        #expect(fetched[0].lastSeenLocation?.longitude == -2.58)
+        XCTAssertEqual(fetched[0].locationPrecision, .fuzzy)
+        XCTAssertEqual(fetched[0].lastSeenLocation?.latitude, 51.15)
+        XCTAssertEqual(fetched[0].lastSeenLocation?.longitude, -2.58)
     }
 
-    @Test("Friend deletion")
-    func friendDeletion() throws {
-        let context = try makeContext()
+    /// Friend deletion
+    func testFriendDeletion() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let friend = Friend(user: user)
         context.insert(friend)
@@ -242,14 +258,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Friend>())
-        #expect(fetched.isEmpty)
+        XCTAssertTrue(fetched.isEmpty)
     }
 
     // MARK: - Message CRUD Tests
 
-    @Test("Message creation with sender and channel")
-    func messageCreation() throws {
-        let context = try makeContext()
+    /// Message creation with sender and channel
+    func testMessageCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -264,14 +280,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Message>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].type == .text)
-        #expect(fetched[0].status == .sent)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].type, .text)
+        XCTAssertEqual(fetched[0].status, .sent)
     }
 
-    @Test("Message type enum roundtrip")
-    func messageTypeEnum() throws {
-        let context = try makeContext()
+    /// Message type enum roundtrip
+    func testMessageTypeEnum() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -287,12 +303,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Message>())
-        #expect(fetched.count == MessageType.allCases.count)
+        XCTAssertEqual(fetched.count, MessageType.allCases.count)
     }
 
-    @Test("Message status enum roundtrip")
-    func messageStatusEnum() throws {
-        let context = try makeContext()
+    /// Message status enum roundtrip
+    func testMessageStatusEnum() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -308,13 +324,13 @@ struct SwiftDataSchemaValidationTests {
             try context.save()
 
             let refetched = try context.fetch(FetchDescriptor<Message>())
-            #expect(refetched[0].status == status)
+            XCTAssertEqual(refetched[0].status, status)
         }
     }
 
-    @Test("Message expiration computed property")
-    func messageExpiration() throws {
-        let context = try makeContext()
+    /// Message expiration computed property
+    func testMessageExpiration() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -328,12 +344,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Message>())
-        #expect(!fetched[0].isExpired)
+        XCTAssertFalse(fetched[0].isExpired)
     }
 
-    @Test("Message reply-to relationship")
-    func messageReplyTo() throws {
-        let context = try makeContext()
+    /// Message reply-to relationship
+    func testMessageReplyTo() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -356,13 +372,13 @@ struct SwiftDataSchemaValidationTests {
 
         let fetched = try context.fetch(FetchDescriptor<Message>())
         let replyMsg = fetched.first { msg in msg.rawPayload == Data("reply".utf8) }
-        #expect(replyMsg?.replyTo != nil)
-        #expect(replyMsg?.replyTo?.rawPayload == Data("original".utf8))
+        XCTAssertNotNil(replyMsg?.replyTo)
+        XCTAssertEqual(replyMsg?.replyTo?.rawPayload, Data("original".utf8))
     }
 
-    @Test("Message deletion")
-    func messageDeletion() throws {
-        let context = try makeContext()
+    /// Message deletion
+    func testMessageDeletion() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -374,14 +390,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Message>())
-        #expect(fetched.isEmpty)
+        XCTAssertTrue(fetched.isEmpty)
     }
 
     // MARK: - Channel CRUD Tests
 
-    @Test("Channel creation with all types")
-    func channelCreationAllTypes() throws {
-        let context = try makeContext()
+    /// Channel creation with all types
+    func testChannelCreationAllTypes() throws {
+        let context = makeContext()
 
         for type in ChannelType.allCases {
             let channel = Channel(type: type, name: "Test \(type)")
@@ -390,12 +406,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Channel>())
-        #expect(fetched.count == ChannelType.allCases.count)
+        XCTAssertEqual(fetched.count, ChannelType.allCases.count)
     }
 
-    @Test("Channel mute status enum roundtrip")
-    func channelMuteStatus() throws {
-        let context = try makeContext()
+    /// Channel mute status enum roundtrip
+    func testChannelMuteStatus() throws {
+        let context = makeContext()
 
         for muteStatus in MuteStatus.allCases {
             let channel = Channel(type: .dm, muteStatus: muteStatus)
@@ -404,14 +420,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Channel>())
-        for (idx, status) in MuteStatus.allCases.enumerated() {
-            #expect(fetched[idx].muteStatus == status)
-        }
+        // SwiftData fetch order isn't guaranteed without an explicit sort,
+        // so compare the set of statuses instead of indexed equality.
+        XCTAssertEqual(Set(fetched.map(\.muteStatus)), Set(MuteStatus.allCases))
     }
 
-    @Test("Channel computed properties")
-    func channelComputedProperties() throws {
-        let context = try makeContext()
+    /// Channel computed properties
+    func testChannelComputedProperties() throws {
+        let context = makeContext()
 
         let dmChannel = Channel(type: .dm)
         let groupChannel = Channel(type: .group)
@@ -425,20 +441,20 @@ struct SwiftDataSchemaValidationTests {
         let fetched = try context.fetch(FetchDescriptor<Channel>())
 
         let dm = fetched.first { $0.type == .dm }
-        #expect(dm?.isGroup == false)
-        #expect(dm?.isPublic == false)
+        XCTAssertEqual(dm?.isGroup, false)
+        XCTAssertEqual(dm?.isPublic, false)
 
         let group = fetched.first { $0.type == .group }
-        #expect(group?.isGroup == true)
-        #expect(group?.isPublic == false)
+        XCTAssertEqual(group?.isGroup, true)
+        XCTAssertEqual(group?.isPublic, false)
 
         let location = fetched.first { $0.type == .locationChannel }
-        #expect(location?.isPublic == true)
+        XCTAssertEqual(location?.isPublic, true)
     }
 
-    @Test("Channel muted computed property")
-    func channelMutedProperty() throws {
-        let context = try makeContext()
+    /// Channel muted computed property
+    func testChannelMutedProperty() throws {
+        let context = makeContext()
 
         let unmutedChannel = Channel(type: .dm, muteStatus: .unmuted)
         let mutedChannel = Channel(type: .dm, muteStatus: .mutedForever)
@@ -451,13 +467,13 @@ struct SwiftDataSchemaValidationTests {
         let unmuted = fetched.first { $0.muteStatus == .unmuted }
         let muted = fetched.first { $0.muteStatus == .mutedForever }
 
-        #expect(!unmuted!.isMuted)
-        #expect(muted!.isMuted)
+        XCTAssertFalse(unmuted!.isMuted)
+        XCTAssertTrue(muted!.isMuted)
     }
 
-    @Test("Channel deletion")
-    func channelDeletion() throws {
-        let context = try makeContext()
+    /// Channel deletion
+    func testChannelDeletion() throws {
+        let context = makeContext()
         let channel = makeChannel(context: context)
         try context.save()
 
@@ -465,14 +481,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Channel>())
-        #expect(fetched.isEmpty)
+        XCTAssertTrue(fetched.isEmpty)
     }
 
     // MARK: - Attachment Cascade Delete Tests
 
-    @Test("Attachment creation with message relationship")
-    func attachmentCreation() throws {
-        let context = try makeContext()
+    /// Attachment creation with message relationship
+    func testAttachmentCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -490,13 +506,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Blip.Attachment>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].type == .image)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].type, .image)
     }
 
-    @Test("Attachment cascade delete with message deletion")
-    func attachmentCascadeDelete() throws {
-        let context = try makeContext()
+    /// Attachment cascade delete with message deletion
+    func testAttachmentCascadeDelete() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -515,18 +531,18 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let attachmentsBefore = try context.fetch(FetchDescriptor<Blip.Attachment>())
-        #expect(attachmentsBefore.count == 3)
+        XCTAssertEqual(attachmentsBefore.count, 3)
 
         context.delete(message)
         try context.save()
 
         let attachmentsAfter = try context.fetch(FetchDescriptor<Blip.Attachment>())
-        #expect(attachmentsAfter.isEmpty)
+        XCTAssertTrue(attachmentsAfter.isEmpty)
     }
 
-    @Test("Attachment type enum roundtrip")
-    func attachmentTypeEnum() throws {
-        let context = try makeContext()
+    /// Attachment type enum roundtrip
+    func testAttachmentTypeEnum() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -541,14 +557,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Blip.Attachment>())
-        #expect(fetched.count == AttachmentType.allCases.count)
+        XCTAssertEqual(fetched.count, AttachmentType.allCases.count)
     }
 
     // MARK: - GroupMembership Tests
 
-    @Test("GroupMembership creation with cascade delete")
-    func groupMembershipCreation() throws {
-        let context = try makeContext()
+    /// GroupMembership creation with cascade delete
+    func testGroupMembershipCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(type: .group, context: context)
 
@@ -562,13 +578,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<GroupMembership>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].role == .member)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].role, .member)
     }
 
-    @Test("GroupMembership role enum roundtrip")
-    func groupMembershipRole() throws {
-        let context = try makeContext()
+    /// GroupMembership role enum roundtrip
+    func testGroupMembershipRole() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(type: .group, context: context)
 
@@ -583,12 +599,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<GroupMembership>())
-        #expect(fetched.count == GroupRole.allCases.count)
+        XCTAssertEqual(fetched.count, GroupRole.allCases.count)
     }
 
-    @Test("GroupMembership isAdmin computed property")
-    func groupMembershipIsAdmin() throws {
-        let context = try makeContext()
+    /// GroupMembership isAdmin computed property
+    func testGroupMembershipIsAdmin() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(type: .group, context: context)
 
@@ -602,14 +618,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<GroupMembership>())
-        #expect(fetched.first { $0.role == .member }?.isAdmin == false)
-        #expect(fetched.first { $0.role == .admin }?.isAdmin == true)
-        #expect(fetched.first { $0.role == .creator }?.isAdmin == true)
+        XCTAssertEqual(fetched.first { $0.role == .member }?.isAdmin, false)
+        XCTAssertEqual(fetched.first { $0.role == .admin }?.isAdmin, true)
+        XCTAssertEqual(fetched.first { $0.role == .creator }?.isAdmin, true)
     }
 
-    @Test("GroupMembership cascade delete with channel")
-    func groupMembershipCascadeDelete() throws {
-        let context = try makeContext()
+    /// GroupMembership cascade delete with channel
+    func testGroupMembershipCascadeDelete() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(type: .group, context: context)
 
@@ -624,20 +640,20 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let membershipsBefore = try context.fetch(FetchDescriptor<GroupMembership>())
-        #expect(membershipsBefore.count == 3)
+        XCTAssertEqual(membershipsBefore.count, 3)
 
         context.delete(channel)
         try context.save()
 
         let membershipsAfter = try context.fetch(FetchDescriptor<GroupMembership>())
-        #expect(membershipsAfter.isEmpty)
+        XCTAssertTrue(membershipsAfter.isEmpty)
     }
 
     // MARK: - Event and Stage Tests
 
-    @Test("Event creation and stage hierarchy")
-    func eventStageHierarchy() throws {
-        let context = try makeContext()
+    /// Event creation and stage hierarchy
+    func testEventStageHierarchy() throws {
+        let context = makeContext()
         let event = makeEvent(context: context)
         try context.save()
 
@@ -656,13 +672,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Stage>())
-        #expect(fetched.count == 2)
-        #expect(fetched[0].event?.name == "Glastonbury")
+        XCTAssertEqual(fetched.count, 2)
+        XCTAssertEqual(fetched[0].event?.name, "Glastonbury")
     }
 
-    @Test("Event cascade delete with stages")
-    func eventCascadeDelete() throws {
-        let context = try makeContext()
+    /// Event cascade delete with stages
+    func testEventCascadeDelete() throws {
+        let context = makeContext()
         let event = makeEvent(context: context)
         try context.save()
 
@@ -677,18 +693,18 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let stagesBefore = try context.fetch(FetchDescriptor<Stage>())
-        #expect(stagesBefore.count == 3)
+        XCTAssertEqual(stagesBefore.count, 3)
 
         context.delete(event)
         try context.save()
 
         let stagesAfter = try context.fetch(FetchDescriptor<Stage>())
-        #expect(stagesAfter.isEmpty)
+        XCTAssertTrue(stagesAfter.isEmpty)
     }
 
-    @Test("Event computed properties")
-    func eventComputedProperties() throws {
-        let context = try makeContext()
+    /// Event computed properties
+    func testEventComputedProperties() throws {
+        let context = makeContext()
 
         let now = Date()
         let upcoming = Event(
@@ -713,15 +729,15 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Event>())
-        #expect(fetched.first { $0.name == "Future Fest" }?.isUpcoming == true)
-        #expect(fetched.first { $0.name == "Current Fest" }?.isActive == true)
+        XCTAssertEqual(fetched.first { $0.name == "Future Fest" }?.isUpcoming, true)
+        XCTAssertEqual(fetched.first { $0.name == "Current Fest" }?.isActive, true)
     }
 
     // MARK: - SetTime Tests
 
-    @Test("SetTime creation with stage relationship")
-    func setTimeCreation() throws {
-        let context = try makeContext()
+    /// SetTime creation with stage relationship
+    func testSetTimeCreation() throws {
+        let context = makeContext()
         let event = makeEvent(context: context)
         try context.save()
 
@@ -744,14 +760,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<SetTime>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].artistName == "Radiohead")
-        #expect(fetched[0].duration == 3600)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].artistName, "Radiohead")
+        XCTAssertEqual(fetched[0].duration, 3600)
     }
 
-    @Test("SetTime cascade delete with stage")
-    func setTimeCascadeDelete() throws {
-        let context = try makeContext()
+    /// SetTime cascade delete with stage
+    func testSetTimeCascadeDelete() throws {
+        let context = makeContext()
         let event = makeEvent(context: context)
         try context.save()
 
@@ -776,20 +792,20 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let setTimesBefore = try context.fetch(FetchDescriptor<SetTime>())
-        #expect(setTimesBefore.count == 3)
+        XCTAssertEqual(setTimesBefore.count, 3)
 
         context.delete(stage)
         try context.save()
 
         let setTimesAfter = try context.fetch(FetchDescriptor<SetTime>())
-        #expect(setTimesAfter.isEmpty)
+        XCTAssertTrue(setTimesAfter.isEmpty)
     }
 
     // MARK: - SOSAlert Tests
 
-    @Test("SOSAlert creation with location")
-    func sosAlertCreation() throws {
-        let context = try makeContext()
+    /// SOSAlert creation with location
+    func testSosAlertCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let sosAlert = SOSAlert(
@@ -803,13 +819,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<SOSAlert>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].severity == .red)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].severity, .red)
     }
 
-    @Test("SOSAlert severity enum roundtrip")
-    func sosAlertSeverity() throws {
-        let context = try makeContext()
+    /// SOSAlert severity enum roundtrip
+    func testSosAlertSeverity() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         for severity in SOSSeverity.allCases {
@@ -825,12 +841,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<SOSAlert>())
-        #expect(fetched.count == SOSSeverity.allCases.count)
+        XCTAssertEqual(fetched.count, SOSSeverity.allCases.count)
     }
 
-    @Test("SOSAlert status state transitions")
-    func sosAlertStatusTransitions() throws {
-        let context = try makeContext()
+    /// SOSAlert status state transitions
+    func testSosAlertStatusTransitions() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let alert = SOSAlert(
@@ -849,13 +865,13 @@ struct SwiftDataSchemaValidationTests {
             try context.save()
 
             let fetched = try context.fetch(FetchDescriptor<SOSAlert>())
-            #expect(fetched[0].status == status)
+            XCTAssertEqual(fetched[0].status, status)
         }
     }
 
-    @Test("SOSAlert computed properties")
-    func sosAlertComputedProperties() throws {
-        let context = try makeContext()
+    /// SOSAlert computed properties
+    func testSosAlertComputedProperties() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let alert = SOSAlert(
@@ -870,13 +886,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<SOSAlert>())
-        #expect(fetched[0].isActive == true)
-        #expect(fetched[0].isResolved == false)
+        XCTAssertEqual(fetched[0].isActive, true)
+        XCTAssertEqual(fetched[0].isResolved, false)
     }
 
-    @Test("SOSAlert resolution enum roundtrip")
-    func sosAlertResolution() throws {
-        let context = try makeContext()
+    /// SOSAlert resolution enum roundtrip
+    func testSosAlertResolution() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let alert = SOSAlert(
@@ -896,15 +912,15 @@ struct SwiftDataSchemaValidationTests {
             try context.save()
 
             let refetched = try context.fetch(FetchDescriptor<SOSAlert>())
-            #expect(refetched[0].resolution == resolution)
+            XCTAssertEqual(refetched[0].resolution, resolution)
         }
     }
 
     // MARK: - MessageQueue Tests
 
-    @Test("MessageQueue creation and retry logic")
-    func messageQueueCreation() throws {
-        let context = try makeContext()
+    /// MessageQueue creation and retry logic
+    func testMessageQueueCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -922,13 +938,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<MessageQueue>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].canRetry == true)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].canRetry, true)
     }
 
-    @Test("MessageQueue transport enum roundtrip")
-    func messageQueueTransport() throws {
-        let context = try makeContext()
+    /// MessageQueue transport enum roundtrip
+    func testMessageQueueTransport() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -943,12 +959,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<MessageQueue>())
-        #expect(fetched.count == QueueTransport.allCases.count)
+        XCTAssertEqual(fetched.count, QueueTransport.allCases.count)
     }
 
-    @Test("MessageQueue status enum roundtrip")
-    func messageQueueStatus() throws {
-        let context = try makeContext()
+    /// MessageQueue status enum roundtrip
+    func testMessageQueueStatus() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -965,13 +981,13 @@ struct SwiftDataSchemaValidationTests {
             try context.save()
 
             let fetched = try context.fetch(FetchDescriptor<MessageQueue>())
-            #expect(fetched[0].status == status)
+            XCTAssertEqual(fetched[0].status, status)
         }
     }
 
-    @Test("MessageQueue retry exhaustion")
-    func messageQueueRetryExhaustion() throws {
-        let context = try makeContext()
+    /// MessageQueue retry exhaustion
+    func testMessageQueueRetryExhaustion() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -988,14 +1004,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<MessageQueue>())
-        #expect(fetched[0].canRetry == false)
+        XCTAssertEqual(fetched[0].canRetry, false)
     }
 
     // MARK: - MeetingPoint Tests
 
-    @Test("MeetingPoint creation with location")
-    func meetingPointCreation() throws {
-        let context = try makeContext()
+    /// MeetingPoint creation with location
+    func testMeetingPointCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -1010,13 +1026,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<MeetingPoint>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].label == "Meet at the Pyramid")
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].label, "Meet at the Pyramid")
     }
 
-    @Test("MeetingPoint expiration computed property")
-    func meetingPointExpiration() throws {
-        let context = try makeContext()
+    /// MeetingPoint expiration computed property
+    func testMeetingPointExpiration() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -1031,14 +1047,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<MeetingPoint>())
-        #expect(fetched[0].isExpired == true)
+        XCTAssertEqual(fetched[0].isExpired, true)
     }
 
     // MARK: - FriendLocation Tests
 
-    @Test("FriendLocation creation with breadcrumbs")
-    func friendLocationCreation() throws {
-        let context = try makeContext()
+    /// FriendLocation creation with breadcrumbs
+    func testFriendLocationCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let friend = Friend(user: user)
         context.insert(friend)
@@ -1055,13 +1071,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<FriendLocation>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].hasPreciseLocation == true)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].hasPreciseLocation, true)
     }
 
-    @Test("FriendLocation breadcrumb cascade delete")
-    func friendLocationBreadcrumbCascadeDelete() throws {
-        let context = try makeContext()
+    /// FriendLocation breadcrumb cascade delete
+    func testFriendLocationBreadcrumbCascadeDelete() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let friend = Friend(user: user)
         context.insert(friend)
@@ -1082,20 +1098,20 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let breadcrumbsBefore = try context.fetch(FetchDescriptor<BreadcrumbPoint>())
-        #expect(breadcrumbsBefore.count == 3)
+        XCTAssertEqual(breadcrumbsBefore.count, 3)
 
         context.delete(location)
         try context.save()
 
         let breadcrumbsAfter = try context.fetch(FetchDescriptor<BreadcrumbPoint>())
-        #expect(breadcrumbsAfter.isEmpty)
+        XCTAssertTrue(breadcrumbsAfter.isEmpty)
     }
 
     // MARK: - BreadcrumbPoint Tests
 
-    @Test("BreadcrumbPoint creation with coordinates")
-    func breadcrumbPointCreation() throws {
-        let context = try makeContext()
+    /// BreadcrumbPoint creation with coordinates
+    func testBreadcrumbPointCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let friend = Friend(user: user)
         context.insert(friend)
@@ -1114,15 +1130,15 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<BreadcrumbPoint>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].coordinate.latitude == 51.15)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].coordinate.latitude, 51.15)
     }
 
     // MARK: - CrowdPulse Tests
 
-    @Test("CrowdPulse creation with heat level")
-    func crowdPulseCreation() throws {
-        let context = try makeContext()
+    /// CrowdPulse creation with heat level
+    func testCrowdPulseCreation() throws {
+        let context = makeContext()
 
         let pulse = CrowdPulse(
             geohash: "gcpv2h",
@@ -1133,13 +1149,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<CrowdPulse>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].heatLevel == .busy)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].heatLevel, .busy)
     }
 
-    @Test("CrowdPulse heat level enum roundtrip")
-    func crowdPulseHeatLevel() throws {
-        let context = try makeContext()
+    /// CrowdPulse heat level enum roundtrip
+    func testCrowdPulseHeatLevel() throws {
+        let context = makeContext()
 
         for heatLevel in HeatLevel.allCases {
             let pulse = CrowdPulse(
@@ -1151,17 +1167,16 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<CrowdPulse>())
-        #expect(fetched.count == HeatLevel.allCases.count)
+        XCTAssertEqual(fetched.count, HeatLevel.allCases.count)
     }
 
-    @Test("CrowdPulse isStale computed property")
-    func crowdPulseIsStale() throws {
-        let context = try makeContext()
+    /// CrowdPulse isStale computed property
+    func testCrowdPulseIsStale() throws {
+        let context = makeContext()
 
         let fresh = CrowdPulse(geohash: "fresh", lastUpdated: Date())
         let stale = CrowdPulse(
-            geohash: "stale",
-            lastUpdated: Date().addingTimeInterval(-400)
+            geohash: "stale", lastUpdated: Date().addingTimeInterval(-400)
         )
 
         context.insert(fresh)
@@ -1169,29 +1184,29 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<CrowdPulse>())
-        #expect(fetched.first { $0.geohash == "fresh" }?.isStale == false)
-        #expect(fetched.first { $0.geohash == "stale" }?.isStale == true)
+        XCTAssertEqual(fetched.first { $0.geohash == "fresh" }?.isStale, false)
+        XCTAssertEqual(fetched.first { $0.geohash == "stale" }?.isStale, true)
     }
 
     // MARK: - UserPreferences Tests
 
-    @Test("UserPreferences creation with defaults")
-    func userPreferencesCreation() throws {
-        let context = try makeContext()
+    /// UserPreferences creation with defaults
+    func testUserPreferencesCreation() throws {
+        let context = makeContext()
 
         let prefs = UserPreferences()
         context.insert(prefs)
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<UserPreferences>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].theme == .system)
-        #expect(fetched[0].pttMode == .holdToTalk)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].theme, .system)
+        XCTAssertEqual(fetched[0].pttMode, .holdToTalk)
     }
 
-    @Test("UserPreferences theme enum roundtrip")
-    func userPreferencesTheme() throws {
-        let context = try makeContext()
+    /// UserPreferences theme enum roundtrip
+    func testUserPreferencesTheme() throws {
+        let context = makeContext()
 
         for theme in AppTheme.allCases {
             let prefs = UserPreferences(theme: theme)
@@ -1200,12 +1215,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<UserPreferences>())
-        #expect(fetched.count == AppTheme.allCases.count)
+        XCTAssertEqual(fetched.count, AppTheme.allCases.count)
     }
 
-    @Test("UserPreferences pttMode enum roundtrip")
-    func userPreferencesPTTMode() throws {
-        let context = try makeContext()
+    /// UserPreferences pttMode enum roundtrip
+    func testUserPreferencesPTTMode() throws {
+        let context = makeContext()
 
         for pttMode in PTTMode.allCases {
             let prefs = UserPreferences(pttMode: pttMode)
@@ -1214,12 +1229,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<UserPreferences>())
-        #expect(fetched.count == PTTMode.allCases.count)
+        XCTAssertEqual(fetched.count, PTTMode.allCases.count)
     }
 
-    @Test("UserPreferences map style enum roundtrip")
-    func userPreferencesMapStyle() throws {
-        let context = try makeContext()
+    /// UserPreferences map style enum roundtrip
+    func testUserPreferencesMapStyle() throws {
+        let context = makeContext()
 
         for mapStyle in MapStyle.allCases {
             let prefs = UserPreferences(friendFinderMapStyle: mapStyle)
@@ -1228,12 +1243,12 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<UserPreferences>())
-        #expect(fetched.count == MapStyle.allCases.count)
+        XCTAssertEqual(fetched.count, MapStyle.allCases.count)
     }
 
-    @Test("UserPreferences location sharing enum roundtrip")
-    func userPreferencesLocationSharing() throws {
-        let context = try makeContext()
+    /// UserPreferences location sharing enum roundtrip
+    func testUserPreferencesLocationSharing() throws {
+        let context = makeContext()
 
         for precision in LocationPrecision.allCases {
             let prefs = UserPreferences(defaultLocationSharing: precision)
@@ -1242,14 +1257,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<UserPreferences>())
-        #expect(fetched.count == LocationPrecision.allCases.count)
+        XCTAssertEqual(fetched.count, LocationPrecision.allCases.count)
     }
 
     // MARK: - GroupSenderKey Tests
 
-    @Test("GroupSenderKey creation with key material")
-    func groupSenderKeyCreation() throws {
-        let context = try makeContext()
+    /// GroupSenderKey creation with key material
+    func testGroupSenderKeyCreation() throws {
+        let context = makeContext()
         let channel = makeChannel(type: .group, context: context)
         try context.save()
 
@@ -1263,13 +1278,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<GroupSenderKey>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].needsRotation == false)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].needsRotation, false)
     }
 
-    @Test("GroupSenderKey rotation logic")
-    func groupSenderKeyRotation() throws {
-        let context = try makeContext()
+    /// GroupSenderKey rotation logic
+    func testGroupSenderKeyRotation() throws {
+        let context = makeContext()
         let channel = makeChannel(type: .group, context: context)
         try context.save()
 
@@ -1283,20 +1298,20 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<GroupSenderKey>())
-        #expect(fetched[0].needsRotation == false)
+        XCTAssertEqual(fetched[0].needsRotation, false)
 
         fetched[0].messageCounter = 100
         try context.save()
 
         let refetched = try context.fetch(FetchDescriptor<GroupSenderKey>())
-        #expect(refetched[0].needsRotation == true)
+        XCTAssertEqual(refetched[0].needsRotation, true)
     }
 
     // MARK: - NoiseSessionModel Tests
 
-    @Test("NoiseSessionModel creation with expiry")
-    func noiseSessionCreation() throws {
-        let context = try makeContext()
+    /// NoiseSessionModel creation with expiry
+    func testNoiseSessionCreation() throws {
+        let context = makeContext()
 
         let session = NoiseSessionModel(
             peerID: Data(repeating: 0x11, count: 8),
@@ -1308,13 +1323,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<NoiseSessionModel>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].handshakeComplete == true)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].handshakeComplete, true)
     }
 
-    @Test("NoiseSessionModel expiration and validity")
-    func noiseSessionExpiration() throws {
-        let context = try makeContext()
+    /// NoiseSessionModel expiration and validity
+    func testNoiseSessionExpiration() throws {
+        let context = makeContext()
 
         let validSession = NoiseSessionModel(
             peerID: Data(repeating: 0x33, count: 8),
@@ -1333,13 +1348,13 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<NoiseSessionModel>())
-        #expect(fetched.first { $0.peerID == Data(repeating: 0x33, count: 8) }?.isValid == true)
-        #expect(fetched.first { $0.peerID == Data(repeating: 0x44, count: 8) }?.isValid == false)
+        XCTAssertEqual(fetched.first { $0.peerID == Data(repeating: 0x33, count: 8) }?.isValid, true)
+        XCTAssertEqual(fetched.first { $0.peerID == Data(repeating: 0x44, count: 8) }?.isValid, false)
     }
 
-    @Test("NoiseSessionModel IK handshake eligibility")
-    func noiseSessionIKHandshake() throws {
-        let context = try makeContext()
+    /// NoiseSessionModel IK handshake eligibility
+    func testNoiseSessionIKHandshake() throws {
+        let context = makeContext()
 
         let ikEligible = NoiseSessionModel(
             peerID: Data(repeating: 0x55, count: 8),
@@ -1358,15 +1373,15 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<NoiseSessionModel>())
-        #expect(fetched.first { $0.peerID == Data(repeating: 0x55, count: 8) }?.canUseIKHandshake == true)
-        #expect(fetched.first { $0.peerID == Data(repeating: 0x66, count: 8) }?.canUseIKHandshake == false)
+        XCTAssertEqual(fetched.first { $0.peerID == Data(repeating: 0x55, count: 8) }?.canUseIKHandshake, true)
+        XCTAssertEqual(fetched.first { $0.peerID == Data(repeating: 0x66, count: 8) }?.canUseIKHandshake, false)
     }
 
     // MARK: - MedicalResponder Tests
 
-    @Test("MedicalResponder creation with user")
-    func medicalResponderCreation() throws {
-        let context = try makeContext()
+    /// MedicalResponder creation with user
+    func testMedicalResponderCreation() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let event = makeEvent(context: context)
         try context.save()
@@ -1382,16 +1397,16 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<MedicalResponder>())
-        #expect(fetched.count == 1)
-        #expect(fetched[0].callsign == "MED-01")
-        #expect(fetched[0].hasActiveAlert == false)
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched[0].callsign, "MED-01")
+        XCTAssertEqual(fetched[0].hasActiveAlert, false)
     }
 
     // MARK: - Complex Relationship Tests
 
-    @Test("User with multiple relationships")
-    func userMultipleRelationships() throws {
-        let context = try makeContext()
+    /// User with multiple relationships
+    func testUserMultipleRelationships() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         try context.save()
 
@@ -1434,16 +1449,16 @@ struct SwiftDataSchemaValidationTests {
             FetchDescriptor<User>(predicate: #Predicate { $0.username == "alice" })
         )[0]
 
-        #expect(fetchedUser.friends.count == 3)
-        #expect(fetchedUser.sentMessages.count == 5)
-        #expect(fetchedUser.memberships.count == 2)
+        XCTAssertEqual(fetchedUser.friends.count, 3)
+        XCTAssertEqual(fetchedUser.sentMessages.count, 5)
+        XCTAssertEqual(fetchedUser.memberships.count, 2)
     }
 
     // MARK: - Bulk Operations and Performance Tests
 
-    @Test("Bulk message insertion")
-    func bulkMessageInsertion() throws {
-        let context = try makeContext()
+    /// Bulk message insertion
+    func testBulkMessageInsertion() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
         try context.save()
@@ -1460,14 +1475,14 @@ struct SwiftDataSchemaValidationTests {
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<Message>())
-        #expect(fetched.count == 100)
+        XCTAssertEqual(fetched.count, 100)
     }
 
     // MARK: - Index Validation Tests
 
-    @Test("Message createdAt index sorting")
-    func messageIndexSorting() throws {
-        let context = try makeContext()
+    /// Message createdAt index sorting
+    func testMessageIndexSorting() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
         try context.save()
@@ -1488,13 +1503,13 @@ struct SwiftDataSchemaValidationTests {
         let fetched = try context.fetch(descriptor)
 
         for i in 0 ..< fetched.count - 1 {
-            #expect(fetched[i].createdAt <= fetched[i + 1].createdAt)
+            XCTAssertTrue(fetched[i].createdAt <= fetched[i + 1].createdAt)
         }
     }
 
-    @Test("Friend status index filtering")
-    func friendStatusIndexFiltering() throws {
-        let context = try makeContext()
+    /// Friend status index filtering
+    func testFriendStatusIndexFiltering() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         for status in FriendStatus.allCases {
@@ -1507,15 +1522,15 @@ struct SwiftDataSchemaValidationTests {
             predicate: #Predicate { $0.statusRaw == "accepted" }
         )
         let accepted = try context.fetch(descriptor)
-        #expect(accepted.count == 1)
-        #expect(accepted[0].status == .accepted)
+        XCTAssertEqual(accepted.count, 1)
+        XCTAssertEqual(accepted[0].status, .accepted)
     }
 
     // MARK: - GeoPoint Roundtrip Tests
 
-    @Test("GeoPoint storage and retrieval via Friend")
-    func geoPointFriendRoundtrip() throws {
-        let context = try makeContext()
+    /// GeoPoint storage and retrieval via Friend
+    func testGeoPointFriendRoundtrip() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let friend = Friend(
@@ -1529,13 +1544,13 @@ struct SwiftDataSchemaValidationTests {
         let fetched = try context.fetch(FetchDescriptor<Friend>())[0]
         let location = fetched.lastSeenLocation
 
-        #expect(location?.latitude == 51.5074)
-        #expect(location?.longitude == -0.1278)
+        XCTAssertEqual(location?.latitude, 51.5074)
+        XCTAssertEqual(location?.longitude, -0.1278)
     }
 
-    @Test("GeoPoint storage and retrieval via SOSAlert")
-    func geoPointSOSAlertRoundtrip() throws {
-        let context = try makeContext()
+    /// GeoPoint storage and retrieval via SOSAlert
+    func testGeoPointSOSAlertRoundtrip() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
 
         let alert = SOSAlert(
@@ -1551,13 +1566,13 @@ struct SwiftDataSchemaValidationTests {
         let fetched = try context.fetch(FetchDescriptor<SOSAlert>())[0]
         let location = fetched.preciseLocation
 
-        #expect(location.latitude == 48.8566)
-        #expect(location.longitude == 2.3522)
+        XCTAssertEqual(location.latitude, 48.8566)
+        XCTAssertEqual(location.longitude, 2.3522)
     }
 
-    @Test("GeoPoint storage and retrieval via MeetingPoint")
-    func geoPointMeetingPointRoundtrip() throws {
-        let context = try makeContext()
+    /// GeoPoint storage and retrieval via MeetingPoint
+    func testGeoPointMeetingPointRoundtrip() throws {
+        let context = makeContext()
         let user = makeUser(context: context)
         let channel = makeChannel(context: context)
 
@@ -1574,7 +1589,7 @@ struct SwiftDataSchemaValidationTests {
         let fetched = try context.fetch(FetchDescriptor<MeetingPoint>())[0]
         let coords = fetched.coordinates
 
-        #expect(coords.latitude == 40.7128)
-        #expect(coords.longitude == -74.0060)
+        XCTAssertEqual(coords.latitude, 40.7128)
+        XCTAssertEqual(coords.longitude, -74.0060)
     }
 }

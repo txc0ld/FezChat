@@ -76,6 +76,19 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           -quiet
 
+      - name: Test app (Blip scheme — BlipTests target)
+        # Runs the app-level test suite. These depend on the Blip app target and
+        # cannot run via `swift test`; previously they ran only locally via Xcode.
+        # (BDEV-399 / BDEV-405)
+        run: >
+          xcodebuild test
+          -scheme Blip
+          -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+          -skipPackagePluginValidation
+          CODE_SIGN_IDENTITY=""
+          CODE_SIGNING_ALLOWED=NO
+          -quiet
+
   server-tests:
     runs-on: ubuntu-latest
 
